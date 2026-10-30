@@ -7,6 +7,8 @@ import { logError } from './audit';
 import { UserFacingError } from './errors';
 import { RateLimitError } from './rate-limit';
 import { UploadError } from './storage';
+import { env } from './env';
+import { uploadErrorCode } from '@/lib/upload-messages';
 import { AccessDeniedError, requireTenantAction, type TenantContext } from './tenant';
 
 /**
@@ -37,12 +39,9 @@ export async function toActionError(e: unknown): Promise<{ ok: false; error: str
   if (e instanceof AccessDeniedError) return { ok: false, error: 'You do not have permission to do this.' };
   if (e instanceof UserFacingError) return { ok: false, error: e.code };
   if (e instanceof UploadError) {
-    const map: Record<string, string> = {
-      file_too_large: 'The file is too large (maximum 5 MB).',
-      unsupported_type: 'Only PNG, JPEG or WebP images are accepted.',
-      no_file: 'Please choose a file.',
-    };
-    return { ok: false, error: map[e.message] ?? 'Upload failed.' };
+    // Localized in the browser (ActionForm) in the staff member's language (audit BUG-06).
+    const code = e.message === 'file_too_large' ? 'image_too_large' : e.message === 'unsupported_type' || e.message === 'no_file' ? e.message : null;
+    return { ok: false, error: code ? uploadErrorCode(code, env.UPLOAD_MAX_BYTES) : 'Upload failed.' };
   }
   if (e instanceof RateLimitError) return { ok: false, error: 'Too many requests. Please wait a moment.' };
   // Next.js redirect()/notFound() throw special errors that must propagate.

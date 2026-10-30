@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ActionForm } from '@/components/forms/action-form';
 import { Field, Input, Select, Textarea } from '@/components/ui';
+import { DEFAULT_UPLOAD_MAX_BYTES } from '@/lib/upload-messages';
 import { addSourceAction } from '../actions';
 
 const TYPES = [
@@ -29,7 +30,7 @@ export function AddSourceForm({ org, jobId }: { org: string; jobId: string }) {
       </Field>
       {t.file && (
         <Field label="File" htmlFor="file" hint="Up to 5 MB. Columns such as Category, Name, Description, Price, Size are recognised in PT, EN, FR, ES and AR.">
-          <Input key={type} id="file" name="file" type="file" accept={t.file} className="pt-2" />
+          <Input key={type} id="file" name="file" type="file" accept={t.file} data-max-bytes={DEFAULT_UPLOAD_MAX_BYTES} className="pt-2" />
         </Field>
       )}
       {t.text && (

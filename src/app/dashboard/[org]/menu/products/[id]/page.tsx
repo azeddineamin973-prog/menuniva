@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { env } from '@/server/env';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader } from '@/components/ui';
@@ -116,7 +117,7 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
                 <input type="hidden" name="org" value={ctx.org.slug} />
                 <input type="hidden" name="productId" value={product.id} />
                 <Field label="Photo" htmlFor="image" hint="PNG, JPEG or WebP, max 5 MB.">
-                  <Input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" required className="pt-2" />
+                  <Input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" data-max-bytes={env.UPLOAD_MAX_BYTES} required className="pt-2" />
                 </Field>
                 <Checkbox name="rightsConfirmed" label="I have the right to publish this photo." />
               </ActionForm>
