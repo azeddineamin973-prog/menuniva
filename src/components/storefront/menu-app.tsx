@@ -426,6 +426,8 @@ function ProductSheet({ product: p, m, money, canOrder, onClose, onAdd }: { prod
   );
 }
 
+const emptyContact = { name: '', phone: '', address: '', postalCode: '', city: '', deliveryNotes: '' };
+
 function CartSheet({
   channel,
   scope,
@@ -460,21 +462,53 @@ function CartSheet({
   onSubmitted: (trackingToken: string) => void;
 }) {
   const c = m.customer;
-  const [quote, setQuote] = useState<{ subtotalCents: number; discountCents?: number; totalCents?: number; discounts?: { description: string; amountCents: number }[]; couponStatus?: string; issues: QuoteIssue[] } | null>(null);
-  const [couponInput, setCouponInput] = useState('');
-  const [coupon, setCoupon] = useState('');
-  const [notes, setNotes] = useState('');
-  const [tableCode, setTableCode] = useState('');
-  const [contact, setContact] = useState({ name: '', phone: '', address: '', postalCode: '', city: '', deliveryNotes: '' });
-  const [pickup, setPickup] = useState(() => (checkout?.pickup?.asapAllowed ? 'asap' : checkout?.pickup?.slots[0]?.value ?? ''));
-  const [payMethod, setPayMethod] = useState<'CASH_ON_DELIVERY' | 'CARD_TERMINAL'>(checkout?.delivery?.cash === false ? 'CARD_TERMINAL' : 'CASH_ON_DELIVERY');
+  // `forCoupon`: the code this quote was computed with — an error is only shown for the current code
+  // (audit BUG-08: a valid code briefly showed "not valid" from the previous quote).
+  const [quote, setQuote] = useState<{ subtotalCents: number; discountCents?: number; totalCents?: number; discounts?: { description: string; amountCents: number }[]; couponStatus?: string; forCoupon?: string; issues: QuoteIssue[] } | null>(null);
+  // What the guest typed survives closing and reopening the cart (audit BUG-09). Kept only in this
+  // browser tab (sessionStorage) and cleared once the order is confirmed.
+  const scopeKey = `${channel}:${scope.qrToken ?? `${scope.orgSlug}/${scope.locationSlug}`}`;
+  const draftKey = `mn_checkout:${scopeKey}`;
+  const [draft] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(draftKey) ?? 'null') as Partial<{ couponInput: string; coupon: string; notes: string; tableCode: string; contact: typeof emptyContact; pickup: string; payMethod: 'CASH_ON_DELIVERY' | 'CARD_TERMINAL' }> | null;
+    } catch {
+      return null;
+    }
+  });
+  const [couponInput, setCouponInput] = useState(draft?.couponInput ?? '');
+  const [coupon, setCoupon] = useState(draft?.coupon ?? '');
+  const [notes, setNotes] = useState(draft?.notes ?? '');
+  const [tableCode, setTableCode] = useState(draft?.tableCode ?? '');
+  const [contact, setContact] = useState({ ...emptyContact, ...draft?.contact });
+  const [pickup, setPickup] = useState(() => {
+    const options = [...(checkout?.pickup?.asapAllowed ? ['asap'] : []), ...(checkout?.pickup?.slots.map((x) => x.value) ?? [])];
+    return draft?.pickup && options.includes(draft.pickup) ? draft.pickup : options[0] ?? '';
+  });
+  const [payMethod, setPayMethod] = useState<'CASH_ON_DELIVERY' | 'CARD_TERMINAL'>(draft?.payMethod ?? (checkout?.delivery?.cash === false ? 'CARD_TERMINAL' : 'CASH_ON_DELIVERY'));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ couponInput, coupon, notes, tableCode, contact, pickup, payMethod }));
+    } catch {}
+  }, [draftKey, couponInput, coupon, notes, tableCode, contact, pickup, payMethod]);
   const [dq, setDq] = useState<DeliveryQuote | null>(null);
   const field = (k: keyof typeof contact) => ({ value: contact[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setContact({ ...contact, [k]: e.target.value }) });
   const inputCls = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-sm';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const idemStorageKey = `mn_idem:${scopeKey}`;
+  const pendingKey = `mn_pending:${scopeKey}`;
+  // A request whose outcome is unknown (connection lost). Retrying resends exactly this body with the
+  // same idempotency key, so the restaurant receives the order at most once (audit BUG-10).
+  const [pending, setPending] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(pendingKey);
+    } catch {
+      return null;
+    }
+  });
   const [idemKey] = useState(() => {
-    const k = `mn_idem:${scope.qrToken ?? scope.locationSlug}`;
+    const k = idemStorageKey;
     const existing = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(k) : null;
     const v = existing ?? uid();
     try {
@@ -494,7 +528,7 @@ function CartSheet({
       signal: ctrl.signal,
     })
       .then((r) => (r.ok ? r.json() : null))
-      .then((q) => q && setQuote(q))
+      .then((q) => q && setQuote({ ...q, forCoupon: coupon }))
       .catch(() => {});
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -523,11 +557,12 @@ function CartSheet({
 
   const issueText = (i: QuoteIssue) => (i.code === 'selection_rules' && i.group ? fmt(m.validation.chooseOption, { group: i.group }) : fmt(c.itemNoLongerAvailable, { name: i.name ?? lines[i.index]?.name ?? '' }));
 
+  const submitRef = useRef<(() => Promise<void>) | null>(null);
   const submit = async () => {
     setSubmitting(true);
     setError(null);
     const common = { idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined, couponCode: coupon || undefined };
-    const body = JSON.stringify(
+    const body = pending ?? JSON.stringify(
       channel === 'TABLE'
         ? { ...common, qrToken: scope.qrToken, tableCode: tableCode.trim() || undefined }
         : channel === 'TAKEAWAY'
@@ -536,12 +571,22 @@ function CartSheet({
     );
     const endpoint = channel === 'TABLE' ? '/api/public/orders/table' : channel === 'TAKEAWAY' ? '/api/public/orders/pickup' : '/api/public/orders/delivery';
     // Retries reuse the same idempotency key, so a flaky connection can never create two orders.
+    try {
+      sessionStorage.setItem(pendingKey, body);
+    } catch {}
+    const settle = () => {
+      // The server answered definitively (accepted or refused): nothing is pending any more.
+      try {
+        sessionStorage.removeItem(pendingKey);
+      } catch {}
+      setPending(null);
+    };
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.trackingToken) {
-          sessionStorage.removeItem(`mn_idem:${scope.qrToken ?? scope.locationSlug}`);
+          for (const k of [idemStorageKey, pendingKey, draftKey]) sessionStorage.removeItem(k);
           return onSubmitted(data.trackingToken);
         }
         // Only `items_unavailable` carries price/availability issues. Validation errors (e.g. missing
@@ -565,15 +610,27 @@ function CartSheet({
           await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
           continue;
         } else setError(m.common.retry);
+        settle();
         setSubmitting(false);
         return;
       } catch {
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       }
     }
-    setError(m.common.connectionLost);
+    // Outcome unknown: the order may or may not have reached the restaurant. Say so plainly and
+    // offer a safe retry (same body, same key) instead of a misleading "reconnecting…".
+    setPending(body);
+    setError(c.submitUncertain);
     setSubmitting(false);
   };
+  submitRef.current = submit;
+  // Back online while an order is unconfirmed: check it once automatically (safe, idempotent).
+  useEffect(() => {
+    if (!pending) return;
+    const onOnline = () => void submitRef.current?.();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [pending]);
 
   return (
     <Sheet onClose={onClose} label={c.cart}>
@@ -597,10 +654,10 @@ function CartSheet({
                   <p className="text-sm font-semibold tabular-nums">{money(l.unitCents * l.quantity)}</p>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
-                  <button type="button" className="h-8 w-8 rounded-lg ring-1 ring-black/10" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">−</button>
+                  <button type="button" disabled={!!pending} className="h-8 w-8 rounded-lg ring-1 ring-black/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">−</button>
                   <span className="w-6 text-center tabular-nums">{l.quantity}</span>
-                  <button type="button" className="h-8 w-8 rounded-lg ring-1 ring-black/10" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">+</button>
-                  <button type="button" className="ms-auto h-8 px-2 text-sm underline opacity-70" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
+                  <button type="button" disabled={!!pending} className="h-8 w-8 rounded-lg ring-1 ring-black/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">+</button>
+                  <button type="button" disabled={!!pending} className="ms-auto h-8 px-2 text-sm underline opacity-70 disabled:opacity-30" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
                 </div>
                 {issue && <p className="mt-2 text-sm text-red-700" role="alert">{issueText(issue)}</p>}
               </li>
@@ -681,7 +738,10 @@ function CartSheet({
                 <button type="button" onClick={() => setCoupon(couponInput.trim())} className="rounded-xl px-4 text-sm font-medium ring-1 ring-black/10" data-testid="coupon-apply">{c.apply}</button>
               </div>
             )}
-            {coupon && quote?.couponStatus && quote.couponStatus !== 'valid' && <p className="text-sm text-red-700" role="alert" data-testid="coupon-error">{c.promoInvalid}</p>}
+            {coupon && quote?.forCoupon !== coupon && <p className="text-sm opacity-70" role="status" data-testid="coupon-checking">{c.checkingCode}</p>}
+            {coupon && quote?.forCoupon === coupon && quote.couponStatus && quote.couponStatus !== 'valid' && (
+              <p className="text-sm text-red-700" role="alert" data-testid="coupon-error">{quote.couponStatus === 'not_applicable' ? c.promoNotApplicable : c.promoInvalid}</p>
+            )}
             <div className="space-y-1 rounded-2xl bg-white/80 p-4">
               <div className="flex justify-between text-sm"><span>{c.subtotal}</span><span className="tabular-nums">{quote ? money(quote.subtotalCents) : '…'}</span></div>
               {quote?.discounts?.map((d, i) => (
@@ -695,23 +755,24 @@ function CartSheet({
               {pricesIncludeVat && <p className="text-xs opacity-60">{c.pricesIncludeVat}</p>}
               <p className="text-xs opacity-60">{channel === 'DELIVERY' ? `${c.paymentNote}` : `${c.paymentNote} ${channel === 'TABLE' ? c.payToWaiter : c.payAtCounter}.`}</p>
             </div>
-            {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
+            {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert" data-testid="submit-error">{error}</p>}
+            {pending && !error && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900" role="status" data-testid="submit-pending">{c.submitUncertain}</p>}
             {!checkout?.whatsapp?.only && (
               <button
                 type="button"
                 disabled={
                   !canOrder ||
                   submitting ||
-                  !quote ||
+                  (!pending && (!quote ||
                   quote.issues.length > 0 ||
                   (channel === 'DELIVERY' && (!dq?.covered || !dq.meetsMinimum)) ||
-                  (channel === 'TAKEAWAY' && !pickup)
+                  (channel === 'TAKEAWAY' && !pickup)))
                 }
                 onClick={submit}
                 className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-medium text-white disabled:opacity-50"
                 data-testid="submit-order"
               >
-                {submitting ? c.submitting : c.submitOrder}
+                {submitting ? c.submitting : pending ? c.retrySubmit : c.submitOrder}
               </button>
             )}
             {checkout?.whatsapp && (
