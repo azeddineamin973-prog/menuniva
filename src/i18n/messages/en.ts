@@ -43,7 +43,7 @@ const en = {
     emailTaken: 'An account with this email already exists.',
     tooManyAttempts: 'Too many attempts. Please wait a few minutes and try again.',
     resetTitle: 'Reset your password',
-    resetSent: 'If an account exists for this email, a reset link has been created.',
+    resetSent: "Email is not available yet. Ask your restaurant owner (Staff → “Create password reset link”) or MenuNiva support for a reset link.",
     newPassword: 'New password',
     resetDone: 'Your password has been changed. Please sign in.',
     linkInvalid: 'This link is invalid or has expired.',

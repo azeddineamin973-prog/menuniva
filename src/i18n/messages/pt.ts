@@ -44,7 +44,7 @@ const pt: Messages = {
     emailTaken: 'Já existe uma conta com este email.',
     tooManyAttempts: 'Demasiadas tentativas. Aguarde alguns minutos e tente novamente.',
     resetTitle: 'Redefinir a palavra-passe',
-    resetSent: 'Se existir uma conta com este email, foi criada uma ligação de redefinição.',
+    resetSent: "O envio de emails ainda não está disponível. Peça ao responsável do restaurante (Equipa → «Criar ligação de redefinição») ou ao suporte MenuNiva uma ligação para redefinir a palavra-passe.",
     newPassword: 'Nova palavra-passe',
     resetDone: 'A sua palavra-passe foi alterada. Inicie sessão.',
     linkInvalid: 'Esta ligação é inválida ou expirou.',

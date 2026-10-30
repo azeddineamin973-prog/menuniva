@@ -43,7 +43,7 @@ const fr: Messages = {
     emailTaken: 'Un compte existe déjà avec cet e-mail.',
     tooManyAttempts: 'Trop de tentatives. Patientez quelques minutes puis réessayez.',
     resetTitle: 'Réinitialiser le mot de passe',
-    resetSent: 'Si un compte existe pour cet e-mail, un lien de réinitialisation a été créé.',
+    resetSent: "L’envoi d’e-mails n’est pas encore disponible. Demandez au responsable du restaurant (Équipe → « Créer un lien de réinitialisation ») ou au support MenuNiva un lien de réinitialisation.",
     newPassword: 'Nouveau mot de passe',
     resetDone: 'Votre mot de passe a été modifié. Veuillez vous connecter.',
     linkInvalid: 'Ce lien est invalide ou a expiré.',

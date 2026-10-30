@@ -176,7 +176,7 @@ export function integrationHealth() {
   return [
     { name: 'PostgreSQL database', status: 'CONNECTED', note: 'Checked on every request' },
     { name: 'Machine translation', status: env.TRANSLATION_PROVIDER === 'none' ? 'NOT_CONFIGURED' : 'CONFIGURED (unverified until first call)', note: `Provider: ${env.TRANSLATION_PROVIDER}` },
-    { name: 'Email (SMTP)', status: env.SMTP_URL ? 'CONFIGURED' : 'NOT_CONFIGURED', note: 'Invitations and resets are shown as links until configured' },
+    { name: 'Email', status: 'NOT IMPLEMENTED', note: `No email sender is built yet${env.SMTP_URL ? ' (SMTP_URL is set but unused)' : ''}. Invitations and password resets are shown as links.` },
     { name: 'Glovo partner API', status: env.GLOVO_PARTNER_API_KEY ? 'CREDENTIALS PRESENT' : 'NOT_CONFIGURED', note: 'Requires Glovo partner approval' },
     { name: 'Uber Eats Menu API', status: env.UBER_EATS_CLIENT_ID ? 'CREDENTIALS PRESENT' : 'NOT_CONFIGURED', note: 'Requires Uber partner approval' },
     { name: 'SaaS billing processor', status: env.BILLING_PROVIDER === 'manual' ? 'MANUAL' : 'CONFIGURED', note: 'Subscriptions are managed manually' },

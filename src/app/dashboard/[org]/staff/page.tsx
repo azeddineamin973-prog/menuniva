@@ -3,7 +3,7 @@ import { LinkResultForm } from '@/components/forms/link-result-form';
 import { Alert, Badge, Card, CardBody, CardHeader, Field, Input, PageHeader, Select } from '@/components/ui';
 import { assignableRoles } from '@/lib/permissions';
 import { db } from '@/server/db';
-import { env } from '@/server/env';
+import { EMAIL_DELIVERY_AVAILABLE } from '@/server/email';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
 import { inviteStaffAction, revokeInvitationAction, staffResetLinkAction, updateMemberAction } from './actions';
 
@@ -81,7 +81,7 @@ export default async function StaffPage({ params }: { params: Promise<{ org: str
                             </Field>
                           )}
                         </ActionForm>
-                        {!env.SMTP_URL && (
+                        {!EMAIL_DELIVERY_AVAILABLE && (
                           <LinkResultForm action={staffResetLinkAction} submitLabel="Create password reset link" note="Give this single-use link (30 min) to the staff member:">
                             <input type="hidden" name="org" value={ctx.org.slug} />
                             <input type="hidden" name="membershipId" value={m.id} />
@@ -97,7 +97,7 @@ export default async function StaffPage({ params }: { params: Promise<{ org: str
         </Card>
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Invite someone" description={env.SMTP_URL ? 'An invitation email will be sent.' : 'Email is not configured: copy the link and send it yourself (WhatsApp, SMS…).'} />
+            <CardHeader title="Invite someone" description={EMAIL_DELIVERY_AVAILABLE ? 'An invitation email will be sent.' : 'MenuNiva does not send emails yet: copy the link and send it yourself (WhatsApp, SMS…).'} />
             <CardBody>
               <LinkResultForm action={inviteStaffAction} submitLabel="Create invitation" note="Invitation link (valid 7 days):" testId="invite-form">
                 <input type="hidden" name="org" value={ctx.org.slug} />

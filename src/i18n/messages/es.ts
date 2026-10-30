@@ -43,7 +43,7 @@ const es: Messages = {
     emailTaken: 'Ya existe una cuenta con este correo.',
     tooManyAttempts: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.',
     resetTitle: 'Restablecer la contraseña',
-    resetSent: 'Si existe una cuenta con este correo, se ha creado un enlace de restablecimiento.',
+    resetSent: "El envío de correos aún no está disponible. Pide al responsable del restaurante (Equipo → «Crear enlace de restablecimiento») o al soporte de MenuNiva un enlace para restablecer la contraseña.",
     newPassword: 'Nueva contraseña',
     resetDone: 'Tu contraseña se ha cambiado. Inicia sesión.',
     linkInvalid: 'Este enlace no es válido o ha caducado.',

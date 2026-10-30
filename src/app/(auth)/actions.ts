@@ -6,7 +6,6 @@ import { safeNextPath, zodFieldErrors, type ActionResult } from '@/lib/action-re
 import { audit } from '@/server/audit';
 import { burnPasswordCheck, hashPassword, passwordSchema, verifyPassword } from '@/server/auth/password';
 import { clientIp, createSession, destroySession, revokeAllSessions } from '@/server/auth/session';
-import { createPasswordResetLink } from '@/server/auth/reset';
 import { attemptLogin } from '@/server/auth/login';
 import { hashToken } from '@/server/crypto';
 import { db } from '@/server/db';
@@ -66,16 +65,15 @@ export async function requestPasswordResetAction(_prev: ActionResult, form: Form
   const parsed = emailSchema.safeParse(form.get('email'));
   if (!parsed.success) return { ok: false, error: 'invalid_email' };
   try {
-    await rateLimit(`reset:${await clientIp()}`, 5, 3600);
+    const ip = await clientIp();
+    await (ip ? rateLimit(`reset:${ip}`, 5, 3600) : rateLimit('reset:unknown-ip', 50, 3600));
   } catch (e) {
     if (e instanceof RateLimitError) return { ok: false, error: 'too_many_attempts' };
     throw e;
   }
-  const user = await db.user.findUnique({ where: { email: parsed.data } });
-  if (user && env.SMTP_URL) {
-    await createPasswordResetLink(user.id);
-    // Email delivery is wired when SMTP is configured (NEEDS CONFIGURATION, see docs/DEPLOYMENT.md).
-  }
+  // No email sender exists yet (EMAIL_DELIVERY_AVAILABLE = false): no token is created that nobody
+  // could receive. The page tells the person to ask the owner or MenuNiva support for a reset link.
+  void parsed.data;
   return { ok: true, message: 'reset_sent' };
 }
 
