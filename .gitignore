@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+
+# build output
+.next/
+.next-e2e/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# generated code
+src/generated/
+
+# local database files (embedded PostgreSQL data directory)
+.data/
+
+# uploads stored locally in development
+storage/
+
+# environment files with secrets (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# test output
+test-results/
+playwright-report/
+coverage/
+
+# logs and OS files
+*.log
+.DS_Store

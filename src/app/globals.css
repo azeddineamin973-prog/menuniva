@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- MenuNiva dashboard tokens (light) ---------- */
+:root {
+  --mn-graphite: #171a1d;
+  --mn-lime: #b9ff36;
+  --mn-lime-ink: #1d2a00;
+  --mn-bg: #f6f7f5;
+  --mn-surface: #ffffff;
+  --mn-surface-2: #f1f2ef;
+  --mn-border: #e3e5e0;
+  --mn-text: #171a1d;
+  --mn-muted: #61676d;
+  --mn-focus: #7ac70c;
+  --mn-danger: #c2341d;
+  --mn-warning: #b36b00;
+  --mn-success: #237a3b;
+  --mn-info: #1d5fa8;
+
+  /* Storefront defaults; overridden inline per restaurant */
+  --sf-primary: #1f5c4a;
+  --sf-accent: #b8975a;
+  --sf-bg: #fbf7ee;
+  --sf-text: #1e2420;
+}
+
+.dark {
+  --mn-bg: #0f1113;
+  --mn-surface: #171a1d;
+  --mn-surface-2: #1f2327;
+  --mn-border: #2b3035;
+  --mn-text: #eef0ec;
+  --mn-muted: #9aa1a7;
+  --mn-focus: #b9ff36;
+}
+
+@theme inline {
+  --color-graphite: var(--mn-graphite);
+  --color-lime: var(--mn-lime);
+  --color-lime-ink: var(--mn-lime-ink);
+  --color-bg: var(--mn-bg);
+  --color-surface: var(--mn-surface);
+  --color-surface-2: var(--mn-surface-2);
+  --color-line: var(--mn-border);
+  --color-ink: var(--mn-text);
+  --color-muted: var(--mn-muted);
+  --color-danger: var(--mn-danger);
+  --color-warning: var(--mn-warning);
+  --color-success: var(--mn-success);
+  --color-info: var(--mn-info);
+
+  --color-sf-primary: var(--sf-primary);
+  --color-sf-accent: var(--sf-accent);
+  --color-sf-bg: var(--sf-bg);
+  --color-sf-text: var(--sf-text);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', 'Noto Sans Arabic', 'Geeza Pro', sans-serif;
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Noto Naskh Arabic', 'Geeza Pro', serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --radius-card: 1.25rem;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--mn-bg);
+  color: var(--mn-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 2px;
+}
+
+/* Subtle Moroccan zellige-inspired pattern for restaurant storefronts (original geometric star). */
+.sf-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23B8975A' stroke-opacity='0.22' stroke-width='1'%3E%3Cpath d='M28 6l6.5 15.5L50 28l-15.5 6.5L28 50l-6.5-15.5L6 28l15.5-6.5z'/%3E%3Crect x='17' y='17' width='22' height='22' transform='rotate(45 28 28)'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 56px 56px;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
