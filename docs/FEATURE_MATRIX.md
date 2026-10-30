@@ -56,9 +56,9 @@ Status values (never a generic "Complete"):
 | 12 | WhatsApp prefilled ordering + external links | M9 | M9-09, M9-10 | `buildWhatsAppText` in `menu-app.tsx`, storefront links | takeaway-delivery.spec.ts | TESTED |
 | 13 | Promotions & coupons (server-side) | M10 | M10-01..04 | `src/lib/promotions.ts`, `services/promotions.ts`, `dashboard/[org]/promotions` | TEST 11 (unit + integration + E2E) | TESTED |
 | 14 | Reservations with double-booking prevention | M10 | M10-05..09 | `services/reservations.ts`, `r/[org]/reserve`, `reservation/[token]`, `dashboard/[org]/reservations` | TEST 12 (integration + E2E) | TESTED (no SMS by design) |
-| 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | — | TEST 13, 14 | NOT STARTED |
-| 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | — | — | NOT STARTED |
-| 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | — | — | NOT STARTED |
+| 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | `services/feedback.ts`, `api/public/feedback`, `r/[org]/feedback`, `dashboard/[org]/reviews` | TEST 13, 14 (integration + E2E) | TESTED |
+| 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | `services/loyalty.ts`, `api/public/loyalty`, `o/[token]/loyalty-card.tsx`, `dashboard/[org]/loyalty` | `loyalty.test.ts` (integration) + E2E | TESTED |
+| 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | `src/lib/upsell.ts`, `services/upsell.ts`, `api/public/upsell`, `dashboard/[org]/menu/upsell`, cart in `menu-app.tsx` | unit + integration + E2E | TESTED |
 | 18 | Analytics (paid vs unpaid), CSV export | M12 | M12-01..04 | — | TEST 18 | NOT STARTED |
 | 19 | Pay at counter / waiter / cash on delivery, manual payment records | M8/M9 | M8-08, M9-11 | `services/bills.ts` (recordPayment, voidPayment) | bills.test.ts, bills.spec.ts | TESTED (cash on delivery checkout pending M9) |
 | 19 | Online payments (MB WAY, Multibanco, cards, Bizum) | — | — | `server/payments/providers.ts` (interface, not connected) | — | BLOCKED BY EXTERNAL APPROVAL |

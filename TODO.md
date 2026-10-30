@@ -179,17 +179,17 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M11 — Smart Reviews, Complaint Recovery, Loyalty & Upsell
 
-- [ ] **M11-01** Review settings per location (official Google review URL) — P1
-- [ ] **M11-02** Customer feedback page: stars, categories, comment, follow-up; Google link shown identically to all — P0
-- [ ] **M11-03** Low-rating manager alerts — P1
-- [ ] **M11-04** Feedback inbox: notes, statuses NEW/INVESTIGATING/RESOLVED/ARCHIVED — P1
-- [ ] **M11-05** Repeated-issue analysis by category — P2
-- [ ] **M11-06** Loyalty program settings (enable/disable, points/stamps, expiry) — P2
-- [ ] **M11-07** Voluntary enrolment with consent; marketing opt-in separate; optional birthday — P2
-- [ ] **M11-08** Earn / redeem / expire transactions; never tied to reviews — P2
-- [ ] **M11-09** Upsell rules (product/category → suggestion) — P1
-- [ ] **M11-10** Upsell in cart (polite, never auto-adds) + SHOWN/ACCEPTED tracking — P1
-- [ ] **M11-11** Tests: TEST 13, 14 + milestone gate — P0
+- [x] **M11-01** Review settings per location (official Google review URL) — P1
+- [x] **M11-02** Customer feedback page: stars, categories, comment, follow-up; Google link shown identically to all — P0
+- [x] **M11-03** Low-rating manager alerts — P1
+- [x] **M11-04** Feedback inbox: notes, statuses NEW/INVESTIGATING/RESOLVED/ARCHIVED — P1
+- [x] **M11-05** Repeated-issue analysis by category — P2
+- [x] **M11-06** Loyalty program settings (enable/disable, points/stamps, expiry) — P2
+- [x] **M11-07** Voluntary enrolment with consent; marketing opt-in separate; optional birthday — P2
+- [x] **M11-08** Earn / redeem / expire transactions; never tied to reviews — P2
+- [x] **M11-09** Upsell rules (product/category → suggestion) — P1
+- [x] **M11-10** Upsell in cart (polite, never auto-adds) + SHOWN/ACCEPTED tracking — P1
+- [x] **M11-11** Tests: TEST 13, 14 + milestone gate — P0
 
 ## M12 — Analytics, Subscriptions, Plans & SaaS Administration
 

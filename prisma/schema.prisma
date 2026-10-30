@@ -1038,6 +1038,7 @@ model Order {
   totalCents       Int
   paidCents        Int           @default(0)
   paymentMethodIntent PaymentMethod? // how the guest said they will pay (informational)
+  loyaltyAccountId String?       // set only when the guest voluntarily joins loyalty from this order
   currency         String        @default("EUR")
   idempotencyKey   String
   trackingTokenHash String       @unique
@@ -1061,6 +1062,7 @@ model Order {
   discounts        OrderDiscount[]
   payments         PaymentRecord[]
   feedback         CustomerFeedback[]
+  loyaltyAccount   LoyaltyAccount?        @relation(fields: [loyaltyAccountId], references: [id], onDelete: SetNull)
 
   @@unique([locationId, idempotencyKey])
   @@unique([locationId, number])
@@ -1474,6 +1476,7 @@ model LoyaltyAccount {
 
   organization   RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   transactions   LoyaltyTransaction[]
+  orders         Order[]
 
   @@unique([organizationId, phone])
 }
@@ -1491,6 +1494,7 @@ model LoyaltyTransaction {
   account   LoyaltyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([orderId])
 }
 
 // ============================== UPSELL =====================================

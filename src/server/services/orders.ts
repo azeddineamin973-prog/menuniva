@@ -15,6 +15,7 @@ import { assertLocationAccess, type TenantContext } from '../tenant';
 import { cartSchema, quoteCart, type QuoteIssue } from './pricing';
 import { orderingState } from './public-menu';
 import { computeDiscounts, consumeUsage } from './promotions';
+import { syncLoyaltyForOrder } from './loyalty';
 
 /**
  * Customer tracking token. Derived with HMAC from the location and the client's
@@ -257,6 +258,7 @@ export async function changeOrderStatus(ctx: TenantContext, input: unknown) {
     if (d.to === 'DELIVERED') await tx.deliveryOrderDetails.updateMany({ where: { orderId: order.id }, data: { deliveredAt: now } });
     if (d.to === 'COMPLETED' || d.to === 'DELIVERED') {
       await tx.orderItem.updateMany({ where: { orderId: order.id, prepStatus: 'READY' }, data: { prepStatus: 'SERVED' } });
+      await syncLoyaltyForOrder(tx, order.id);
     }
     await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'order.status_changed', entityType: 'Order', entityId: order.id, metadata: { from: order.status, to: d.to, reason: d.reason ?? null } }, tx);
   });

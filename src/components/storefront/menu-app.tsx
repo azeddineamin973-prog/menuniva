@@ -1,12 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LanguageCode, OrderChannel } from '@/generated/prisma/enums';
 import type { Messages } from '@/i18n';
 import { fmt } from '@/i18n/config';
 import { cn } from '@/lib/cn';
 import { formatCents } from '@/lib/money';
+import { pickSuggestions, type UpsellRuleView } from '@/lib/upsell';
 import type { PublicCategory, PublicProduct } from '@/server/services/public-menu';
 
 export type CartLine = {
@@ -76,7 +77,7 @@ export function MenuApp({
   allergyNotice,
   pricesIncludeVat,
   tableLabel,
-  upsell,
+  upsellRules,
   tableCodeRequired = false,
   checkout,
 }: {
@@ -91,7 +92,7 @@ export function MenuApp({
   allergyNotice: string;
   pricesIncludeVat: boolean;
   tableLabel?: string;
-  upsell?: React.ReactNode;
+  upsellRules?: UpsellRuleView[];
   tableCodeRequired?: boolean;
   checkout?: CheckoutConfig;
 }) {
@@ -109,6 +110,19 @@ export function MenuApp({
   const addLine = (line: CartLine) => {
     setLines((ls) => [...ls, line]);
     setOpen(null);
+  };
+  // Polite cart suggestions: shown only on request (cart open), never added automatically.
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const suggestions = useMemo(() => (canOrder ? pickSuggestions(upsellRules ?? [], menu, lines.map((l) => l.productId), dismissed) : []), [canOrder, upsellRules, menu, lines, dismissed]);
+  const acceptSuggestion = (ruleId: string, p: PublicProduct) => {
+    trackUpsell(ruleId, 'ACCEPTED');
+    const simple = p.variants.length === 0 && p.modifierGroups.every((g) => g.minSelect === 0);
+    if (simple) {
+      setLines((ls) => [...ls, { lineId: uid(), productId: p.id, variantId: null, modifiers: [], quantity: 1, notes: '', name: p.name, detail: '', unitCents: p.priceCents }]);
+    } else {
+      setCartOpen(false);
+      setOpen(p); // the guest still chooses options and taps "add" themselves
+    }
   };
 
   return (
@@ -213,7 +227,7 @@ export function MenuApp({
           canOrder={canOrder}
           allergyNotice={allergyNotice}
           pricesIncludeVat={pricesIncludeVat}
-          upsell={upsell}
+          upsell={suggestions.length > 0 ? <UpsellBox suggestions={suggestions} m={m} money={money} onAdd={acceptSuggestion} onDismiss={(id) => setDismissed((d) => [...d, id])} /> : null}
           tableCodeRequired={tableCodeRequired}
           checkout={checkout}
           onClose={() => setCartOpen(false)}
@@ -231,6 +245,37 @@ export function MenuApp({
   );
 }
 
+function trackUpsell(ruleId: string, type: 'SHOWN' | 'ACCEPTED') {
+  fetch('/api/public/upsell', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ruleId, type }), keepalive: true }).catch(() => undefined);
+}
+function UpsellBox({ suggestions, m, money, onAdd, onDismiss }: { suggestions: { ruleId: string; product: PublicProduct }[]; m: Msg; money: (c: number) => string; onAdd: (ruleId: string, p: PublicProduct) => void; onDismiss: (ruleId: string) => void }) {
+  const seen = useRef(new Set<string>());
+  useEffect(() => {
+    for (const s of suggestions) {
+      if (seen.current.has(s.ruleId)) continue;
+      seen.current.add(s.ruleId);
+      trackUpsell(s.ruleId, 'SHOWN');
+    }
+  }, [suggestions]);
+  return (
+    <section className="rounded-2xl bg-white/70 p-3 ring-1 ring-black/5" aria-label={m.customer.youMightAlsoLike} data-testid="upsell">
+      <p className="mb-2 text-sm font-medium">{m.customer.youMightAlsoLike}</p>
+      <ul className="space-y-2">
+        {suggestions.map((s) => (
+          <li key={s.ruleId} className="flex items-center gap-3" data-testid="upsell-item">
+            {s.product.imageUrl && <img src={s.product.imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{s.product.name}</span>
+              <span className="block text-xs tabular-nums opacity-70">{money(s.product.priceCents)}</span>
+            </span>
+            <button type="button" onClick={() => onAdd(s.ruleId, s.product)} className="h-9 rounded-xl bg-sf-primary px-3 text-sm font-medium text-white" data-testid="upsell-add">{m.customer.addSuggestion}</button>
+            <button type="button" onClick={() => onDismiss(s.ruleId)} className="h-9 rounded-xl px-2 text-xs underline opacity-70" data-testid="upsell-dismiss">{m.customer.noThanks}</button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 function Sheet({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -540,7 +585,7 @@ function CartSheet({
           {lines.map((l, i) => {
             const issue = quote?.issues.find((x) => x.index === i);
             return (
-              <li key={l.lineId} className={cn('rounded-2xl bg-white/80 p-3 ring-1', issue ? 'ring-red-300' : 'ring-black/5')}>
+              <li key={l.lineId} className={cn('rounded-2xl bg-white/80 p-3 ring-1', issue ? 'ring-red-300' : 'ring-black/5')} data-testid="cart-line">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium">{l.name}</p>

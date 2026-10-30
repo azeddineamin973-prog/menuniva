@@ -11,6 +11,7 @@ import { audit } from '../audit';
 import { db } from '../db';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
+import { syncLoyaltyForOrder } from './loyalty';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { createOrderRecord, OrderRejectedError, trackingTokenFor } from './orders';
 import { cartSchema, quoteCart } from './pricing';
@@ -435,6 +436,7 @@ export async function driverUpdate(ctx: TenantContext, orderId: string, to: 'OUT
       if (due <= 0) return;
       await tx.paymentRecord.create({ data: { organizationId: ctx.org.id, orderId: order.id, amountCents: due, method: 'CASH_ON_DELIVERY', recordedById: ctx.userId, note: 'Collected by driver' } });
       await tx.order.update({ where: { id: order.id }, data: { paidCents: fresh.totalCents, paymentStatus: 'PAID' } });
+      await syncLoyaltyForOrder(tx, order.id);
       await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'payment.recorded', entityType: 'Order', entityId: order.id, metadata: { method: 'CASH_ON_DELIVERY', amountCents: due } }, tx);
     });
   }

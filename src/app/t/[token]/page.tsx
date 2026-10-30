@@ -7,6 +7,7 @@ import { LANGUAGE_TAG } from '@/i18n/config';
 import { db } from '@/server/db';
 import { resolveTableToken } from '@/server/services/orders';
 import { getPublicMenu, orderingState } from '@/server/services/public-menu';
+import { upsellRulesFor } from '@/server/services/upsell';
 import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storefront';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ export default async function TablePage({ params, searchParams }: { params: Prom
     );
   }
 
-  const menu = await getPublicMenu(location.id, lang, 'TABLE');
+  const [menu, upsellRules] = await Promise.all([getPublicMenu(location.id, lang, 'TABLE'), upsellRulesFor(org.id)]);
   const state = orderingState(location, org.status, 'TABLE');
   const orderingMessage = state.canOrder ? undefined : state.reason === 'paused' ? m.customer.orderingPaused : m.customer.tableOrderingDisabled;
 
@@ -51,6 +52,7 @@ export default async function TablePage({ params, searchParams }: { params: Prom
         allergyNotice={allergyNoticeFor(settings, lang, m.customer.allergyNoticeDefault)}
         pricesIncludeVat={settings?.pricesIncludeTax ?? true}
         tableLabel={table.label}
+        upsellRules={upsellRules}
         tableCodeRequired={location.tableCodeRequired}
       />
     </StorefrontShell>

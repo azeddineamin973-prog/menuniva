@@ -4,8 +4,10 @@ import { StorefrontShell } from '@/components/storefront/shell';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { db } from '@/server/db';
+import { loyaltyForOrder } from '@/server/services/loyalty';
 import { trackOrder } from '@/server/services/orders';
 import { resolveGuestLanguage } from '@/server/services/storefront';
+import { LoyaltyCard } from './loyalty-card';
 import { OrderTracker } from './tracker';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +22,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
   const lang = await resolveGuestLanguage(org, order.language);
   const m = getMessages(lang);
   const tableToken = order.table?.qrTokens[0]?.token;
+  const loyalty = order.status === 'CANCELLED' ? null : await loyaltyForOrder(token, lang);
   return (
     <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={order.location.name} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
       <OrderTracker
@@ -40,6 +43,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
         }}
         orderMoreHref={tableToken ? `/t/${tableToken}` : `/r/${org.slug}`}
         feedbackHref={`/r/${org.slug}/feedback?o=${encodeURIComponent(token)}`}
+        loyalty={loyalty ? <LoyaltyCard token={token} restaurant={org.name} view={loyalty} m={{ loyalty: m.loyalty, common: m.common }} /> : undefined}
       />
     </StorefrontShell>
   );

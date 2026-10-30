@@ -165,3 +165,27 @@ Not provided by design: GPS/live location tracking, automatic Glovo/Uber courier
 | `tests/e2e/promotions-reservations.spec.ts` (2) | Owner creates 10 % and a code promotion; guest cart shows discount line and “Poupa 1,30 €”, total 11,70 €; wrong code error; valid code (higher priority, not combined) → 11,00 €, stored order 13,00 − 2,00 = 11,00; guest requests reservation from storefront, staff assign table + confirm, guest page shows CONFIRMED; overlapping second reservation cannot take the same table; full time slot disabled for the next guest |
 
 Note: the first M10 E2E attempt failed only because two Playwright runs were started at the same time (shared port/test DB); the sequential full run passed.
+
+## Run 7 — 2026-10-30 (session 3): M11 Smart Reviews, loyalty & cart suggestions
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Unit + integration | `npm test` | ✅ 22 files, **201 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **26 tests passed** |
+| Migration | `20261030065012_loyalty_order_link` | ✅ applied to dev and test |
+
+| File | Covers |
+|---|---|
+| `tests/integration/feedback.test.ts` (11) | **TEST 13** 1★ → private LOW_RATING alert and the Google link is still returned; **TEST 14** 5★ → identical link and identical response shape, no alert; every rating 1–5 gets the same link; no link configured → none for anyone; contact stored only with follow-up, follow-up needs contact; configurable threshold; feedback switch; one feedback per order; invalid ratings; only https Google URLs accepted (M11-01); inbox statuses, alert cleared on status change, internal notes, stats (average, distribution, repeated issues, low-rating resolution), archived hidden; **TEST 15** feedback isolation between restaurants |
+| `tests/integration/loyalty.test.ts` (11) | Settings validation, cannot switch on without a reward; earn amounts (stamp / points without delivery fee); explicit consent required, marketing and birthday separate (birthday needs its own consent); existing member's consents never changed from another order page; earn only when COMPLETED and fully PAID, exactly once, in either order; voided payment reverses the earn (ADJUST); join after completion earns immediately; staff redeem needs enough stamps; FIFO expiry (idempotent); **feedback never changes loyalty**; member deletion erases phone/name/birthday and history; staff can withdraw but not grant marketing consent; tenant isolation |
+| `tests/unit/upsell.test.ts` (3) + `tests/integration/upsell.test.ts` (3) | Product and category triggers, priority order, max 2; never suggests items in cart, sold out, unavailable or without a price on the channel; dismissed hidden; self-suggestion / duplicate / foreign ids refused; global switch and paused rules; SHOWN/ACCEPTED counters, unknown or paused rule refused; tenant isolation |
+| `tests/e2e/reviews-loyalty-upsell.spec.ts` (3) | Guest 1★ (with follow-up) and 5★ both see the same Google link before and after submitting; manager sees low-rating alert, contact, adds note, resolves → alert cleared, repeated issue listed. Owner creates a suggestion; guest cart shows it without adding it; tapping Add opens the dish sheet (required choice) and still adds nothing; “No, thanks” hides it; SHOWN/ACCEPTED recorded. Owner enables loyalty; guest joins from the order page only after ticking consent (marketing unticked by default); member listed 0 / 5; member deleted and personal data erased |
+
+Master-spec test status after Run 7: TEST 1–15, 17, 19 ✅ · TEST 16 partial (Super Admin flow browser test in M12) · TEST 18 partial (analytics in M12) · TEST 20 pending (M13 demo environment).
+
+Defects found and fixed in this run:
+- Feedback contact-name field used an English/Portuguese hard-coded placeholder; now translated in all 5 languages.
+
+Note: an intermediate run failed because Vitest and Playwright were started at the same time on the shared test database; the sequential runs above passed.
+

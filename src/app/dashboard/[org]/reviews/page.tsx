@@ -1,0 +1,174 @@
+import Link from 'next/link';
+import { ActionForm } from '@/components/forms/action-form';
+import { InlineAction } from '@/components/forms/inline-action';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, PageHeader, Select, Stat, Textarea } from '@/components/ui';
+import { getMessages } from '@/i18n';
+import { formatTimeInZone } from '@/lib/time';
+import { currentLocation } from '@/server/current-location';
+import { db } from '@/server/db';
+import { feedbackInbox, feedbackStats } from '@/server/services/feedback';
+import { requireTenantPage } from '@/server/tenant';
+import { feedbackNoteAction, feedbackStatusAction, reviewSettingsAction } from './actions';
+
+const STATUSES = ['NEW', 'INVESTIGATING', 'RESOLVED', 'ARCHIVED'] as const;
+const TONE: Record<string, 'warning' | 'info' | 'success' | 'neutral'> = { NEW: 'warning', INVESTIGATING: 'info', RESOLVED: 'success', ARCHIVED: 'neutral' };
+
+export default async function ReviewsPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ status?: string; max?: string }> }) {
+  const { org } = await params;
+  const sp = await searchParams;
+  const ctx = await requireTenantPage(org, 'reviews.view');
+  const location = await currentLocation(ctx);
+  if (!location) return <Alert tone="warning">No location.</Alert>;
+  const m = getMessages(ctx.user.preferredLanguage);
+  const status = STATUSES.includes(sp.status as never) ? sp.status : undefined;
+  const maxRating = sp.max && /^[1-4]$/.test(sp.max) ? Number(sp.max) : undefined;
+  const [items, stats, review, unread] = await Promise.all([
+    feedbackInbox(ctx, { status, maxRating, locationId: location.id }),
+    feedbackStats(ctx, 30, location.id),
+    db.reviewSettings.findUnique({ where: { locationId: location.id } }),
+    db.notification.count({ where: { organizationId: ctx.org.id, locationId: location.id, type: 'LOW_RATING', readAt: null } }),
+  ]);
+  const settings = await db.restaurantSettings.findUnique({ where: { organizationId: ctx.org.id } });
+  const manage = ctx.can('reviews.manage');
+  const base = `/dashboard/${ctx.org.slug}/reviews`;
+  const q = (s?: string, mx?: number) => {
+    const p = new URLSearchParams();
+    if (s) p.set('status', s);
+    if (mx) p.set('max', String(mx));
+    const str = p.toString();
+    return str ? `${base}?${str}` : base;
+  };
+  const max = Math.max(1, ...stats.distribution);
+  return (
+    <>
+      <PageHeader
+        title={m.nav.reviews}
+        description="Private guest feedback. Nothing here is published. Every guest sees the same Google review link, whatever their rating."
+      />
+      {unread > 0 && (
+        <div className="mb-4" data-testid="low-rating-alert">
+          <Alert tone="danger" title={`${unread} low-rating ${unread === 1 ? 'alert' : 'alerts'} need attention`}>
+            Open the feedback below and set it to “Investigating” or “Resolved” to clear the alert.
+          </Alert>
+        </div>
+      )}
+      {!review?.googleReviewUrl && (
+        <div className="mb-4">
+          <Alert tone="info">
+            No official Google review link is set for {location.name}. Add it in{' '}
+            <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>. Until then guests only see the private form.
+          </Alert>
+        </div>
+      )}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Average (30 days)" value={<span data-testid="stat-average">{stats.average ?? '—'}</span>} hint={`${stats.count} responses`} />
+        <Stat label="Open" value={<span data-testid="stat-open">{stats.open}</span>} hint="New or investigating" />
+        <Stat label="Low ratings resolved" value={`${stats.lowResolved} / ${stats.lowTotal}`} hint="Ratings of 3★ or less" />
+        <Card>
+          <CardBody className="space-y-1">
+            {[5, 4, 3, 2, 1].map((r) => (
+              <div key={r} className="flex items-center gap-2 text-xs">
+                <span className="w-6 tabular-nums">{r}★</span>
+                <span className="h-2 flex-1 rounded bg-surface-2">
+                  <span className="block h-2 rounded bg-lime" style={{ width: `${(stats.distribution[r - 1] / max) * 100}%` }} />
+                </span>
+                <span className="w-6 text-end tabular-nums">{stats.distribution[r - 1]}</span>
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <Card>
+          <CardHeader
+            title="Feedback inbox"
+            description={
+              <span className="flex flex-wrap gap-2">
+                <Link href={q(undefined, maxRating)} className={!status ? 'font-semibold underline' : 'underline-offset-2 hover:underline'}>Active</Link>
+                {STATUSES.map((s) => (
+                  <Link key={s} href={q(s, maxRating)} className={status === s ? 'font-semibold underline' : 'underline-offset-2 hover:underline'}>{s.toLowerCase()}</Link>
+                ))}
+                <span aria-hidden>·</span>
+                <Link href={q(status, maxRating ? undefined : 3)} className={maxRating ? 'font-semibold underline' : 'underline-offset-2 hover:underline'} data-testid="filter-low">Only 3★ or less</Link>
+              </span>
+            }
+          />
+          {items.length === 0 ? (
+            <CardBody><EmptyState title="No feedback here yet" description="Guests can leave feedback from their order page or the feedback link." /></CardBody>
+          ) : (
+            <ul className="divide-y divide-line">
+              {items.map((f) => (
+                <li key={f.id} className="space-y-2 px-5 py-4" data-testid="feedback-row">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-lg font-semibold" aria-label={`${f.rating} out of 5`} data-testid="feedback-rating">{'★'.repeat(f.rating)}<span className="text-muted">{'★'.repeat(5 - f.rating)}</span></span>
+                    <Badge tone={TONE[f.status]} data-testid="feedback-status">{f.status.toLowerCase()}</Badge>
+                    {f.order && <Badge tone="neutral">Order #{f.order.number} · {f.order.channel.toLowerCase().replace('_', '-')}</Badge>}
+                    <span className="ms-auto text-xs text-muted">{f.createdAt.toLocaleDateString('pt-PT')} {formatTimeInZone(f.createdAt, location.timeZone)} · {f.language.toUpperCase()}</span>
+                  </div>
+                  {f.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1">{f.categories.map((c) => <Badge key={c} tone="dark">{m.feedback.categories[c]}</Badge>)}</div>
+                  )}
+                  {f.comment && <p className="whitespace-pre-wrap text-sm">“{f.comment}”</p>}
+                  {f.wantsFollowUp && (
+                    <p className="text-sm text-warning" data-testid="feedback-contact">Asks to be contacted: {f.contactName ? `${f.contactName} · ` : ''}{f.contactInfo}</p>
+                  )}
+                  {f.notes.length > 0 && (
+                    <ul className="space-y-1 rounded-xl bg-surface-2 p-3 text-sm">
+                      {f.notes.map((n) => <li key={n.id} data-testid="feedback-note"><span className="text-xs text-muted">{n.createdAt.toLocaleDateString('pt-PT')} · </span>{n.body}</li>)}
+                    </ul>
+                  )}
+                  {manage && (
+                    <div className="flex flex-wrap items-start gap-2">
+                      {STATUSES.filter((s) => s !== f.status).map((s) => (
+                        <InlineAction key={s} action={feedbackStatusAction} fields={{ org: ctx.org.slug, feedbackId: f.id, status: s }} label={s === 'NEW' ? 'Reopen' : s.charAt(0) + s.slice(1).toLowerCase()} variant={s === 'RESOLVED' ? 'primary' : 'secondary'} testId={`fb-${s}`} />
+                      ))}
+                      <ActionForm action={feedbackNoteAction} submitLabel="Add note" submitVariant="secondary" resetOnSuccess className="flex w-full items-start gap-2 space-y-0">
+                        <input type="hidden" name="org" value={ctx.org.slug} />
+                        <input type="hidden" name="feedbackId" value={f.id} />
+                        <Textarea name="body" rows={1} placeholder="Internal note (never shown to the guest)" className="min-h-9 flex-1" aria-label="Internal note" data-testid="feedback-note-input" />
+                      </ActionForm>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title="Repeated issues" description="Categories chosen in ratings of 3★ or less, last 30 days." />
+            <CardBody>
+              {stats.issues.length === 0 ? (
+                <p className="text-sm text-muted">No repeated issues.</p>
+              ) : (
+                <ul className="space-y-1 text-sm" data-testid="issues">
+                  {stats.issues.map(([c, n]) => (
+                    <li key={c} className="flex justify-between"><span>{m.feedback.categories[c as keyof typeof m.feedback.categories]}</span><span className="tabular-nums">{n}</span></li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+          {manage && (
+            <Card>
+              <CardHeader title="Feedback settings" />
+              <CardBody>
+                <ActionForm action={reviewSettingsAction} testId="review-settings-form">
+                  <input type="hidden" name="org" value={ctx.org.slug} />
+                  <input type="hidden" name="locationId" value={location.id} />
+                  <Checkbox name="feedbackEnabled" label="Accept guest feedback" defaultChecked={settings?.feedbackEnabled ?? true} />
+                  <Field label="Alert managers for ratings up to" htmlFor="rv-threshold" hint="Alerts are internal. They never change what the guest sees.">
+                    <Select id="rv-threshold" name="lowRatingThreshold" defaultValue={String(review?.lowRatingThreshold ?? 3)}>
+                      {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}★</option>)}
+                    </Select>
+                  </Field>
+                  <p className="text-xs text-muted">Guest feedback link: <code>/r/{ctx.org.slug}/feedback?l={location.slug}</code></p>
+                </ActionForm>
+              </CardBody>
+            </Card>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}

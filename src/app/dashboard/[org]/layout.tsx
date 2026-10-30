@@ -18,12 +18,15 @@ export default async function DashboardLayout({ children, params }: { children: 
   const base = `/dashboard/${ctx.org.slug}`;
 
   const [locations, current] = await Promise.all([accessibleLocations(ctx), currentLocation(ctx)]);
-  const [newOrders, openTasks, orgs] = await Promise.all([
+  const [newOrders, openTasks, lowRatings, orgs] = await Promise.all([
     ctx.can('orders.view')
       ? db.order.count({ where: { organizationId: ctx.org.id, status: 'NEW', acknowledgedAt: null, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
       : 0,
     ctx.can('tasks.manage')
       ? db.staffTask.count({ where: { organizationId: ctx.org.id, status: 'OPEN', ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
+      : 0,
+    ctx.can('reviews.view')
+      ? db.notification.count({ where: { organizationId: ctx.org.id, type: 'LOW_RATING', readAt: null, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
       : 0,
     listUserOrganizations(ctx.userId),
   ]);
@@ -32,7 +35,7 @@ export default async function DashboardLayout({ children, params }: { children: 
     href: `${base}${i.path}`,
     label: m.nav[i.key],
     group: i.group,
-    badge: i.key === 'liveOrders' ? newOrders : i.key === 'tasks' ? openTasks : undefined,
+    badge: i.key === 'liveOrders' ? newOrders : i.key === 'tasks' ? openTasks : i.key === 'reviews' ? lowRatings : undefined,
   }));
 
   const lang = ctx.user.preferredLanguage;

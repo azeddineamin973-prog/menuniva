@@ -11,6 +11,7 @@ import { zonedParts } from '@/lib/time';
 import { db } from '@/server/db';
 import { pickupOptions, publicLocation } from '@/server/services/fulfilment';
 import { getPublicMenu } from '@/server/services/public-menu';
+import { upsellRulesFor } from '@/server/services/upsell';
 import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storefront';
 
 export const dynamic = 'force-dynamic';
@@ -62,7 +63,7 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   }
   if (!canOrder && !message) message = m.customer.orderingPaused;
 
-  const menu = await getPublicMenu(location.id, lang, channel);
+  const [menu, upsellRules] = await Promise.all([getPublicMenu(location.id, lang, channel), upsellRulesFor(org.id)]);
   const title = mode === 'pickup' ? m.customer.pickup : mode === 'delivery' ? m.customer.restaurantDelivery : m.customer.orderViaWhatsApp;
   const minDelivery = location.deliveryZones.reduce<number | null>((min, z) => (min === null || z.minOrderCents < min ? z.minOrderCents : min), null);
 
@@ -84,6 +85,7 @@ export default async function OrderModePage({ params, searchParams }: { params: 
         allergyNotice={allergyNoticeFor(settings, lang, m.customer.allergyNoticeDefault)}
         pricesIncludeVat={settings?.pricesIncludeTax ?? true}
         checkout={checkout}
+        upsellRules={upsellRules}
       />
     </StorefrontShell>
   );

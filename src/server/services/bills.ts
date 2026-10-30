@@ -6,6 +6,7 @@ import { audit } from '../audit';
 import { db, type Tx } from '../db';
 import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
+import { syncLoyaltyForOrder } from './loyalty';
 
 const ACTIVE: OrderStatus[] = ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
@@ -20,6 +21,7 @@ export async function recomputeOrderPayment(tx: Tx, orderId: string) {
   const agg = await tx.paymentRecord.aggregate({ where: { orderId, status: 'RECORDED' }, _sum: { amountCents: true } });
   const paid = agg._sum.amountCents ?? 0;
   await tx.order.update({ where: { id: orderId }, data: { paidCents: paid, paymentStatus: paymentStatusFor(paid, order.totalCents) } });
+  await syncLoyaltyForOrder(tx, orderId);
 }
 
 async function lockOrders(tx: Tx, ids: string[]) {
@@ -75,6 +77,7 @@ export async function closeTableSession(ctx: TenantContext, input: unknown) {
     for (const o of served) {
       const u = await tx.order.updateMany({ where: { id: o.id, status: 'READY' }, data: { status: 'COMPLETED', completedAt: new Date() } });
       if (u.count) await tx.orderStatusEvent.create({ data: { orderId: o.id, fromStatus: 'READY', toStatus: 'COMPLETED', actorType: 'STAFF', actorUserId: ctx.userId, note: 'Table closed' } });
+      if (u.count) await syncLoyaltyForOrder(tx, o.id);
     }
     await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_closed', entityType: 'TableSession', entityId: session.id, metadata: { balanceCents: bill.balanceCents, note: d.note ?? null } }, tx);
   });
@@ -140,6 +143,7 @@ export async function changeOrderItem(ctx: TenantContext, input: unknown) {
     const total = subtotal - discount + order.deliveryFeeCents;
     if (order.paidCents > total) throw new UserFacingError('The new total would be lower than what was already paid. Void a payment first.');
     await tx.order.update({ where: { id: order.id }, data: { subtotalCents: subtotal, discountCents: discount, totalCents: total, paymentStatus: paymentStatusFor(order.paidCents, total) } });
+    await syncLoyaltyForOrder(tx, order.id);
     if (item.stationId) {
       const remaining = lines.filter((l) => l.stationId === item.stationId).length;
       if (remaining === 0) await tx.kitchenTicket.updateMany({ where: { orderId: order.id, stationId: item.stationId }, data: { status: 'CANCELLED' } });

@@ -23,7 +23,7 @@ type Initial = {
 };
 
 /** Polls the real order status every 6 s (no fake progress). */
-export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHref }: { token: string; tag: string; m: Pick<Messages, 'customer' | 'orderStatus' | 'common'>; initial: Initial; orderMoreHref: string; feedbackHref: string }) {
+export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHref, loyalty }: { token: string; tag: string; m: Pick<Messages, 'customer' | 'orderStatus' | 'common'>; initial: Initial; orderMoreHref: string; feedbackHref: string; loyalty?: React.ReactNode }) {
   const [status, setStatus] = useState<OrderStatus>(initial.status);
   const [cancelReason, setCancelReason] = useState(initial.cancelReason);
   const [offline, setOffline] = useState(false);
@@ -108,6 +108,7 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
         {!done && initial.channel === 'TABLE' && <Link href={orderMoreHref} className="rounded-2xl bg-sf-primary py-3 text-center font-medium text-white">{m.customer.orderMore}</Link>}
         <Link href={feedbackHref} className="rounded-2xl py-3 text-center font-medium ring-1 ring-black/10">{m.customer.leaveFeedback}</Link>
       </div>
+      {status !== 'CANCELLED' && loyalty}
     </div>
   );
 }

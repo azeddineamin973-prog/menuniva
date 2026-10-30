@@ -27,6 +27,7 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
           <>
             <ButtonLink href={`${base}/menu/quick`} variant="secondary">Quick prices & sold out</ButtonLink>
             {canEdit && <ButtonLink href={`${base}/menu/translations`} variant="secondary">Translations</ButtonLink>}
+            {canEdit && <ButtonLink href={`${base}/menu/upsell`} variant="secondary">Cart suggestions</ButtonLink>}
             {ctx.can('import.manage') && <ButtonLink href={`${base}/import`} variant="secondary">Import menu</ButtonLink>}
           </>
         }
