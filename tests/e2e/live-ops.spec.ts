@@ -79,6 +79,7 @@ test('M7-10: connection loss is shown, and the board reloads authoritative state
   await login(page, s.owner, s.password);
   await page.goto(`/dashboard/${s.orgSlug}/orders`);
   await expect(page.getByTestId('connection-status')).toContainText('Live');
+  await expect(page.getByTestId('column-new')).toBeVisible(); // first poll rendered
   const before = await page.getByTestId('order-card').count();
   await context.setOffline(true);
   await expect(page.getByTestId('connection-status')).toContainText('Connection lost', { timeout: 12_000 });

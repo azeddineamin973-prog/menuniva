@@ -1,26 +1,32 @@
 # MenuNiva — Progress Log
 
-## Current status (end of session 1 — 2026-10-30)
+## Current status (end of session 2 — 2026-10-30)
 
-**Task completion (from TODO.md):** 57 of 169 tasks verified (33.7 %) · 24 in progress · 88 not started.
+**Task completion (from TODO.md):** 103 of 169 tasks verified (60.9 %) · 0 in progress · 66 not started.
 
-| Milestone | Verified | In progress | Not started | Total |
+| Milestone | Verified | Not started | Total | Gate |
 |---|---|---|---|---|
-| M1 Setup, architecture, branding | 10 | 3 | 0 | 13 |
-| M2 DB, auth, tenancy, Super Admin | 12 | 3 | 1 | 16 |
-| M3 Onboarding, settings, staff | 7 | 5 | 1 | 13 |
-| M4 Menu, 5 languages, translation | 7 | 7 | 2 | 16 |
-| M5 Import Studio | 0 | 0 | 16 | 16 |
-| M6 QR, tables, customer menu, cart | 9 | 3 | 1 | 13 |
-| M7 Ordering, live dashboard, KDS | 10 | 2 | 1 | 13 |
-| M8 Sessions, bills, waiter requests, printing | 1 | 1 | 11 | 13 |
-| M9 Takeaway, delivery, WhatsApp | 0 | 0 | 12 | 12 |
-| M10 Promotions, reservations | 0 | 0 | 10 | 10 |
-| M11 Reviews, loyalty, upsell | 0 | 0 | 11 | 11 |
-| M12 Analytics, subscriptions, admin | 0 | 0 | 10 | 10 |
-| M13 Security, backups, deployment | 1 | 0 | 12 | 13 |
+| M1 Setup, architecture, branding | 13 | 0 | 13 | ✅ closed |
+| M2 DB, auth, tenancy, Super Admin | 16 | 0 | 16 | ✅ closed |
+| M3 Onboarding, settings, staff | 13 | 0 | 13 | ✅ closed |
+| M4 Menu, 5 languages, translation | 16 | 0 | 16 | ✅ closed |
+| M5 Import Studio | 16 | 0 | 16 | ✅ closed (OCR needs configuration; Glovo/Uber APIs need provider approval) |
+| M6 QR, tables, customer menu, cart | 13 | 0 | 13 | ✅ closed |
+| M7 Ordering, live dashboard, KDS | 13 | 0 | 13 | ✅ closed |
+| M8 Sessions, bills, waiter requests, printing | 2 | 11 | 13 | next |
+| M9 Takeaway, delivery, WhatsApp | 0 | 12 | 12 | |
+| M10 Promotions, reservations | 0 | 10 | 10 | |
+| M11 Reviews, loyalty, upsell | 0 | 11 | 11 | |
+| M12 Analytics, subscriptions, admin | 0 | 10 | 10 | |
+| M13 Security, backups, deployment | 1 | 12 | 13 | |
 
-No milestone gate is closed yet: each of M1–M7 still has partially verified tasks (listed in TODO.md as `[~]`).
+Tests: 128 unit/integration + 15 browser E2E passing (QA_REPORT.md, Run 3).
+
+## Completed in session 2
+- Closed all partially verified tasks of M1–M4, M6, M7 with new integration and browser tests.
+- New features: per-location availability & prices (M4-05), availability schedules for dishes and categories (M4-08), restaurant-approved IVA tax classes with PT/ES starting points (M4-14), additional locations within plan limits + sidebar location switcher (M3-07), staff operational screens localized in 5 languages (M4-15).
+- Fixed: schedules not enforced in server pricing; forms losing values after validation errors.
+- M5 Import Studio: CSV, Excel, PDF (native text), pasted text, Glovo/Uber merchant exports; honest statuses (photo OCR not configured, partner APIs need approval, store pages not scraped); SSRF-safe fetch; duplicate detection across sources and against the existing menu; per-item decisions and canonical choice; transactional publish with platform prices kept as references; cancel/rollback.
 
 ## Completed in session 1
 - Environment inspected; project created in `~/Desktop/saas/menuniva`; no other project touched.
@@ -42,7 +48,5 @@ No milestone gate is closed yet: each of M1–M7 still has partially verified ta
 3. Real business data still to be entered by the restaurant: postal code, opening hours, dishes, prices, allergens, tables, Google review link.
 
 ## Next tasks (in order)
-1. Close M1–M4/M6/M7 partial items: mobile viewport E2E, Super Admin browser test, password reset test, upload tests, location price overrides UI, availability schedule UI, tax classes (M4-14).
-2. M5 Import Studio (CSV first → TEST 2, TEST 19).
-3. M8 table sessions, payments, split bills, kitchen ticket printing.
-4. M9 takeaway & delivery, M10, M11, M12, M13.
+1. M8: M8-01 table session lifecycle → M8-02 bill view → M8-05..M8-10 (TEST 18 payments part).
+2. M9 takeaway & delivery, M10, M11, M12, M13.

@@ -84,22 +84,22 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M5 — Magic Import Studio (executed after M7)
 
-- [ ] **M5-01** Import job service (DRAFT → NEEDS_REVIEW → PUBLISHED / CANCELLED / FAILED) — P0 · Deps: M4-02
-- [ ] **M5-02** Adapter interface + registry: GlovoCatalogAdapter, UberEatsMenuAdapter, CSVImporter, ExcelImporter, PDFMenuImporter, ImageMenuImporter, TextMenuImporter — P0 · **AC** "Connected" only for genuine working connections
-- [ ] **M5-03** CSVImporter (delimiter detection, PT decimal comma, header mapping) — P0 · **Verify** unit tests
-- [ ] **M5-04** ExcelImporter (XLSX) — P1 · **Verify** unit tests
-- [ ] **M5-05** TextMenuImporter (pasted text heuristics) — P1 · **Verify** unit tests
-- [ ] **M5-06** PDFMenuImporter: native text extraction; scanned PDFs → clear fallback — P1 · **Verify** unit tests
-- [ ] **M5-07** ImageMenuImporter: OCR only if configured; otherwise honest fallback — P2 · **NEEDS CONFIGURATION**
-- [ ] **M5-08** GlovoCatalogAdapter: partner API when credentials exist; merchant export/paste otherwise — P1 · **REQUIRES EXTERNAL APPROVAL** for API
-- [ ] **M5-09** UberEatsMenuAdapter: same model — P1 · **REQUIRES EXTERNAL APPROVAL** for API
-- [ ] **M5-10** SSRF-safe URL validation/fetch (no private IPs, redirect limit, timeout, size cap) — P0 · **Verify** unit tests
-- [ ] **M5-11** Duplicate detection & merge suggestions across sources and existing products — P1
-- [ ] **M5-12** Import preview UI (items, categories, images, missing info, duplicates, translation status, warnings) — P0
-- [ ] **M5-13** Review decisions & canonical selection; external prices stored as reference only — P0
-- [ ] **M5-14** Publish in one transaction; cancel/rollback unpublished; never silent overwrite — P0
-- [ ] **M5-15** Tests: TEST 2, TEST 19 — P0
-- [ ] **M5-16** Milestone gate — P0
+- [x] **M5-01** Import job service (DRAFT → NEEDS_REVIEW → PUBLISHED / CANCELLED / FAILED) — P0 · Deps: M4-02
+- [x] **M5-02** Adapter interface + registry: GlovoCatalogAdapter, UberEatsMenuAdapter, CSVImporter, ExcelImporter, PDFMenuImporter, ImageMenuImporter, TextMenuImporter — P0 · **AC** "Connected" only for genuine working connections
+- [x] **M5-03** CSVImporter (delimiter detection, PT decimal comma, header mapping) — P0 · **Verify** unit tests
+- [x] **M5-04** ExcelImporter (XLSX) — P1 · **Verify** unit tests
+- [x] **M5-05** TextMenuImporter (pasted text heuristics) — P1 · **Verify** unit tests
+- [x] **M5-06** PDFMenuImporter: native text extraction; scanned PDFs → clear fallback — P1 · **Verify** unit tests
+- [x] **M5-07** ImageMenuImporter: OCR only if configured; otherwise honest fallback — P2 · fallback verified; OCR engine itself **NEEDS CONFIGURATION**
+- [x] **M5-08** GlovoCatalogAdapter: partner API when credentials exist; merchant export/paste otherwise — P1 · merchant export/paste + honest status verified; partner API **REQUIRES EXTERNAL APPROVAL**
+- [x] **M5-09** UberEatsMenuAdapter: same model — P1 · merchant export/paste + honest status verified; Menu API **REQUIRES EXTERNAL APPROVAL**
+- [x] **M5-10** SSRF-safe URL validation/fetch (no private IPs, redirect limit, timeout, size cap) — P0 · **Verify** unit tests
+- [x] **M5-11** Duplicate detection & merge suggestions across sources and existing products — P1
+- [x] **M5-12** Import preview UI (items, categories, images, missing info, duplicates, translation status, warnings) — P0
+- [x] **M5-13** Review decisions & canonical selection; external prices stored as reference only — P0
+- [x] **M5-14** Publish in one transaction; cancel/rollback unpublished; never silent overwrite — P0
+- [x] **M5-15** Tests: TEST 2, TEST 19 — P0
+- [x] **M5-16** Milestone gate — P0
 
 ## M6 — QR Codes, Tables, Customer Menu & Shopping Cart
 
