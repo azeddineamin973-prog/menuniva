@@ -47,7 +47,9 @@ export async function computeDiscounts(
   p: { organizationId: string; locationId: string; channel: OrderChannel; couponCode?: string | null; lines: QuotedLine[]; subtotalCents: number; now?: Date },
 ) {
   // Without the promotions module no promotion applies; a typed code is reported as invalid.
-  const enabled = await hasModule(p.organizationId, 'promotions');
+  // The module check must use `tx`: computeDiscounts runs inside the order transaction, and asking
+  // the pool for a second connection there starved the pool with 10+ simultaneous orders (BUG-01).
+  const enabled = await hasModule(p.organizationId, 'promotions', tx);
   const { rules, couponStatus } = enabled ? await loadRules(tx, p) : { rules: [], couponStatus: p.couponCode ? ('invalid' as const) : ('none' as const) };
   const res = applyPromotions(
     p.lines.map((l, i) => ({ key: String(i), productId: l.productId, categoryId: l.categoryId, unitCents: l.unitPriceCents + l.modifiersUnitCents, quantity: l.quantity })),

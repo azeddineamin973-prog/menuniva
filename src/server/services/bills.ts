@@ -7,6 +7,7 @@ import { db, type Tx } from '../db';
 import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { syncLoyaltyForOrder } from './loyalty';
+import { lockTable } from './orders';
 
 const ACTIVE: OrderStatus[] = ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
@@ -46,13 +47,17 @@ export async function openTableSession(ctx: TenantContext, tableId: string) {
   const table = await db.restaurantTable.findFirst({ where: { id: tableId, organizationId: ctx.org.id }, include: { location: true } });
   if (!table) throw new UserFacingError('Table not found.', 404);
   await assertLocationAccess(ctx, table.locationId);
-  const existing = await db.tableSession.findFirst({ where: { tableId, status: 'OPEN' } });
-  if (existing) return existing;
-  const session = await db.tableSession.create({
-    data: { organizationId: ctx.org.id, locationId: table.locationId, tableId, openedById: ctx.userId, verificationCode: table.location.tableCodeRequired ? newTableCode() : null },
+  // Same per-table lock as guest ordering, so staff and guests cannot open two sessions at once.
+  return db.$transaction(async (tx) => {
+    await lockTable(tx, tableId);
+    const existing = await tx.tableSession.findFirst({ where: { tableId, status: 'OPEN' } });
+    if (existing) return existing;
+    const session = await tx.tableSession.create({
+      data: { organizationId: ctx.org.id, locationId: table.locationId, tableId, openedById: ctx.userId, verificationCode: table.location.tableCodeRequired ? newTableCode() : null },
+    });
+    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_opened', entityType: 'TableSession', entityId: session.id, metadata: { table: table.label } }, tx);
+    return session;
   });
-  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_opened', entityType: 'TableSession', entityId: session.id, metadata: { table: table.label } });
-  return session;
 }
 
 export const closeSessionSchema = z.object({ sessionId: z.string().min(1), note: z.string().trim().max(300).optional() });
@@ -175,6 +180,7 @@ export async function transferSession(ctx: TenantContext, sessionId: string, toT
   if (!target) throw new UserFacingError('Choose an active table in the same location.');
   if (target.id === session.tableId) throw new UserFacingError('This is already the current table.');
   await db.$transaction(async (tx) => {
+    await lockTable(tx, target.id);
     const busy = await tx.tableSession.findFirst({ where: { tableId: target.id, status: 'OPEN' } });
     if (busy) throw new UserFacingError(`Table ${target.label} already has guests. Close it first.`);
     await tx.tableSession.update({ where: { id: session.id }, data: { tableId: target.id } });

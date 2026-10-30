@@ -4,6 +4,7 @@ node_modules/
 # build output
 .next/
 .next-e2e/
+.next-demo/
 out/
 build/
 dist/
@@ -34,3 +35,7 @@ coverage/
 .DS_Store
 # database backups contain personal data — never commit
 /backups/
+# audit artifacts that may contain database copies
+/audit/backups/
+/audit/logs/
+/audit/artifacts/

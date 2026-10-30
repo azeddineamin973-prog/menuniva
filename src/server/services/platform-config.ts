@@ -1,7 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { audit } from '../audit';
-import { db } from '../db';
+import { db, type Tx } from '../db';
 
 /**
  * Platform settings editable by Super Admin (PlatformConfig table). Every key has a safe
@@ -17,8 +17,9 @@ export type PlatformConfigValues = z.infer<typeof configSchema>;
 
 export const CONFIG_DEFAULTS: PlatformConfigValues = { signupsOpen: true, defaultTrialDays: 30, trialIncludesAllModules: true, supportEmail: null };
 
-export async function getPlatformConfig(): Promise<PlatformConfigValues> {
-  const rows = await db.platformConfig.findMany({ where: { key: { in: Object.keys(CONFIG_DEFAULTS) } } });
+/** Pass `tx` when called inside a transaction, so no second pool connection is needed. */
+export async function getPlatformConfig(tx: Tx | typeof db = db): Promise<PlatformConfigValues> {
+  const rows = await tx.platformConfig.findMany({ where: { key: { in: Object.keys(CONFIG_DEFAULTS) } } });
   const merged: Record<string, unknown> = { ...CONFIG_DEFAULTS };
   for (const r of rows) merged[r.key] = r.value;
   const parsed = configSchema.safeParse(merged);

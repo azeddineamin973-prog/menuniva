@@ -95,6 +95,9 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
       const quote = await quoteCart({ locationId: location.id, channel: 'TABLE', lang: data.language, items: data.items }, tx);
       if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
 
+      // Serialise session lookup/creation per table: without this lock, guests ordering at the
+      // same moment each opened their own OPEN session, splitting one table's bill (BUG-03).
+      await lockTable(tx, table.id);
       let session = await tx.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
       if (!session && location.tableCodeRequired) throw new OrderRejectedError('table_not_open');
       session ??= await tx.tableSession.create({ data: { organizationId: location.organizationId, locationId: location.id, tableId: table.id } });
@@ -130,6 +133,11 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
     }
     throw e;
   }
+}
+
+/** Row lock on a table for the rest of the transaction (one OPEN session per table). */
+export async function lockTable(tx: Tx, tableId: string) {
+  await tx.$queryRaw`SELECT id FROM "RestaurantTable" WHERE id = ${tableId} FOR UPDATE`;
 }
 
 type OrderRecordInput = {

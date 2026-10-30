@@ -9,7 +9,7 @@ import { getPlatformConfig } from './services/platform-config';
 export async function orgModuleState(organizationId: string, now = new Date(), tx: Tx | typeof db = db) {
   const [org, config] = await Promise.all([
     tx.restaurantOrganization.findUnique({ where: { id: organizationId }, select: { enabledModules: true, disabledModules: true, subscription: { select: { status: true, trialEndsAt: true, plan: { select: { features: true } } } } } }),
-    getPlatformConfig(),
+    getPlatformConfig(tx),
   ]);
   if (!org) return null;
   const sub = org.subscription;
@@ -27,7 +27,7 @@ export async function orgModules(organizationId: string, now = new Date(), tx: T
   return (await orgModuleState(organizationId, now, tx))?.effective ?? new Set();
 }
 
-export async function hasModule(organizationId: string, module: ModuleKey, tx?: Tx): Promise<boolean> {
+export async function hasModule(organizationId: string, module: ModuleKey, tx?: Tx | typeof db): Promise<boolean> {
   return (await orgModules(organizationId, new Date(), tx)).has(module);
 }
 

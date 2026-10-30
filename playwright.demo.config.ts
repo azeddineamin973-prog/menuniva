@@ -8,7 +8,8 @@ if (!/menuniva_demo/.test(demoDb)) throw new Error('DEMO_DATABASE_URL must point
 
 /**
  * TEST 20: the complete restaurant flow in the separate DEMO environment (APP_ENV=demo,
- * menuniva_demo database, fictitious data from `npm run demo:seed`). Builds into the E2E build folder (no extra disk).
+ * menuniva_demo database, fictitious data from `npm run demo:seed`). Builds into its own `.next-demo`
+ * folder: sharing `.next-e2e` with the E2E suite made a running server answer 500 (audit BUG-12).
  *   npm run test:demo
  */
 export default defineConfig({
@@ -26,7 +27,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 400_000,
     env: {
-      NEXT_DIST_DIR: '.next-e2e',
+      NEXT_DIST_DIR: '.next-demo',
       APP_ENV: 'demo',
       DATABASE_URL: demoDb,
       APP_BASE_URL: `http://localhost:${PORT}`,

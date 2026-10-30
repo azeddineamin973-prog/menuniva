@@ -126,6 +126,17 @@ test('M9-07/08/11: owner assigns the driver; driver takes it out and delivers wi
   await driverCtx.close();
 });
 
+test('audit BUG-04: a pickup order without name/phone asks for the field, never claims that prices changed', async ({ page }) => {
+  await page.goto(`/r/${s.orgSlug}/order/pickup`);
+  await addHarira(page);
+  const resp = page.waitForResponse((r) => r.url().endsWith('/api/public/orders/pickup'));
+  await page.getByTestId('submit-order').click();
+  expect((await (await resp).json()).error).toBe('validation_failed');
+  const alert = page.getByTestId('cart-sheet').getByRole('alert').last();
+  await expect(alert).toHaveText('Este campo é obrigatório.');
+  await expect(page.getByTestId('cart-sheet')).not.toContainText('preços foram alterados');
+});
+
 test('M9-09/10: WhatsApp prepares a message (nothing is stored or sent); external links on the storefront', async ({ page }) => {
   await page.goto(`/r/${s.orgSlug}`);
   await expect(page.getByRole('link', { name: /Pedir na Glovo/ })).toHaveAttribute('href', 'https://glovoapp.com/pt/en/braga/e2e-seed/');

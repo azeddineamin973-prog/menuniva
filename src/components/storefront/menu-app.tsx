@@ -544,7 +544,9 @@ function CartSheet({
           sessionStorage.removeItem(`mn_idem:${scope.qrToken ?? scope.locationSlug}`);
           return onSubmitted(data.trackingToken);
         }
-        if (res.status === 422 && data.issues?.length) {
+        // Only `items_unavailable` carries price/availability issues. Validation errors (e.g. missing
+        // name or phone) also return an `issues` array and must not be shown as "prices changed" (BUG-04).
+        if (res.status === 422 && data.error === 'items_unavailable' && data.issues?.length) {
           setQuote((q) => (q ? { ...q, issues: data.issues } : { subtotalCents: 0, issues: data.issues }));
           setError(c.priceChanged);
         } else if (res.status === 429) setError(c.tooManyOrders);
