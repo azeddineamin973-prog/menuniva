@@ -3,6 +3,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
 import { storeTenantImage } from '@/server/storage';
+import { eraseGuestData, findGuestData, updateRetention } from '@/server/services/privacy';
 import { updateBranding, updateChannelSettings, updateLocationDetails, updateOrganizationSettings } from '@/server/services/settings';
 
 export async function saveOrganizationSettingsAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
@@ -47,4 +48,13 @@ export async function saveBrandingAction(_p: ActionResult, form: FormData): Prom
     },
     { revalidate: '/dashboard/[org]' },
   );
+}
+export async function saveRetentionAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => updateRetention(ctx, form.get('days')), { revalidate: '/dashboard/[org]' });
+}
+export async function findGuestDataAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => findGuestData(ctx, String(form.get('q') ?? '')));
+}
+export async function eraseGuestDataAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => eraseGuestData(ctx, String(form.get('q') ?? ''), String(form.get('confirm') ?? '')));
 }

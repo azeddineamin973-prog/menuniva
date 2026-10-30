@@ -28,3 +28,10 @@ export async function rateLimit(key: string, limit: number, windowSeconds: numbe
     throw new RateLimitError(Math.max(retry, 1));
   }
 }
+
+/** Read-only check: true when `key` already used up `limit` in the current window. */
+export async function isRateLimited(key: string, limit: number, windowSeconds: number): Promise<boolean> {
+  const windowStart = new Date(Math.floor(Date.now() / (windowSeconds * 1000)) * windowSeconds * 1000);
+  const row = await db.rateLimitBucket.findUnique({ where: { key } });
+  return !!row && row.windowStart.getTime() === windowStart.getTime() && row.count >= limit;
+}

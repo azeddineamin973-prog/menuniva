@@ -9,7 +9,7 @@ import { centsToInputValue, formatCents } from '@/lib/money';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { listDrivers } from '@/server/services/fulfilment';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { assignDriverAction, deleteZoneAction, saveDeliverySettingsAction, saveZoneAction } from './actions';
 

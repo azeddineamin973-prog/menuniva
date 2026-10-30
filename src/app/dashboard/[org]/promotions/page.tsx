@@ -5,7 +5,7 @@ import { centsToInputValue, formatCents } from '@/lib/money';
 import { db } from '@/server/db';
 import { pickName } from '@/server/services/menu';
 import { listPromotions } from '@/server/services/promotions';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { savePromotionAction } from './actions';
 

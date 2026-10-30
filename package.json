@@ -15,12 +15,17 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:migrate:safe": "node scripts/migrate-safe.mjs",
     "db:studio": "prisma studio",
     "setup:admin-token": "tsx --conditions=react-server scripts/create-setup-token.ts",
     "setup:casa": "tsx --conditions=react-server scripts/bootstrap-casa-de-marrocos.ts",
     "demo:seed": "tsx --conditions=react-server scripts/seed-demo.ts",
+    "retention": "tsx --conditions=react-server scripts/retention.ts",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:demo": "playwright test --config playwright.demo.config.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

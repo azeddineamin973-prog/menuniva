@@ -5,7 +5,7 @@ import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, Pag
 import { db } from '@/server/db';
 import { getMenuAdmin, pickName } from '@/server/services/menu';
 import { upsellRulesAdmin } from '@/server/services/upsell';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { createUpsellRuleAction, deleteUpsellRuleAction, toggleUpsellRuleAction, upsellEnabledAction } from './actions';
 

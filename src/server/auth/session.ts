@@ -3,7 +3,7 @@ import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
 import { db } from '../db';
 import { hashToken, newSecretToken } from '../crypto';
-import { isProduction } from '../env';
+import { secureCookies } from '../env';
 
 export const SESSION_COOKIE = 'mn_session';
 const SESSION_DAYS = 30;
@@ -32,7 +32,7 @@ export async function createSession(userId: string) {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: isProduction,
+    secure: secureCookies,
     sameSite: 'lax',
     path: '/',
     expires: expiresAt,

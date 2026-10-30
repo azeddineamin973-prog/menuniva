@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/forms/action-form';
 import { Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui';
 import { adapterStatuses, listImportJobs } from '@/server/import/service';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { createImportJobAction } from './actions';
 

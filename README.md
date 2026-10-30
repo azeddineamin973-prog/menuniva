@@ -3,11 +3,14 @@
 **One Menu. Every Order. Every Language.**
 
 Multi-tenant restaurant platform: QR table ordering, live orders, kitchen & café displays,
-five-language menus (pt-PT, en, fr, ar, es), with takeaway, delivery, reservations, reviews,
-loyalty and analytics following in later milestones. Casa de Marrocos (Braga) is tenant #1.
+five-language menus (pt-PT, en, fr, ar, es — Arabic right-to-left), menu import, bills and split
+payments, takeaway, own delivery, WhatsApp orders, promotions, reservations, private feedback with an
+equal Google review link, loyalty, cart suggestions, analytics, plans and Super Admin.
+Casa de Marrocos (Braga) is tenant #1.
 
 Project tracking: [`TODO.md`](TODO.md) · [`docs/ROADMAP.md`](docs/ROADMAP.md) · [`docs/PROGRESS.md`](docs/PROGRESS.md) ·
-[`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) · [`QA_REPORT.md`](QA_REPORT.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+[`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) · [`QA_REPORT.md`](QA_REPORT.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (going live, backups, launch checklist)
 
 ---
 
@@ -52,10 +55,25 @@ Open **http://localhost:3000** in Chrome.
 ### Run the tests
 ```bash
 npm test            # unit + integration tests on the separate test database
-npm run test:e2e    # full browser test (builds the app, uses Google Chrome)
+npm run test:e2e    # browser tests (builds the app, uses Google Chrome) — run after npm test, never at the same time
+npm run test:demo   # TEST 20: full flow in the separate demo environment
 npm run typecheck
 ```
-Tests never touch your real restaurant data (they use `menuniva_test`).
+Tests never touch your real restaurant data (they use `menuniva_test` and `menuniva_demo`).
+
+### Demo restaurant (fictitious, separate database)
+```bash
+npm run demo:seed   # (re)creates "Restaurante Demo" in menuniva_demo and prints the logins
+```
+To open it, start the app against the demo database:
+`APP_ENV=demo DATABASE_URL=$DEMO_DATABASE_URL npm run dev` (every page then shows a DEMO banner).
+
+### Everyday operations
+```bash
+npm run backup          # backup of the database in ./backups (contains personal data — keep it safe)
+npm run db:migrate:safe # after updating MenuNiva: status → backup → migrate → verify
+npm run retention       # erase old guest contact data per each restaurant's retention period (run daily)
+```
 
 ### Free disk space (recommended)
 Your Mac is almost full (~1 GB free). The npm download cache is safe to delete and is re-downloaded only if needed:
@@ -69,13 +87,14 @@ This frees about 3 GB. Nothing in MenuNiva or your other projects is affected.
 ## What works today and what does not
 See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full status of every feature. In short:
 
-- **Working & tested:** accounts, restaurant tenants and isolation, roles, Super Admin bootstrap, setup wizard,
-  menu with per-channel prices, variants/extras, verified allergens, translations, tables & QR codes,
-  five-language mobile menu (Arabic RTL), table ordering, live orders, kitchen/café displays, call waiter / bill requests.
-- **Not built yet:** menu import, takeaway, delivery, promotions, reservations, reviews, loyalty, upsell,
-  analytics, payment recording/split bills, kitchen ticket printing, demo environment, deployment.
-- **Needs external accounts:** machine translation (DeepL or LibreTranslate), email (SMTP), Glovo/Uber Eats partner APIs,
-  online payments, certified invoicing, automated SaaS billing.
+- **Working & tested:** everything in the master specification that does not depend on an outside company
+  (see the matrix), including GDPR export/erasure, backups/restore, safe migrations and an automated
+  authorization audit of every page, route and action.
+- **Needs configuration / external approval:** machine translation (DeepL or LibreTranslate), email (SMTP),
+  Glovo/Uber Eats partner APIs, online customer payments, certified invoicing, a SaaS billing processor,
+  photo text recognition (OCR) for menu photos, thermal printers (formatter ready, untested on hardware).
+- **Your restaurant data:** Casa de Marrocos still needs its real postal code, hours, dishes, prices,
+  allergens, tables and Google review link before it is published.
 
 Payments are taken at the restaurant. MenuNiva receipts are **not** legal invoices.
 

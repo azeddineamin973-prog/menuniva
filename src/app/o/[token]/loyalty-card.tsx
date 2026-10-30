@@ -89,16 +89,16 @@ export function LoyaltyCard({ token, restaurant, view, m }: { token: string; res
       <form onSubmit={join} className="mt-4 space-y-3">
         <input value={phone} onChange={(e) => setPhone(e.target.value)} required type="tel" inputMode="tel" autoComplete="tel" placeholder={l.phone} aria-label={l.phone} className={input} maxLength={30} data-testid="loyalty-phone" />
         <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" placeholder={`${l.name} (${m.common.optional})`} aria-label={l.name} className={input} maxLength={80} />
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" data-testid="loyalty-consent" />
+        <label className="flex min-h-11 items-start gap-2 py-1 text-sm">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" data-testid="loyalty-consent" />
           <span>{fmt(l.consent, { restaurant })}</span>
         </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} className="mt-1" data-testid="loyalty-marketing" />
+        <label className="flex min-h-11 items-start gap-2 py-1 text-sm">
+          <input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" data-testid="loyalty-marketing" />
           <span>{fmt(l.marketing, { restaurant })}</span>
         </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" checked={bdConsent} onChange={(e) => setBdConsent(e.target.checked)} className="mt-1" />
+        <label className="flex min-h-11 items-start gap-2 py-1 text-sm">
+          <input type="checkbox" checked={bdConsent} onChange={(e) => setBdConsent(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" />
           <span>{l.birthdayConsent}</span>
         </label>
         {bdConsent && (

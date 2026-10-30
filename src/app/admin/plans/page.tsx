@@ -3,10 +3,13 @@ import { Alert, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, 
 import { db } from '@/server/db';
 import { ensureDefaultPlans } from '@/server/services/plans';
 import { updatePlanAction } from '../actions';
+import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PlansPage() {
+  // Layout checks are not re-run on client navigation, so every admin page checks itself.
+  await requirePlatformAdminPage();
   await ensureDefaultPlans();
   const plans = await db.subscriptionPlan.findMany({ orderBy: { sortOrder: 'asc' }, include: { _count: { select: { subscriptions: true } } } });
   return (

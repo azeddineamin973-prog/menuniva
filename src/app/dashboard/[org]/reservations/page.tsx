@@ -9,7 +9,7 @@ import { formatTimeInZone, zonedParts } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { reservationsForDay } from '@/server/services/reservations';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { assignTableAction, reservationStatusAction, saveReservationSettingsAction, unassignTableAction } from './actions';
 

@@ -2,12 +2,15 @@ import Link from 'next/link';
 import { Badge, ButtonLink, Card, EmptyState, PageHeader, Stat } from '@/components/ui';
 import { formatCents } from '@/lib/money';
 import { listTenants, platformMetrics } from '@/server/services/admin';
+import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
 
 const STATUS_TONE = { ONBOARDING: 'info', ACTIVE: 'success', SUSPENDED: 'danger', ARCHIVED: 'neutral' } as const;
 
 export default async function AdminHome() {
+  // Layout checks are not re-run on client navigation, so every admin page checks itself.
+  await requirePlatformAdminPage();
   const [tenants, metrics] = await Promise.all([listTenants(), platformMetrics()]);
   return (
     <>

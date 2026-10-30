@@ -2,10 +2,13 @@ import { ActionForm } from '@/components/forms/action-form';
 import { Card, CardHeader, EmptyState, PageHeader, Select } from '@/components/ui';
 import { db } from '@/server/db';
 import { updateSupportTicketAction } from '../actions';
+import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SupportPage() {
+  // Layout checks are not re-run on client navigation, so every admin page checks itself.
+  await requirePlatformAdminPage();
   const tickets = await db.supportTicket.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { organization: { select: { name: true } } } });
   return (
     <>

@@ -1,8 +1,8 @@
 # MenuNiva — Progress Log
 
-## Current status (session 3 — 2026-10-30)
+## Current status (session 5 — 2026-10-30) — release 1.0.0-rc.1
 
-**Task completion (from TODO.md):** 157 of 169 tasks verified (92.9 %) · 0 in progress · 12 not started.
+**Task completion (from TODO.md):** 169 of 169 tasks verified (100 %). Items that depend on outside companies are marked NEEDS CONFIGURATION / BLOCKED BY EXTERNAL APPROVAL in docs/FEATURE_MATRIX.md.
 
 | Milestone | Verified | Not started | Total | Gate |
 |---|---|---|---|---|
@@ -18,10 +18,12 @@
 | M10 Promotions, reservations | 10 | 0 | 10 | ✅ closed |
 | M11 Reviews, loyalty, upsell | 11 | 0 | 11 | ✅ closed |
 | M12 Analytics, subscriptions, admin | 10 | 0 | 10 | ✅ closed (billing processor needs configuration) |
-| M13 Security, backups, deployment | 1 | 12 | 13 | next |
+| M13 Security, backups, deployment | 13 | 0 | 13 | ✅ closed (not deployed: no hosting/domain yet) |
 
-Tests: 218 unit/integration + 28 browser E2E passing (QA_REPORT.md, Run 8).
+Tests: 239 unit/integration + 33 browser E2E + 1 demo-environment E2E passing (QA_REPORT.md, Run 9). Master-spec TEST 1–20 all pass.
 
+## Completed in session 5
+- M13: automated authorization audit (static check of every page/route/action + runtime check as anonymous, another restaurant's owner and a waiter); every admin page now checks the Super Admin role itself; failed-only login rate limiting. GDPR guest data search/export/erasure and a daily retention job (per-restaurant period). Error monitoring with personal-data scrubbing, token masking and optional https forwarding; error page. Backup/restore without PostgreSQL client tools (consistent snapshot, checksum, FK-ordered verified restore). Environment rules (separate databases per environment, https and real secret for public ones, DEMO banner). Safe migration command (status → backup → deploy → verify) and migration lint. Mobile pass at 360 px (fixed small tap targets). Demo seed and TEST 20 in the demo environment. Deployment guide and launch checklist.
 ## Completed in session 3
 - M12: analytics per location in its time zone (Today / 7 / 30 days / custom) with order value, collected payments, unpaid and cancelled value kept separate, channels, hours, days, dishes, categories, zones, promotions, payment methods, reservations, feedback and suggestions; CSV export with formula-safe cells. Owner subscription page (plan, status, trial, live usage vs limits, features, genuine billing history). Dish limit enforced (new, imported and un-archived dishes). Feature modules enforced server-side and in navigation: plan modules, all modules during a trial (configurable), Super Admin add-ons and switch-offs that survive plan changes. Manual billing adapter: Super Admin records/voids payments received; processor webhooks refused until configured. Super Admin metrics (new tenants, trials ending, past due, open support, tenants by plan, recorded billing) and platform settings (self-registration on/off, trial length, trials include all modules, support email).
 - M11: private guest feedback (stars, categories, comment, optional follow-up contact) with the official Google review link shown identically to every guest whatever the rating; low-rating manager alerts (configurable threshold, nav badge); feedback inbox with statuses, internal notes, 30-day stats and repeated issues. Loyalty: stamps or points, voluntary enrolment on the order page with explicit consent, separate marketing and birthday opt-ins, earn only when completed and fully paid (reversed if a payment is voided), staff redeem, FIFO expiry, member deletion; not linked to reviews. Cart suggestions: product/category rules, only available dishes with a channel price, never auto-added, “No, thanks”, anonymous SHOWN/ACCEPTED counts.
@@ -55,11 +57,17 @@ Tests: 218 unit/integration + 28 browser E2E passing (QA_REPORT.md, Run 8).
 3. Real business data still to be entered by the restaurant: postal code, opening hours, dishes, prices, allergens, tables, Google review link.
 
 ## Known limitations
+- Not deployed: no hosting, domain or production database exists; docs/DEPLOYMENT.md describes the steps.
+- Restore loads the whole backup into memory (fine for current sizes); very large databases should rely on the provider's PITR first.
+- `ERROR_MONITORING_DSN` forwarding is tested with a mocked endpoint, not with a real collector.
 - Analytics "collected" counts payments recorded in the period (by payment date); "unpaid" refers to orders placed in the period.
 - SaaS billing is manual. No processor is integrated; `/api/billing/webhook` answers 501.
 - Trial access to every module is a platform setting (on by default), not final commercial policy.
 ### M11
 - Loyalty expiry runs when the loyalty page, a member's order page or a redemption is opened (no background scheduler yet; M13 adds scheduled jobs).
 - The loyalty card on the order page updates on reload, not on every status poll.
-## Next tasks (in order)
-1. M13: automated route authorization audit, GDPR export/deletion + retention, error monitoring hook, backups/restore, environments, safe migrations, mobile pass, demo seed, deployment guide, full TEST 1–20, final QA, release tag.
+## Next steps (owner decisions)
+1. Free disk space (`npm cache clean --force`) before further development on this Mac.
+2. Run `npm run setup:casa -- --owner-email=YOUR_EMAIL` and enter Casa de Marrocos' real data (postal code, hours, dishes, prices, allergens, tables, Google review link).
+3. Choose hosting, domain and a managed EU PostgreSQL; follow docs/DEPLOYMENT.md and its launch checklist.
+4. Optional integrations when accounts exist: SMTP, DeepL/LibreTranslate, OCR, thermal printer, payment/invoicing providers, Glovo/Uber partner APIs, billing processor.

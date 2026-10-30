@@ -1,6 +1,7 @@
 import 'server-only';
 import type { Prisma } from '@/generated/prisma/client';
 import { db, type Tx } from './db';
+import { forwardError, scrub } from './monitoring';
 
 export type AuditEntry = {
   organizationId?: string | null;
@@ -33,9 +34,11 @@ export async function logError(source: string, error: unknown, context?: Prisma.
   try {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(`[${source}]`, err);
+    const safe = context === undefined ? undefined : (scrub(context) as Prisma.InputJsonValue);
     await db.errorLog.create({
-      data: { source, message: err.message.slice(0, 1000), stack: err.stack?.slice(0, 4000), context },
+      data: { source, message: err.message.slice(0, 1000), stack: err.stack?.slice(0, 4000), context: safe },
     });
+    await forwardError({ source, message: err.message.slice(0, 1000), stack: err.stack, context: safe });
   } catch {
     // logging must never break the request
   }

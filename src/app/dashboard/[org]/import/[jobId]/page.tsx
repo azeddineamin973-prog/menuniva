@@ -7,7 +7,7 @@ import { LANGUAGE_NATIVE_NAME } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
 import { UserFacingError } from '@/server/errors';
 import { getImportPreview } from '@/server/import/service';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { cancelImportAction, chooseCanonicalAction, publishImportAction, setDecisionAction } from '../actions';
 import { AddSourceForm } from './source-form';

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import { dirOf, isLanguage, LANG_COOKIE, LANGUAGE_TAG } from '@/i18n/config';
+import { env } from '@/server/env';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -26,7 +27,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const dark = jar.get('mn_theme')?.value === 'dark';
   return (
     <html lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)} className={dark ? 'dark' : undefined} suppressHydrationWarning>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {env.APP_ENV === 'demo' && (
+          <div className="bg-warning px-4 py-1 text-center text-xs font-semibold text-white" data-testid="demo-environment">
+            MenuNiva DEMO environment — all restaurants, dishes and orders here are fictitious.
+          </div>
+        )}
+        {children}
+      </body>
     </html>
   );
 }

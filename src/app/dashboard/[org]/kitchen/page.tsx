@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { db } from '@/server/db';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { getMessages } from '@/i18n';
 

@@ -67,8 +67,8 @@ export function FeedbackForm({ org, l, orderToken, lang, m }: { org: string; l?:
         </div>
       </fieldset>
       <textarea value={comment} onChange={(e) => setComment(e.target.value.slice(0, 2000))} placeholder={f.comment} aria-label={f.comment} className="min-h-[100px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-sm" />
-      <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="mt-1" data-testid="follow-up" />
+      <label className="flex min-h-11 items-start gap-2 py-1 text-sm">
+        <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" data-testid="follow-up" />
         {f.followUp}
       </label>
       {follow && (

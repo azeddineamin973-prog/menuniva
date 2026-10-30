@@ -11,7 +11,7 @@ export type Seed = { orgSlug: string; orgId: string; locationId: string; dishId:
 
 /** Creates a fictitious restaurant in the TEST database via the real services. */
 export function seed(prefix: string): Seed {
-  const out = execFileSync('npx', ['tsx', '--conditions=react-server', 'tests/e2e/seed.ts', prefix], { env: { ...process.env, DATABASE_URL: TEST_DB }, encoding: 'utf8' });
+  const out = execFileSync('npx', ['tsx', '--conditions=react-server', 'tests/e2e/seed.ts', prefix], { env: { ...process.env, APP_ENV: 'test', DATABASE_URL: TEST_DB }, encoding: 'utf8' });
   const line = out.trim().split('\n').reverse().find((l) => l.startsWith('{'));
   return JSON.parse(line!);
 }

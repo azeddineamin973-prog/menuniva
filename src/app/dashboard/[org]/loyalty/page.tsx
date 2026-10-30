@@ -4,7 +4,7 @@ import { Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, 
 import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
 import { loyaltyMembers, rewardText } from '@/server/services/loyalty';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { deleteMemberAction, redeemAction, saveLoyaltyProgramAction, withdrawMarketingAction } from './actions';
 

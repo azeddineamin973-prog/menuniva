@@ -1,5 +1,4 @@
 import 'server-only';
-import { redirect } from 'next/navigation';
 import { effectiveModules, type ModuleKey } from '@/lib/modules';
 import { db, type Tx } from './db';
 import { UserFacingError } from './errors';
@@ -37,7 +36,3 @@ export async function assertModule(organizationId: string, module: ModuleKey, tx
   if (!(await hasModule(organizationId, module, tx))) throw new UserFacingError('module_not_available', 403, { module });
 }
 
-/** Dashboard page gate: sections outside the tenant's modules explain why instead of failing. */
-export async function requireModulePage(ctx: { org: { id: string; slug: string } }, module: ModuleKey) {
-  if (!(await hasModule(ctx.org.id, module))) redirect(`/dashboard/${ctx.org.slug}/unavailable?m=${module}`);
-}

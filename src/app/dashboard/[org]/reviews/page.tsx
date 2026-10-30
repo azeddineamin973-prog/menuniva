@@ -7,7 +7,7 @@ import { formatTimeInZone } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { feedbackInbox, feedbackStats } from '@/server/services/feedback';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { feedbackNoteAction, feedbackStatusAction, reviewSettingsAction } from './actions';
 

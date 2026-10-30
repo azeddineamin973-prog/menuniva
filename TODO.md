@@ -206,16 +206,16 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M13 — Security, Testing, Backups, Deployment & Release Preparation
 
-- [ ] **M13-01** Security review: authz on every route/action (automated route audit test) — P0
-- [ ] **M13-02** GDPR: customer data export/deletion, retention job — P1
-- [ ] **M13-03** Error monitoring hook (ErrorLog + optional DSN) — P1
+- [x] **M13-01** Security review: authz on every route/action (automated route audit test) — P0
+- [x] **M13-02** GDPR: customer data export/deletion, retention job — P1
+- [x] **M13-03** Error monitoring hook (ErrorLog + optional DSN) — P1
 - [x] **M13-04** Health check endpoint (`/api/health`: app + DB) — P0
-- [ ] **M13-05** Backup & restore scripts and documented strategy — P0
-- [ ] **M13-06** Environments: development, staging, production, demo — P0
-- [ ] **M13-07** Safe migration procedure (`migrate deploy`, backups first) — P0
-- [ ] **M13-08** Mobile usability pass (customer + staff screens) — P1
-- [ ] **M13-09** Full E2E suite TEST 1–20 — P0
-- [ ] **M13-10** Demo environment seed with clearly labelled fake data (separate DB) — P1
-- [ ] **M13-11** README, deployment & launch guide, production checklist — P0
-- [ ] **M13-12** Final QA_REPORT + feature status matrix — P0
-- [ ] **M13-13** Release commit/tag — P0
+- [x] **M13-05** Backup & restore scripts and documented strategy — P0
+- [x] **M13-06** Environments: development, staging, production, demo — P0
+- [x] **M13-07** Safe migration procedure (`migrate deploy`, backups first) — P0
+- [x] **M13-08** Mobile usability pass (customer + staff screens) — P1
+- [x] **M13-09** Full E2E suite TEST 1–20 — P0
+- [x] **M13-10** Demo environment seed with clearly labelled fake data (separate DB) — P1
+- [x] **M13-11** README, deployment & launch guide, production checklist — P0
+- [x] **M13-12** Final QA_REPORT + feature status matrix — P0
+- [x] **M13-13** Release commit/tag — P0

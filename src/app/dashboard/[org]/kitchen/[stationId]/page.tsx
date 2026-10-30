@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/server/db';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { assertLocationAccess, requireTenantPage } from '@/server/tenant';
 import { KdsBoard } from './kds-board';
 import { getMessages } from '@/i18n';

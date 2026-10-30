@@ -9,7 +9,7 @@ import { formatTimeInZone, startOfDayInZone } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { pickupOptions } from '@/server/services/fulfilment';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { saveTakeawaySettingsAction } from '../delivery/actions';
 

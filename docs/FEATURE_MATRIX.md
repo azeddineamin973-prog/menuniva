@@ -27,7 +27,7 @@ Status values (never a generic "Complete"):
 | 4 | Admin localization | M4 | M4-15 | nav + auth localized; other admin text English | — | TESTED (staff operational screens; owner settings screens English) |
 | 4 | Language settings (default/enabled/source) | M4 | M4-13 | `settings/page.tsx`, `services/settings.ts` | — | TESTED |
 | 4 | Translation provider abstraction, "Translation required", review | M4 | M4-10..12 | `src/server/translation`, `services/translations.ts`, `menu/translations` | menu.test.ts | TESTED (manual editor) |
-| 4 | Machine translation via DeepL/LibreTranslate | M4 | M4-10 | — | — | NEEDS CONFIGURATION |
+| 4 | Machine translation via DeepL/LibreTranslate | M4 | M4-10 | provider abstraction (`getTranslationProvider`); results saved as MACHINE and hidden from guests until reviewed | menu.test.ts (MACHINE translations hidden from guests) | NEEDS CONFIGURATION |
 | 5 | Import adapters (CSV, XLSX, PDF, image, text, manual) | M5 | M5-02..07 | `src/server/import/{adapters,tabular,xlsx,text}.ts` | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | TESTED |
 | 5 | Glovo partner API import | M5 | M5-08 | — | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | BLOCKED BY EXTERNAL APPROVAL (merchant export import TESTED) |
 | 5 | Uber Eats Menu API import | M5 | M5-09 | — | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | BLOCKED BY EXTERNAL APPROVAL (merchant export import TESTED) |
@@ -60,7 +60,7 @@ Status values (never a generic "Complete"):
 | 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | `services/loyalty.ts`, `api/public/loyalty`, `o/[token]/loyalty-card.tsx`, `dashboard/[org]/loyalty` | `loyalty.test.ts` (integration) + E2E | TESTED |
 | 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | `src/lib/upsell.ts`, `services/upsell.ts`, `api/public/upsell`, `dashboard/[org]/menu/upsell`, cart in `menu-app.tsx` | unit + integration + E2E | TESTED |
 | 18 | Analytics (paid vs unpaid), CSV export | M12 | M12-01..04 | `services/analytics.ts`, `dashboard/[org]/analytics`, `api/dashboard/[org]/analytics/export` | TEST 18 (unit + integration + E2E) | TESTED |
-| 19 | Pay at counter / waiter / cash on delivery, manual payment records | M8/M9 | M8-08, M9-11 | `services/bills.ts` (recordPayment, voidPayment) | bills.test.ts, bills.spec.ts | TESTED (cash on delivery checkout pending M9) |
+| 19 | Pay at counter / waiter / cash on delivery, manual payment records | M8/M9 | M8-08, M9-11 | `services/bills.ts` (recordPayment, voidPayment), `fulfilment.ts` (driverUpdate cash) | bills.test.ts, bills.spec.ts, takeaway-delivery.spec.ts | TESTED |
 | 19 | Online payments (MB WAY, Multibanco, cards, Bizum) | — | — | `server/payments/providers.ts` (interface, not connected) | — | BLOCKED BY EXTERNAL APPROVAL |
 | 19 | Certified invoicing (PT AT / ES Verifactu) | — | — | `server/payments/providers.ts` (interface); receipt labelled not an invoice | bills.spec.ts | BLOCKED BY EXTERNAL APPROVAL |
 | 19 | SaaS plans, trials, manual subscriptions, limits, module toggles | M12 | M2-13, M12-05..06, M12-09 | `services/plans.ts`, `services/limits.ts`, `src/lib/modules.ts`, `server/modules.ts`, `dashboard/[org]/subscription`, `admin/tenants/[id]` | `plans-modules.test.ts` + TEST 16 E2E | TESTED |
@@ -68,12 +68,14 @@ Status values (never a generic "Complete"):
 | 20 | Restaurant dashboard sections + role navigation | M3–M12 | M3-10, M12-09 | `dashboard/[org]/layout.tsx` (filtered by permission and module; every section has a page) | role E2E + TEST 16 E2E | TESTED |
 | 21 | Super Admin (secure bootstrap, audit, tenants, plans, metrics, platform settings) | M2/M12 | M2-11, M2-12, M12-08 | `src/app/admin/*`, `services/admin.ts`, `platform-setup.ts`, `services/platform-config.ts` | bootstrap + plans-modules integration, TEST 16 E2E | TESTED |
 | 22 | Public storefront `/r/[slug]`, SEO, custom-domain ready | M6 | M6-05 | `r/[org]/[[...location]]` (title, description, OG, JSON-LD, canonical) | — | TESTED |
-| 24 | Normalized schema, migrations, indexes | M2 | M2-01 | `prisma/schema.prisma`, `prisma/migrations/` | migration applied | WORKING |
+| 24 | Normalized schema, migrations, indexes, safe migration procedure | M2/M13 | M2-01, M13-07 | `prisma/schema.prisma`, `prisma/migrations/`, `scripts/migrate-safe.mjs` | migrations.test.ts (lint), backup-restore.test.ts, scratch-DB run | TESTED |
 | 25 | Auth, sessions, CSRF, rate limiting, audit, uploads | M2/M3 | M2-03..10, M3-05 | `src/server/auth/*`, `http.ts`, `rate-limit.ts`, `audit.ts`, `storage.ts` | integration + curl | TESTED |
-| 25 | GDPR export/deletion, retention | M13 | M13-02 | — | — | NOT STARTED |
-| 26 | PT/ES country config, IVA classes, address formats | M3/M4 | M3-03, M4-14 | postal formats + time zones done; tax classes schema only | unit | TESTED |
+| 25 | GDPR export/deletion, retention | M13 | M13-02 | `services/privacy.ts`, `settings/privacy`, `api/dashboard/[org]/privacy/export`, `scripts/retention.ts` | privacy.test.ts | TESTED |
+| 25 | Authorization on every page, route and action | M13 | M13-01 | `tenant.ts`, `route-tenant.ts`, `action.ts`, admin guards on every admin page | route-audit.test.ts (static), route-audit.spec.ts (runtime), login.test.ts | TESTED |
+| 26 | PT/ES country config, IVA classes, address formats | M3/M4 | M3-03, M4-14 | postal formats, time zones, restaurant-approved IVA classes | unit + menu-advanced.test.ts | TESTED |
 | 27 | Persistent orders, acknowledgment, unread counters | M7 | M7-05 | `orders.ts`, `live-board.tsx`, sidebar badge | E2E | TESTED |
-| 28 | Separate demo environment (labelled fake data) | M13 | M13-10 | `menuniva_demo` database | — | NOT STARTED |
-| Add-3 | Backups, environments, monitoring, health checks, deploy checklist | M13 | M13-03..07, M13-11 | `/api/health` done; separate dev/test/demo DBs | curl | IN PROGRESS |
+| 28 | Separate demo environment (labelled fake data) | M13 | M13-10 | `scripts/seed-demo.ts`, `menuniva_demo`, DEMO banner (`APP_ENV=demo`), `playwright.demo.config.ts` | TEST 20 (demo-flow.spec.ts) | TESTED |
+| Add-3 | Backups, environments, monitoring, health checks, deploy checklist | M13 | M13-03..07, M13-11 | `scripts/backup.mjs`, `restore.mjs`, `lib/backup-core.mjs`, `env.ts` (environment rules), `monitoring.ts`, `instrumentation.ts`, `/api/health`, `docs/DEPLOYMENT.md` | backup-restore.test.ts, environments.test.ts, monitoring.test.ts | TESTED (no hosting deployed yet; external DSN unverified) |
+| Add-4 | Mobile usability (360 px) for guest and staff screens | M13 | M13-08 | responsive layouts; 24 px minimum tap targets on guest screens | mobile-pass.spec.ts | TESTED |
 
-_Last updated: 2026-10-30 (session 2). Casa de Marrocos tenant: created via `scripts/bootstrap-casa-de-marrocos.ts` — WORKING (verified in DB)._
+_Last updated: 2026-10-30 (session 5). Casa de Marrocos tenant: created via `scripts/bootstrap-casa-de-marrocos.ts` — WORKING (verified in DB)._

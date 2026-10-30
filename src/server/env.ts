@@ -27,14 +27,38 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
+/**
+ * Rules that keep environments apart (M13-06). Each environment uses its own database:
+ * production/staging never point at a dev/test/demo database, demo only at a *demo* database,
+ * and public environments must use https and a real secret.
+ */
+export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'>): string[] {
+  const problems: string[] = [];
+  let dbName = '';
+  try {
+    dbName = new URL(e.DATABASE_URL).pathname.slice(1).toLowerCase();
+  } catch {
+    problems.push('DATABASE_URL: not a valid postgres URL');
+  }
+  const isPublic = e.APP_ENV === 'production' || e.APP_ENV === 'staging' || e.APP_ENV === 'demo';
+  // A demo may run on a laptop over http; a public demo deployment should still use https.
+  if ((e.APP_ENV === 'production' || e.APP_ENV === 'staging') && !e.APP_BASE_URL.startsWith('https://')) problems.push(`APP_BASE_URL: must use https in ${e.APP_ENV}`);
+  if (isPublic && /replace-with|change-me|test-secret/i.test(e.APP_SECRET)) problems.push('APP_SECRET: still the example value; generate a new random secret');
+  if ((e.APP_ENV === 'production' || e.APP_ENV === 'staging') && /(^|_)(dev|test|demo)($|_)/.test(dbName)) problems.push(`DATABASE_URL: ${e.APP_ENV} must not use the "${dbName}" database`);
+  if (e.APP_ENV === 'production' && /(^|_)staging($|_)/.test(dbName)) problems.push('DATABASE_URL: production must not use the staging database');
+  if (e.APP_ENV === 'demo' && dbName && !dbName.includes('demo')) problems.push('DATABASE_URL: the demo environment must use a separate database whose name contains "demo"');
+  if (e.APP_ENV !== 'test' && dbName.includes('test')) problems.push('DATABASE_URL: the test database is wiped by automated tests; use it only with APP_ENV=test');
+  return problems;
+}
 function load(): Env {
   const parsed = schema.safeParse(process.env);
-  if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
-    throw new Error(`MenuNiva configuration error. Check your .env file:\n${issues}`);
+  const issues = parsed.success ? environmentProblems(parsed.data) : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+  if (!parsed.success || issues.length) {
+    throw new Error(`MenuNiva configuration error. Check your .env file:\n${issues.map((i) => `  - ${i}`).join('\n')}`);
   }
   return parsed.data;
 }
-
 export const env = load();
 export const isProduction = env.APP_ENV === 'production' || env.APP_ENV === 'staging';
+/** Cookies are marked Secure whenever the app is served over https (production, staging, demo). */
+export const secureCookies = env.APP_BASE_URL.startsWith('https://');

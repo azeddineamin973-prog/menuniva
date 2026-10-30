@@ -598,7 +598,7 @@ function CartSheet({
                   <button type="button" className="h-8 w-8 rounded-lg ring-1 ring-black/10" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">−</button>
                   <span className="w-6 text-center tabular-nums">{l.quantity}</span>
                   <button type="button" className="h-8 w-8 rounded-lg ring-1 ring-black/10" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">+</button>
-                  <button type="button" className="ms-auto text-sm underline opacity-70" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
+                  <button type="button" className="ms-auto h-8 px-2 text-sm underline opacity-70" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
                 </div>
                 {issue && <p className="mt-2 text-sm text-red-700" role="alert">{issueText(issue)}</p>}
               </li>

@@ -182,6 +182,6 @@ export function integrationHealth() {
     { name: 'SaaS billing processor', status: env.BILLING_PROVIDER === 'manual' ? 'MANUAL' : 'CONFIGURED', note: 'Subscriptions are managed manually' },
     { name: 'Online customer payments', status: 'NOT_CONFIGURED', note: 'Pay at counter / waiter / cash on delivery only' },
     { name: 'Certified invoicing', status: 'NOT_CONFIGURED', note: 'MenuNiva receipts are not legal invoices' },
-    { name: 'Error monitoring', status: env.ERROR_MONITORING_DSN ? 'CONFIGURED' : 'BUILT-IN LOG ONLY', note: 'Errors are stored in the ErrorLog table' },
+    { name: 'Error monitoring', status: env.ERROR_MONITORING_DSN?.startsWith('https://') ? 'CONFIGURED (forwarding, unverified until first error)' : env.ERROR_MONITORING_DSN ? 'INVALID DSN (https required)' : 'BUILT-IN LOG ONLY', note: 'Errors are stored in ErrorLog (personal data scrubbed, kept 90 days); with ERROR_MONITORING_DSN they are also POSTed as JSON to that https endpoint' },
   ];
 }

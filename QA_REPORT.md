@@ -211,3 +211,63 @@ Defects found and fixed in this run:
 - Super Admin module checkboxes ignored the trial: switching off a module outside the plan during a trial was silently not saved. Module changes are now stored as differences from what the tenant gets anyway.
 - A new E2E that promoted a user to Super Admin broke the first-admin bootstrap test; the spec now restores the user's role afterwards.
 
+## Run 9 — 2026-10-30 (session 5): M13 security, GDPR, backups, environments, release (final)
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Production build | `next build` (inside `npm run test:e2e`) | ✅ |
+| Unit + integration | `npm test` | ✅ 32 files, **239 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **33 tests passed** |
+| Demo environment E2E | `npm run test:demo` | ✅ **1 test passed** (TEST 20) |
+| Backup of dev DB | `npm run backup` | ✅ 23 rows, sha256 written, mode 600 |
+| Safe migration | `npm run db:migrate:safe` on an empty scratch DB, then again | ✅ backup → 5 migrations → verified; second run "up to date" |
+| Demo seed | `npm run demo:seed` (twice) | ✅ idempotent, menuniva_demo only |
+
+| File | Covers |
+|---|---|
+| `tests/unit/route-audit.test.ts` (3) | Every page in `src/app` is guarded or listed public with a reason; tenant pages pass a known permission (3 member-only pages listed); every admin page calls `requirePlatformAdminPage()`; every dashboard API handler uses `tenantRoute`/`requireTenantAction` with a known permission; public writes check the origin; every server action calls `runTenantAction` with a literal known permission / `adminRun` / session check, or is a listed auth action. Mutation check: removing a permission or an admin guard makes it fail |
+| `tests/e2e/route-audit.spec.ts` (3) | All 41 dashboard pages, all 8 admin pages and all dashboard API routes: anonymous → login or 401/403/404; another restaurant's owner → 404 everywhere; a waiter → /forbidden on every page their role lacks (>20 pages) |
+| `tests/integration/login.test.ts` (2) | 40 successful logins from one IP never blocked; 8 failures lock an email (even the right password), 30 failures lock an IP, other IPs unaffected; disabled/unknown users get the same answer |
+| `tests/integration/privacy.test.ts` (5) | Phone in any format / email; finds orders, deliveries, reservations, feedback follow-ups, loyalty; JSON export incl. item notes; identifier never in the audit log; erasure (type ERASE) anonymises but keeps amounts; other guests untouched; **TEST 15** guest data isolation; retention erases only finished records older than the period, idempotent, removes expired sessions |
+| `tests/unit/monitoring.test.ts` (4) | Scrubbing of phone/email/name/password/authorization; token masking and query removal in paths; nothing sent without DSN; https DSN receives the JSON event; network failure never throws |
+| `tests/integration/backup-restore.test.ts` (2) | Backup of the test DB restored into a new migrated DB: identical rows (Order, OrderItem, CustomerFeedback incl. enum arrays and emoji, JSON opening hours, MenuProduct, ModifierOption, AuditLog); non-empty target refused; damaged file refused by checksum; target without migrations refused |
+| `tests/unit/environments.test.ts` (2) | Valid setups for all 5 environments; production on dev/staging DB, staging on demo DB, demo on a non-demo DB, test DB outside tests, http in production and example secrets refused |
+| `tests/unit/migrations.test.ts` (3) | Migration naming/order; no unreviewed destructive SQL; new NOT NULL columns have defaults |
+| `tests/e2e/mobile-pass.spec.ts` (2) | 360 × 740: no sideways scrolling on guest screens (menu, dish sheet, cart, tracking, storefront, feedback, Arabic) and on all 34 staff pages without URL parameters; guest buttons/checkboxes ≥ 24 px |
+| `tests/e2e-demo/demo-flow.spec.ts` (1) | **TEST 20** in APP_ENV=demo on menuniva_demo: only the fictitious demo restaurant exists; DEMO banner; 5 languages + Arabic RTL; order 16,50 €; owner accepts; kitchen and café each see only their items; completed; guest sees COMPLETED; analytics keeps unpaid separate |
+
+### Master-spec end-to-end tests — final status
+| Test | Status | Where |
+|---|---|---|
+| 1 Data isolation A/B | ✅ | tenancy.test.ts, route-audit.spec.ts |
+| 2 CSV import → publish → menu | ✅ | import.test.ts, import-studio.spec.ts |
+| 3 Five languages + RTL | ✅ | vertical-slice.spec.ts, demo-flow.spec.ts |
+| 4 Table QR order appears in dashboard | ✅ | ordering.test.ts, vertical-slice.spec.ts |
+| 5 Food → Kitchen, tea → Café | ✅ | ordering.test.ts, vertical-slice.spec.ts, demo-flow.spec.ts |
+| 6 NEW → COMPLETED, guest sees status | ✅ | ordering.test.ts, vertical-slice.spec.ts |
+| 7 Idempotency | ✅ | ordering.test.ts |
+| 8 Takeaway | ✅ | fulfilment.test.ts, takeaway-delivery.spec.ts |
+| 9 Delivery zones/fees | ✅ | fulfilment.test.ts, takeaway-delivery.spec.ts |
+| 10 Delivery workflow + driver | ✅ | fulfilment.test.ts, takeaway-delivery.spec.ts |
+| 11 Promotions server-side | ✅ | promotions.test.ts, promotions-reservations.spec.ts |
+| 12 Reservations, no double booking | ✅ | reservations.test.ts, promotions-reservations.spec.ts |
+| 13 1★ → private alert + Google link | ✅ | feedback.test.ts, reviews-loyalty-upsell.spec.ts |
+| 14 5★ → same Google link | ✅ | feedback.test.ts, reviews-loyalty-upsell.spec.ts |
+| 15 A cannot access B orders/feedback/customers | ✅ | tenancy, feedback, loyalty, upsell, analytics, privacy tests; route-audit.spec.ts |
+| 16 Super Admin creates tenant + onboarding + modules | ✅ | super-admin.spec.ts, plans-modules.test.ts, analytics-subscription.spec.ts |
+| 17 Sold out blocks ordering | ✅ | ordering.test.ts |
+| 18 Unpaid ≠ revenue | ✅ | analytics.test.ts, analytics-subscription.spec.ts |
+| 19 Import failures publish nothing | ✅ | import.test.ts, import-studio.spec.ts |
+| 20 Full flow in separate demo environment | ✅ | demo-flow.spec.ts (`npm run test:demo`) |
+
+Defects found and fixed in this run:
+- Admin pages relied only on the admin layout; on client-side navigation a layout is not re-checked. Every admin page now checks the Super Admin role itself.
+- The access notice page rendered without checking membership; it now requires a member session.
+- Successful logins counted toward the per-IP limit, so a restaurant whose staff share one connection could be locked out (found when the larger E2E suite hit it). Only failed attempts count now.
+- Cart "Remove" button (20 px) and guest checkboxes (13 px) were below the 24 px tap target; enlarged.
+- The E2E seeder ran against the test database without `APP_ENV=test` (caught by the new environment rule).
+- Services used by CLI scripts imported `next/navigation` through the tenant guard and the new module page guard; the guards now load it lazily / live in a separate file, so `npm run demo:seed` and other scripts work.
+
+Not verified (needs real accounts or hardware): SMTP delivery, DeepL/LibreTranslate, OCR, thermal printers, online payments, certified invoicing, billing processor, Glovo/Uber partner APIs, a real error collector, a real hosting deployment.
+

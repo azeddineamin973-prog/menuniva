@@ -7,12 +7,15 @@ import { MODULE_LABELS, MODULES } from '@/lib/modules';
 import { InlineAction } from '@/components/forms/inline-action';
 import { formatCents } from '@/lib/money';
 import { recordBillingAction, setModulesAction, setTenantStatusAction, updateSubscriptionAction, voidBillingAction } from '../../actions';
+import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
 
 const d = (x: Date | null | undefined) => (x ? x.toISOString().slice(0, 10) : '');
 
 export default async function TenantDetail({ params }: { params: Promise<{ id: string }> }) {
+  // Layout checks are not re-run on client navigation, so every admin page checks itself.
+  await requirePlatformAdminPage();
   const { id } = await params;
   const org = await db.restaurantOrganization.findUnique({
     where: { id },

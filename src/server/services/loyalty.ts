@@ -232,15 +232,20 @@ export async function redeemReward(ctx: TenantContext, accountId: string) {
 }
 
 /** Deletes a member on request: personal data is erased and history removed. */
+/** Erases a member's personal data and history (used by staff deletion, guest data requests and retention). */
+export async function eraseLoyaltyAccount(tx: Tx, accountId: string) {
+  await tx.loyaltyTransaction.deleteMany({ where: { accountId } });
+  await tx.order.updateMany({ where: { loyaltyAccountId: accountId }, data: { loyaltyAccountId: null } });
+  await tx.loyaltyAccount.update({
+    where: { id: accountId },
+    data: { phone: `deleted:${accountId}`, name: null, birthday: null, marketingOptIn: false, marketingOptInAt: null, balance: 0, deletedAt: new Date() },
+  });
+}
+
 export async function deleteLoyaltyAccount(ctx: TenantContext, accountId: string) {
   const a = await ownedAccount(ctx, accountId);
   await db.$transaction(async (tx) => {
-    await tx.loyaltyTransaction.deleteMany({ where: { accountId: a.id } });
-    await tx.order.updateMany({ where: { loyaltyAccountId: a.id }, data: { loyaltyAccountId: null } });
-    await tx.loyaltyAccount.update({
-      where: { id: a.id },
-      data: { phone: `deleted:${a.id}`, name: null, birthday: null, marketingOptIn: false, marketingOptInAt: null, balance: 0, deletedAt: new Date() },
-    });
+    await eraseLoyaltyAccount(tx, a.id);
     await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'loyalty.member_deleted', entityType: 'LoyaltyAccount', entityId: a.id }, tx);
   });
 }

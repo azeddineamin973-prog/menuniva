@@ -3,10 +3,13 @@ import { db } from '@/server/db';
 import { integrationHealth } from '@/server/services/admin';
 import { adminResetLinkAction } from '../actions';
 import { LinkResultForm } from '@/components/forms/link-result-form';
+import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HealthPage() {
+  // Layout checks are not re-run on client navigation, so every admin page checks itself.
+  await requirePlatformAdminPage();
   const errors = await db.errorLog.findMany({ orderBy: { createdAt: 'desc' }, take: 50 });
   return (
     <>

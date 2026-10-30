@@ -1,9 +1,12 @@
 import { Card, CardHeader, PageHeader } from '@/components/ui';
 import { db } from '@/server/db';
+import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AuditPage() {
+  // Layout checks are not re-run on client navigation, so every admin page checks itself.
+  await requirePlatformAdminPage();
   const logs = await db.auditLog.findMany({
     where: { action: { startsWith: 'platform.' } },
     orderBy: { createdAt: 'desc' },

@@ -1,5 +1,5 @@
 import 'server-only';
-import { notFound, redirect } from 'next/navigation';
+// next/navigation is loaded lazily inside the page guards so CLI scripts can use the services.
 import type { MembershipRole, OrganizationStatus } from '@/generated/prisma/enums';
 import { can, type Permission } from '@/lib/permissions';
 import { db } from './db';
@@ -71,8 +71,9 @@ export async function accessibleLocations(ctx: TenantContext) {
 
 /** For server components/pages: redirects to login, 404s for non-members, 403 page for missing permission. */
 export async function requireTenantPage(orgSlug: string, permission?: Permission): Promise<TenantContext & { user: CurrentUser }> {
+  const { notFound, redirect } = await import('next/navigation');
   const user = await getCurrentUser();
-  if (!user) redirect(`/login?next=/dashboard/${encodeURIComponent(orgSlug)}`);
+  if (!user) return redirect(`/login?next=/dashboard/${encodeURIComponent(orgSlug)}`);
   try {
     const ctx = await resolveTenantAccess(user.id, orgSlug, permission);
     return { ...ctx, user };
@@ -94,9 +95,10 @@ export async function requireTenantAction(orgSlug: string, permission?: Permissi
 }
 
 export async function requirePlatformAdminPage(): Promise<CurrentUser> {
+  const { notFound, redirect } = await import('next/navigation');
   const user = await getCurrentUser();
-  if (!user) redirect('/login?next=/admin');
-  if (user.platformRole !== 'PLATFORM_SUPER_ADMIN') notFound();
+  if (!user) return redirect('/login?next=/admin');
+  if (user.platformRole !== 'PLATFORM_SUPER_ADMIN') return notFound();
   return user;
 }
 

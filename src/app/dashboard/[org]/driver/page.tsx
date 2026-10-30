@@ -4,7 +4,7 @@ import { getMessages } from '@/i18n';
 import { fmt } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
 import { myDeliveries } from '@/server/services/fulfilment';
-import { requireModulePage } from '@/server/modules';
+import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { driverUpdateAction } from '../delivery/actions';
 

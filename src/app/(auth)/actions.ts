@@ -7,6 +7,7 @@ import { audit } from '@/server/audit';
 import { burnPasswordCheck, hashPassword, passwordSchema, verifyPassword } from '@/server/auth/password';
 import { clientIp, createSession, destroySession, revokeAllSessions } from '@/server/auth/session';
 import { createPasswordResetLink } from '@/server/auth/reset';
+import { attemptLogin } from '@/server/auth/login';
 import { hashToken } from '@/server/crypto';
 import { db } from '@/server/db';
 import { env } from '@/server/env';
@@ -43,23 +44,9 @@ const loginSchema = z.object({ email: emailSchema, password: z.string().min(1).m
 export async function loginAction(_prev: ActionResult, form: FormData): Promise<ActionResult> {
   const parsed = loginSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: 'invalid_credentials' };
-  const { email, password } = parsed.data;
-  try {
-    const ip = await clientIp();
-    await rateLimit(`login:ip:${ip}`, 30, 900);
-    await rateLimit(`login:email:${email}`, 8, 900);
-  } catch (e) {
-    if (e instanceof RateLimitError) return { ok: false, error: 'too_many_attempts' };
-    throw e;
-  }
-  const user = await db.user.findUnique({ where: { email } });
-  if (!user) {
-    await burnPasswordCheck(password);
-    return { ok: false, error: 'invalid_credentials' };
-  }
-  const valid = await verifyPassword(user.passwordHash, password);
-  if (!valid || user.disabledAt) return { ok: false, error: 'invalid_credentials' };
-  await createSession(user.id);
+  const r = await attemptLogin(parsed.data.email, parsed.data.password, await clientIp());
+  if (!r.ok) return { ok: false, error: r.error };
+  await createSession(r.userId);
   redirect(safeNextPath(form.get('next'), '/dashboard'));
 }
 

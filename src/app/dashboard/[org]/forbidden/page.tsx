@@ -1,7 +1,9 @@
 import { ButtonLink, EmptyState } from '@/components/ui';
+import { requireTenantPage } from '@/server/tenant';
 
 export default async function ForbiddenPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
+  await requireTenantPage(org); // members only; no specific permission needed to see this notice
   return (
     <EmptyState
       title="You don't have access to this section"

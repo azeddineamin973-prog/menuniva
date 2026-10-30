@@ -32,3 +32,5 @@ coverage/
 # logs and OS files
 *.log
 .DS_Store
+# database backups contain personal data — never commit
+/backups/
