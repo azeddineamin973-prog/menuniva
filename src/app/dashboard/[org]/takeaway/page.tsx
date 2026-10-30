@@ -28,6 +28,9 @@ export default async function TakeawayPage({ params }: { params: Promise<{ org: 
   return (
     <>
       <PageHeader title={m.nav.takeaway} description="Guests order ahead and collect at the counter. Payment is taken at pickup." />
+      {location.takeawayEnabled && !settings?.pickupHours && !location.openingHours && (
+        <div className="mb-4" data-testid="no-hours-warning"><Alert tone="danger" title="No hours set">Guests can currently order takeaway at any time of day. Enter pickup hours below or your opening hours in Settings.</Alert></div>
+      )}
       {!location.takeawayEnabled && <div className="mb-4"><Alert tone="warning">Takeaway is switched off. Turn it on in <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>

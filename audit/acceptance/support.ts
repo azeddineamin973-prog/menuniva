@@ -120,6 +120,8 @@ export async function buildRestaurant(
   await loc.getByLabel('Postal code').fill('4700-123');
   await loc.getByLabel('City').fill('Braga');
   await loc.getByLabel('Telephone').fill('+351 900 000 102');
+  // Opening hours are required before takeaway/delivery can be switched on (GAP-04)
+  await fillWeekHours(loc, '00:05', '23:55');
   await loc.getByRole('button', { name: 'Save' }).click();
   await expect(loc.getByText('Saved')).toBeVisible();
   await page.goto(`${base}/stations`);

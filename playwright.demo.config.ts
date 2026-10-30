@@ -22,17 +22,10 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PORT}`, channel: 'chrome', headless: true, trace: 'retain-on-failure' },
   projects: [{ name: 'demo', use: { ...devices['Desktop Chrome'], channel: 'chrome' } }],
   webServer: {
-    command: `npx next build && npx next start --port ${PORT}`,
+    // Database URLs and APP_SECRET are read by the launcher from .env, not written here (reporters print the config).
+    command: `node scripts/test-server.mjs demo ${PORT}`,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
     timeout: 400_000,
-    env: {
-      NEXT_DIST_DIR: '.next-demo',
-      APP_ENV: 'demo',
-      DATABASE_URL: demoDb,
-      APP_BASE_URL: `http://localhost:${PORT}`,
-      APP_SECRET: process.env.APP_SECRET ?? '',
-      UPLOAD_DIR: './storage/demo-uploads',
-    },
   },
 });

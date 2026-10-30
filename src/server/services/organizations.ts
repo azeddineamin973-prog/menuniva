@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { CountryCode, LanguageCode } from '@/generated/prisma/enums';
 import { RESERVED_SLUGS, slugify } from '@/lib/slug';
 import { audit } from '../audit';
+import { env } from '../env';
 import { db, type Tx } from '../db';
 import { ensureDefaultPlans } from './plans';
 import { getPlatformConfig } from './platform-config';
@@ -56,7 +57,8 @@ export async function createRestaurant(
         currency: defaults.currency,
         defaultLanguage: lang,
         sourceLanguage: lang,
-        isDemo: opts.isDemo ?? false,
+        // Every restaurant created in the DEMO environment is fictitious and labelled as such.
+        isDemo: opts.isDemo ?? env.APP_ENV === 'demo',
         branding: { create: {} },
         settings: { create: {} },
         subscription: {

@@ -50,6 +50,9 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
   return (
     <>
       <PageHeader title={m.nav.delivery} description="Your own delivery by restaurant staff. Fees are set per postal-code zone — MenuNiva does not calculate distances or dispatch Glovo/Uber couriers." />
+      {location.deliveryEnabled && !settings?.deliveryHours && !location.openingHours && (
+        <div className="mb-4" data-testid="no-hours-warning"><Alert tone="danger" title="No hours set">Guests can currently order delivery at any time of day. Enter delivery hours below or your opening hours in Settings.</Alert></div>
+      )}
       {!location.deliveryEnabled && <div className="mb-4"><Alert tone="warning">Delivery is switched off. Turn it on in <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="space-y-6">

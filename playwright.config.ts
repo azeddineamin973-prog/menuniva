@@ -32,17 +32,10 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
   ],
   webServer: {
-    command: `npx next build && npx next start --port ${PORT}`,
+    // Database URLs and APP_SECRET are read by the launcher from .env, not written here (reporters print the config).
+    command: `node scripts/test-server.mjs test ${PORT}`,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
     timeout: 400_000,
-    env: {
-      NEXT_DIST_DIR: '.next-e2e',
-      APP_ENV: 'test',
-      DATABASE_URL: testDb,
-      APP_BASE_URL: `http://localhost:${PORT}`,
-      APP_SECRET: process.env.APP_SECRET ?? 'e2e-secret-e2e-secret-e2e-secret-123456',
-      UPLOAD_DIR: './storage/e2e-uploads',
-    },
   },
 });

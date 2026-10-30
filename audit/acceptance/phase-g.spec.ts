@@ -82,27 +82,27 @@ test('G2 duplicate submission: same idempotency key ×6 in parallel → one orde
   await ctx.close();
 });
 
-test('G4 rate limiting: per device, shared Wi-Fi false positives, X-Forwarded-For spoofing', async ({ request }) => {
-  const qr = tokenOf(r.tableHrefs[4]);
+test('G4 rate limiting: per guest, shared Wi-Fi without false positives, X-Forwarded-For spoofing', async ({ request }) => {
   const out: Record<string, unknown> = {};
-  // (a) one device, 9 orders in 10 minutes
-  const one: number[] = [];
-  for (let i = 0; i < 9; i++) one.push((await order(request, { qrToken: qr, idempotencyKey: randomUUID(), language: 'pt', items: cart() }, { 'user-agent': 'g4-one-device' })).status());
-  out.sameDevice = one;
-  expect(one.slice(0, 8).every((s) => s === 201)).toBe(true);
-  expect(one[8]).toBe(429);
-  // (b) 9 different guests on the restaurant Wi-Fi (same public IP) with the same phone model / browser version
-  const qr2 = tokenOf(r.tableHrefs[5]);
   const iphoneUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1';
+  const send = (qr: string, headers: Record<string, string>) => order(request, { qrToken: qr, idempotencyKey: randomUUID(), language: 'pt', items: cart() }, { 'user-agent': iphoneUA, ...headers });
+  // (a) one phone (one guest cookie), 11 orders in 10 minutes → the 11th is refused
+  const one: number[] = [];
+  for (let i = 0; i < 11; i++) one.push((await send(tokenOf(r.tableHrefs[4]), { cookie: 'mn_guest=G4OnePhoneCookie000000' })).status());
+  out.sameGuest = one;
+  expect(one.slice(0, 10).every((x) => x === 201)).toBe(true);
+  expect(one[10]).toBe(429);
+  // (b) 9 different guests on one Wi-Fi with the same phone model → all accepted (was: 9th refused)
   const shared: number[] = [];
-  for (let i = 0; i < 9; i++) shared.push((await order(request, { qrToken: qr2, idempotencyKey: randomUUID(), language: 'pt', items: cart() }, { 'user-agent': iphoneUA, 'x-forwarded-for': '203.0.113.10' })).status());
+  for (let i = 0; i < 9; i++) shared.push((await send(tokenOf(r.tableHrefs[5]), { cookie: `mn_guest=G4Wifi${String(i).padStart(17, '0')}`, 'x-forwarded-for': '203.0.113.10' })).status());
   out.nineDifferentGuestsSameWifiSamePhoneModel = shared;
-  // (c) one attacker rotating X-Forwarded-For
-  const qr3 = tokenOf(r.tableHrefs[6]);
+  expect(shared.every((x) => x === 201)).toBe(true);
+  // (c) same guest cookie + rotating X-Forwarded-For → still limited (this server trusts no proxy)
   const spoof: number[] = [];
-  for (let i = 0; i < 12; i++) spoof.push((await order(request, { qrToken: qr3, idempotencyKey: randomUUID(), language: 'pt', items: cart() }, { 'user-agent': 'g4-attacker', 'x-forwarded-for': `198.51.100.${i + 1}` })).status());
-  out.oneAttackerRotatingXForwardedFor = spoof;
-  out.note = 'login limits verified by tests/integration/login.test.ts (8 failures lock an email, 30 an IP); the per-IP key also comes from the untrusted X-Forwarded-For header';
+  for (let i = 0; i < 12; i++) spoof.push((await send(tokenOf(r.tableHrefs[6]), { cookie: 'mn_guest=G4SpoofCookie000000000', 'x-forwarded-for': `198.51.100.${i + 1}` })).status());
+  out.oneClientRotatingXForwardedFor = spoof;
+  expect(spoof.slice(10)).toEqual([429, 429]);
+  out.note = 'TRUST_PROXY_HOPS unset here (0): X-Forwarded-For ignored. Per-IP limits behind a real proxy: audit/phaseG-proxy-sim.mjs; production hosting not chosen (BLOCKED).';
   ev.add('G4', out);
 });
 
@@ -148,21 +148,16 @@ test('G6 file upload safety: SVG/HTML disguised as PNG refused; media served wit
   await ownerPage.goto(`/dashboard/${r.slug}/settings/branding`);
   const form = ownerPage.getByTestId('branding-form');
   const out: Record<string, string> = {};
-  for (const [name, buf] of [['evil-svg.png', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>')], ['page.png', Buffer.from('<!doctype html><script>alert(1)</script>')], ['5.5MB.png', Buffer.concat([PNG_1x1, Buffer.alloc(5.5 * 1024 * 1024)])]] as const) {
+  for (const [name, buf] of [['evil-svg.png', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>')], ['page.png', Buffer.from('<!doctype html><script>alert(1)</script>')], ['5.5MB.png', Buffer.concat([PNG_1x1, Buffer.alloc(5.5 * 1024 * 1024)])], ['7MB.png', Buffer.concat([PNG_1x1, Buffer.alloc(7 * 1024 * 1024)])]] as const) {
     await ownerPage.reload();
     await form.locator('#logo').setInputFiles({ name, mimeType: 'image/png', buffer: buf });
     await form.getByRole('button', { name: 'Save' }).click();
-    await expect(form.getByRole('alert').first()).toBeVisible();
-    out[name] = await form.getByRole('alert').first().innerText();
+    const msg = form.getByTestId('file-error').or(form.getByRole('alert')).first();
+    await expect(msg).toBeVisible();
+    out[name] = await msg.innerText();
+    expect(await ownerPage.getByText('Something went wrong').count()).toBe(0);
   }
-  // A 7 MB photo (above the 6 MB server-action body limit)
-  await ownerPage.reload();
-  await form.locator('#logo').setInputFiles({ name: '7MB.png', mimeType: 'image/png', buffer: Buffer.concat([PNG_1x1, Buffer.alloc(7 * 1024 * 1024)]) });
-  await form.getByRole('button', { name: 'Save' }).click();
-  await expect(form.getByRole('alert').first().or(ownerPage.getByText('Something went wrong'))).toBeVisible();
-  out['7MB.png'] = (await ownerPage.getByText('Something went wrong').count()) ? 'whole page replaced by the generic error page "Something went wrong" (no "file too large" message)' : await form.getByRole('alert').first().innerText();
   await shot(ownerPage, 'g6-7mb-upload');
-  await ownerPage.goto(`/dashboard/${r.slug}/settings/branding`);
   await ownerPage.reload();
   await form.locator('#logo').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG_1x1 });
   await form.getByRole('button', { name: 'Save' }).click();

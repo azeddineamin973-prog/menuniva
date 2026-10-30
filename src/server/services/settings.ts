@@ -4,6 +4,7 @@ import { LANGUAGES } from '@/i18n/config';
 import { openingHoursSchema } from '@/lib/opening-hours';
 import { isValidPostalCode, normalizePostalCode } from '@/lib/postal';
 import { audit } from '../audit';
+import { UserFacingError } from '../errors';
 import { db } from '../db';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 
@@ -124,6 +125,11 @@ export async function updateChannelSettings(ctx: TenantContext, input: unknown) 
   const data = channelSettingsSchema.parse(input);
   await assertLocationAccess(ctx, data.locationId);
   const { locationId, googleReviewUrl, ...rest } = data;
+  // Without any hours, takeaway/delivery would accept orders at any time of day and night
+  // (audit GAP-04). Hours are entered by the restaurant, never assumed.
+  const hours = await db.restaurantLocation.findUniqueOrThrow({ where: { id: locationId }, select: { openingHours: true, takeawaySettings: { select: { pickupHours: true } }, deliverySettings: { select: { deliveryHours: true } } } });
+  if (rest.takeawayEnabled && !hours.openingHours && !hours.takeawaySettings?.pickupHours) throw new UserFacingError('Enter your opening hours (Settings) or pickup hours (Takeaway) before turning on takeaway.');
+  if (rest.deliveryEnabled && !hours.openingHours && !hours.deliverySettings?.deliveryHours) throw new UserFacingError('Enter your opening hours (Settings) or delivery hours (Delivery) before turning on delivery.');
   await db.$transaction(async (tx) => {
     await tx.restaurantLocation.update({
       where: { id: locationId },

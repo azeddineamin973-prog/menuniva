@@ -91,13 +91,16 @@ export async function createTables(ctx: TenantContext, input: unknown) {
     const area = await db.diningArea.findFirst({ where: { id: d.areaId, locationId: d.locationId, organizationId: ctx.org.id } });
     if (!area) throw new UserFacingError('Invalid area.');
   }
-  const sub = await db.subscription.findUnique({ where: { organizationId: ctx.org.id }, include: { plan: true } });
-  const limit = (sub?.plan.limits as { tables?: number } | null)?.tables;
-  const current = await db.restaurantTable.count({ where: { organizationId: ctx.org.id, isActive: true } });
-  if (limit && current + d.labels.length > limit) throw new UserFacingError(`Your plan allows up to ${limit} tables.`);
-  const existing = await db.restaurantTable.findMany({ where: { locationId: d.locationId, label: { in: d.labels } }, select: { label: true } });
-  if (existing.length) throw new UserFacingError(`These table labels already exist: ${existing.map((e) => e.label).join(', ')}`);
   await db.$transaction(async (tx) => {
+    // Limit and label checks inside the transaction, serialised per restaurant, so two parallel
+    // bulk creations cannot exceed the plan's table limit together (audit GAP-05).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`tables:${ctx.org.id}`}))`;
+    const sub = await tx.subscription.findUnique({ where: { organizationId: ctx.org.id }, include: { plan: true } });
+    const limit = (sub?.plan.limits as { tables?: number } | null)?.tables;
+    const current = await tx.restaurantTable.count({ where: { organizationId: ctx.org.id, isActive: true } });
+    if (limit && current + d.labels.length > limit) throw new UserFacingError(`Your plan allows up to ${limit} tables.`);
+    const existing = await tx.restaurantTable.findMany({ where: { locationId: d.locationId, label: { in: d.labels } }, select: { label: true } });
+    if (existing.length) throw new UserFacingError(`These table labels already exist: ${existing.map((e) => e.label).join(', ')}`);
     const max = await tx.restaurantTable.aggregate({ where: { locationId: d.locationId }, _max: { sortOrder: true } });
     let order = max._max.sortOrder ?? 0;
     for (const label of d.labels) {

@@ -9,7 +9,7 @@ import { getSetupProgress } from './setup-progress';
 export async function publishChecks(ctx: TenantContext, locationId: string) {
   await assertLocationAccess(ctx, locationId);
   const [location, visibleProducts, stations, unrouted] = await Promise.all([
-    db.restaurantLocation.findUniqueOrThrow({ where: { id: locationId } }),
+    db.restaurantLocation.findUniqueOrThrow({ where: { id: locationId }, include: { takeawaySettings: { select: { pickupHours: true } }, deliverySettings: { select: { deliveryHours: true } } } }),
     db.menuProduct.count({ where: { organizationId: ctx.org.id, status: 'ACTIVE', prices: { some: { channel: 'DINE_IN' } } } }),
     db.kitchenStation.count({ where: { locationId, isActive: true } }),
     unroutedDishes(ctx.org.id),
@@ -22,7 +22,9 @@ export async function publishChecks(ctx: TenantContext, locationId: string) {
   if (location.tableOrderingEnabled && stations === 0) blockers.push('Create at least one kitchen station so orders reach the kitchen.');
   if (unrouted.length > 0) warnings.push(`${unrouted.length} visible dishes have no kitchen station and will not appear on any kitchen display: ${unrouted.slice(0, 5).map((u) => u.name).join(', ')}${unrouted.length > 5 ? '…' : ''}.`);
   if (!location.postalCode) warnings.push('Postal code is not set.');
-  if (!location.openingHours) warnings.push('Opening hours are not set; takeaway/delivery will not be limited by hours.');
+  if (location.takeawayEnabled && !location.openingHours && !location.takeawaySettings?.pickupHours) blockers.push('Enter opening hours (Settings) or pickup hours (Takeaway): takeaway would otherwise accept orders at any time.');
+  if (location.deliveryEnabled && !location.openingHours && !location.deliverySettings?.deliveryHours) blockers.push('Enter opening hours (Settings) or delivery hours (Delivery): delivery would otherwise accept orders at any time.');
+  if (!location.openingHours) warnings.push('Opening hours are not set (shown on your public page; also used for takeaway/delivery when no specific hours are set).');
   return { location, blockers, warnings, unrouted, stations };
 }
 
