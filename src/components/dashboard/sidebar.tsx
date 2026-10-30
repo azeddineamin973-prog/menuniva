@@ -8,14 +8,16 @@ import { cn } from '@/lib/cn';
 
 export type SidebarLink = { href: string; label: string; group: string; badge?: number };
 
-const GROUP_LABEL: Record<string, string> = { operate: 'Operate', menu: 'Menu', grow: 'Grow', manage: 'Manage' };
+const GROUP_KEYS = ['operate', 'menu', 'grow', 'manage'];
 
 export function Sidebar({
   links,
   orgName,
   orgSwitcher,
   footer,
+  groupLabels,
 }: {
+  groupLabels: Record<string, string>;
   links: SidebarLink[];
   orgName: string;
   orgSwitcher?: React.ReactNode;
@@ -25,7 +27,7 @@ export function Sidebar({
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
 
-  const groups = Object.keys(GROUP_LABEL).filter((g) => links.some((l) => l.group === g));
+  const groups = GROUP_KEYS.filter((g) => links.some((l) => l.group === g));
   const isActive = (href: string) => {
     const base = links[0]?.href;
     return href === base ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -48,7 +50,7 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto px-3 pb-4">
         {groups.map((g) => (
           <div key={g} className="mt-4 first:mt-1">
-            <p className="px-3 pb-1.5 text-[11px] font-medium tracking-wide text-muted uppercase">{GROUP_LABEL[g]}</p>
+            <p className="px-3 pb-1.5 text-[11px] font-medium tracking-wide text-muted uppercase">{groupLabels[g]}</p>
             <ul className="space-y-0.5">
               {links
                 .filter((l) => l.group === g)

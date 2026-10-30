@@ -3,7 +3,8 @@ import { ActionForm } from '@/components/forms/action-form';
 import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Field, Input, PageHeader, Select } from '@/components/ui';
 import { db } from '@/server/db';
 import { pickName } from '@/server/services/menu';
-import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
 import { routeProductsAction, saveStationAction } from '../tables/actions';
 
 const TYPE_LABEL = { KITCHEN: 'Kitchen', CAFE: 'Café', DESSERTS: 'Desserts', DRINKS: 'Drinks', OTHER: 'Other' } as const;
@@ -11,7 +12,7 @@ const TYPE_LABEL = { KITCHEN: 'Kitchen', CAFE: 'Café', DESSERTS: 'Desserts', DR
 export default async function StationsPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'stations.manage');
-  const [location] = await accessibleLocations(ctx);
+  const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const base = `/dashboard/${ctx.org.slug}`;
   const [stations, products, o] = await Promise.all([

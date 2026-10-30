@@ -1,5 +1,6 @@
 'use client';
 
+import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
@@ -30,7 +31,7 @@ export function CreateTenantForm() {
   }
   const fe = !state.ok ? state.fieldErrors : undefined;
   return (
-    <form action={action} className="space-y-4" data-testid="create-tenant-form">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4" data-testid="create-tenant-form">
       {!state.ok && state.error && state.error !== 'validation' && <Alert tone="danger">{friendlyError(state.error)}</Alert>}
       <Field label="Restaurant name" htmlFor="name" error={fe?.name && 'Required (2–100 characters).'}>
         <Input id="name" name="name" required />

@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { LanguageCode, OrderChannel } from '@/generated/prisma/enums';
 import { assertCents } from '@/lib/money';
 import { db, type Tx } from '../db';
-import { localName, PRICE_CHANNEL } from './public-menu';
+import { zonedParts } from '@/lib/time';
+import { localName, PRICE_CHANNEL, scheduleAllows } from './public-menu';
 
 /**
  * Authoritative server-side pricing (Part 8): the browser sends only product/option IDs
@@ -40,12 +41,14 @@ export type QuotedLine = {
 
 export type Quote = { lines: QuotedLine[]; subtotalCents: number; issues: QuoteIssue[] };
 
-export async function quoteCart(params: { locationId: string; channel: OrderChannel; lang: LanguageCode; items: CartItemInput[] }, tx: Tx | typeof db = db): Promise<Quote> {
+export async function quoteCart(params: { locationId: string; channel: OrderChannel; lang: LanguageCode; items: CartItemInput[]; now?: Date }, tx: Tx | typeof db = db): Promise<Quote> {
   const items = cartSchema.parse(params.items);
   const location = await tx.restaurantLocation.findUniqueOrThrow({ where: { id: params.locationId }, include: { organization: { select: { id: true, sourceLanguage: true } } } });
   const orgId = location.organizationId;
   const source = location.organization.sourceLanguage;
   const priceChannel = PRICE_CHANNEL[params.channel];
+  const local = zonedParts(params.now ?? new Date(), location.timeZone);
+  const minuteOfDay = local.hour * 60 + local.minute;
   const ids = [...new Set(items.map((i) => i.productId))];
   const products = await tx.menuProduct.findMany({
     where: { id: { in: ids }, organizationId: orgId },
@@ -55,7 +58,8 @@ export async function quoteCart(params: { locationId: string; channel: OrderChan
       variants: true,
       modifierGroups: { include: { options: true } },
       locationOverrides: { where: { locationId: location.id } },
-      category: { select: { defaultStationId: true, isActive: true } },
+      schedules: true,
+      category: { select: { defaultStationId: true, isActive: true, schedules: true } },
     },
   });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -70,6 +74,8 @@ export async function quoteCart(params: { locationId: string; channel: OrderChan
     const override = p.locationOverrides[0];
     if (override && !override.isAvailable) return void issues.push({ index, code: 'unavailable', name: nameCustomer });
     if (p.soldOut || override?.soldOut) return void issues.push({ index, code: 'sold_out', name: nameCustomer });
+    if (!scheduleAllows(p.category.schedules, local.weekday, minuteOfDay) || !scheduleAllows(p.schedules, local.weekday, minuteOfDay))
+      return void issues.push({ index, code: 'unavailable', name: nameCustomer });
     const overridePrice = override ? { DINE_IN: override.dineInPriceCents, TAKEAWAY: override.takeawayPriceCents, DELIVERY: override.deliveryPriceCents }[priceChannel] : null;
     const base = overridePrice ?? p.prices.find((x) => x.channel === priceChannel)?.amountCents;
     if (base === undefined || base === null) return void issues.push({ index, code: 'not_on_channel', name: nameCustomer });

@@ -7,8 +7,11 @@ import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { centsToInputValue, formatCents } from '@/lib/money';
 import { getMenuAdmin, getProductAdmin, pickName } from '@/server/services/menu';
-import { requireTenantPage } from '@/server/tenant';
-import { removeProductImageAction, setProductStatusAction, uploadProductImageAction } from '../../actions';
+import { db } from '@/server/db';
+import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { removeProductImageAction, saveLocationOverrideAction, setProductStatusAction, uploadProductImageAction } from '../../actions';
+import { ScheduleEditor } from '../../schedule-editor';
+import { groupSchedules } from '@/lib/schedules';
 import { AllergenEditor } from '../allergen-editor';
 import { OptionsEditor } from '../options-editor';
 import { ProductEditor } from '../product-editor';
@@ -18,7 +21,12 @@ type Names = Partial<Record<LanguageCode, string>>;
 export default async function ProductPage({ params }: { params: Promise<{ org: string; id: string }> }) {
   const { org, id } = await params;
   const ctx = await requireTenantPage(org, 'menu.edit');
-  const [product, menu] = await Promise.all([getProductAdmin(ctx, id), getMenuAdmin(ctx)]);
+  const [product, menu, locations, taxClasses] = await Promise.all([
+    getProductAdmin(ctx, id),
+    getMenuAdmin(ctx),
+    accessibleLocations(ctx),
+    db.taxClass.findMany({ where: { organizationId: ctx.org.id, approvedAt: { not: null } }, orderBy: { rateBasisPoints: 'desc' } }),
+  ]);
   if (!product) notFound();
   const { categories, stations, org: o } = menu;
   const base = `/dashboard/${ctx.org.slug}`;
@@ -49,8 +57,10 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
           languages={o.enabledLanguages}
           categories={categories.map((c) => ({ id: c.id, name: pickName(c.translations, langs) ?? 'Untitled', defaultStation: c.defaultStation?.name ?? null }))}
           stations={stations.map((s) => ({ id: s.id, name: s.name }))}
+          taxClasses={taxClasses.map((t) => ({ id: t.id, name: `${t.name} (${(t.rateBasisPoints / 100).toLocaleString('pt-PT')} %)` }))}
           initial={{
             id: product.id,
+            taxClassId: product.taxClassId,
             categoryId: product.categoryId,
             stationId: product.stationId,
             status: product.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT',
@@ -110,6 +120,35 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
                 </Field>
                 <Checkbox name="rightsConfirmed" label="I have the right to publish this photo." />
               </ActionForm>
+            </CardBody>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <ScheduleEditor org={ctx.org.slug} target="product" id={product.id} initial={groupSchedules(product.schedules)} />
+          <Card>
+            <CardHeader title="Per-location availability & prices" description="Leave a price empty to use the base price above." />
+            <CardBody className="space-y-4">
+              {locations.map((l) => {
+                const o = product.locationOverrides.find((x) => x.locationId === l.id);
+                return (
+                  <ActionForm key={l.id} action={saveLocationOverrideAction} submitLabel={`Save for ${l.name}`} submitVariant="secondary" testId={`override-${l.slug}`}>
+                    <input type="hidden" name="org" value={ctx.org.slug} />
+                    <input type="hidden" name="productId" value={product.id} />
+                    <input type="hidden" name="locationId" value={l.id} />
+                    <p className="text-sm font-medium">{l.name}</p>
+                    <div className="flex flex-wrap gap-4">
+                      <Checkbox name="isAvailable" label="Offered here" defaultChecked={o?.isAvailable ?? true} />
+                      <Checkbox name="soldOut" label="Sold out here" defaultChecked={o?.soldOut ?? false} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label="Dine-in" htmlFor={`di-${l.id}`}><Input id={`di-${l.id}`} name="dineIn" inputMode="decimal" placeholder="base" defaultValue={centsToInputValue(o?.dineInPriceCents)} /></Field>
+                      <Field label="Takeaway" htmlFor={`ta-${l.id}`}><Input id={`ta-${l.id}`} name="takeaway" inputMode="decimal" placeholder="base" defaultValue={centsToInputValue(o?.takeawayPriceCents)} /></Field>
+                      <Field label="Delivery" htmlFor={`de-${l.id}`}><Input id={`de-${l.id}`} name="delivery" inputMode="decimal" placeholder="base" defaultValue={centsToInputValue(o?.deliveryPriceCents)} /></Field>
+                    </div>
+                  </ActionForm>
+                );
+              })}
             </CardBody>
           </Card>
         </div>

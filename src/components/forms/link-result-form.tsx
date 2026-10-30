@@ -1,5 +1,6 @@
 'use client';
 
+import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { useActionState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
 import { Alert, Button } from '@/components/ui';
@@ -23,7 +24,7 @@ export function LinkResultForm({
 }) {
   const [state, formAction, pending] = useActionState<R, FormData>(action, initialActionState as R);
   return (
-    <form action={formAction} className="space-y-3" data-testid={testId}>
+    <form onSubmit={keepValuesOnSubmit(formAction)} className="space-y-3" data-testid={testId}>
       {children}
       <Button type="submit" disabled={pending} variant="dark">
         {pending ? 'Working…' : submitLabel}

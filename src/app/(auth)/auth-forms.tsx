@@ -1,5 +1,6 @@
 'use client';
 
+import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { Alert, Button, Field, Input } from '@/components/ui';
@@ -29,7 +30,7 @@ function FormError({ state, m }: { state: ActionResult; m: Messages }) {
 export function LoginForm({ m, next }: { m: Messages; next?: string }) {
   const [state, action, pending] = useActionState(loginAction, initialActionState);
   return (
-    <form action={action} className="space-y-4" data-testid="login-form">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4" data-testid="login-form">
       <FormError state={state} m={m} />
       <input type="hidden" name="next" value={next ?? ''} />
       <Field label={m.auth.email} htmlFor="email">
@@ -57,7 +58,7 @@ export function SignupForm({ m, next }: { m: Messages; next?: string }) {
   const [state, action, pending] = useActionState(signupAction, initialActionState);
   const fe = state.ok ? undefined : state.fieldErrors;
   return (
-    <form action={action} className="space-y-4" data-testid="signup-form">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4" data-testid="signup-form">
       <FormError state={state} m={m} />
       <input type="hidden" name="next" value={next ?? ''} />
       <Field label={m.auth.name} htmlFor="name" error={errorText(m, fe?.name)}>
@@ -86,7 +87,7 @@ export function ForgotPasswordForm({ m }: { m: Messages }) {
   const [state, action, pending] = useActionState(requestPasswordResetAction, initialActionState);
   if (state.ok) return <Alert tone="success">{m.auth.resetSent}</Alert>;
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4">
       <FormError state={state} m={m} />
       <Field label={m.auth.email} htmlFor="email">
         <Input id="email" name="email" type="email" autoComplete="email" required />
@@ -111,7 +112,7 @@ export function ResetPasswordForm({ m, token }: { m: Messages; token: string }) 
     );
   const fe = state.fieldErrors;
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4">
       <FormError state={state} m={m} />
       <input type="hidden" name="token" value={token} />
       <Field label={m.auth.newPassword} htmlFor="password" hint={m.auth.passwordTooShort} error={errorText(m, fe?.password)}>

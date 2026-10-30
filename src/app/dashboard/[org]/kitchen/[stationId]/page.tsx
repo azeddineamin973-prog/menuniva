@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { db } from '@/server/db';
 import { assertLocationAccess, requireTenantPage } from '@/server/tenant';
 import { KdsBoard } from './kds-board';
+import { getMessages } from '@/i18n';
 
 export default async function StationDisplayPage({ params }: { params: Promise<{ org: string; stationId: string }> }) {
   const { org, stationId } = await params;
@@ -15,7 +16,7 @@ export default async function StationDisplayPage({ params }: { params: Promise<{
   }
   return (
     <div className="-mx-4 -my-6 sm:-mx-6 lg:-mx-8 lg:-my-8">
-      <KdsBoard org={ctx.org.slug} stationId={station.id} canUpdate={ctx.can('kds.update')} />
+      <KdsBoard org={ctx.org.slug} stationId={station.id} canUpdate={ctx.can('kds.update')} t={getMessages(ctx.user.preferredLanguage).staff} />
     </div>
   );
 }

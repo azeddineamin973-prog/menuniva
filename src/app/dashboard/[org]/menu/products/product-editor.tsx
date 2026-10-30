@@ -14,6 +14,7 @@ export type ProductEditorValue = {
   id?: string;
   categoryId: string;
   stationId: string | null;
+  taxClassId: string | null;
   status: 'DRAFT' | 'ACTIVE';
   isFeatured: boolean;
   isPopular: boolean;
@@ -28,6 +29,7 @@ export function ProductEditor({
   initial,
   categories,
   stations,
+  taxClasses = [],
   sourceLanguage,
   languages,
 }: {
@@ -36,6 +38,7 @@ export function ProductEditor({
   initial: ProductEditorValue;
   categories: { id: string; name: string; defaultStation: string | null }[];
   stations: { id: string; name: string }[];
+  taxClasses?: { id: string; name: string }[];
   sourceLanguage: LanguageCode;
   languages: LanguageCode[];
 }) {
@@ -51,6 +54,7 @@ export function ProductEditor({
     ...v,
     id: v.id,
     stationId: v.stationId || null,
+    taxClassId: v.taxClassId || null,
     translations: Object.fromEntries(ordered.map((l) => [l, tr(l)])),
   });
 
@@ -139,6 +143,14 @@ export function ProductEditor({
                   {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Select>
               </Field>
+              {taxClasses.length > 0 && (
+                <Field label="VAT class" htmlFor="taxClassId" hint="Approved by you in Settings → Tax. Prices above already include VAT.">
+                  <Select id="taxClassId" value={v.taxClassId ?? ''} onChange={(e) => setV({ ...v, taxClassId: e.target.value || null })}>
+                    <option value="">— not set —</option>
+                    {taxClasses.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </Select>
+                </Field>
+              )}
               <Field label="Tags" htmlFor="tags" optionalLabel="comma separated" hint="e.g. vegetarian, spicy — only if true.">
                 <Input id="tags" value={v.tags.join(', ')} onChange={(e) => setV({ ...v, tags: e.target.value.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 15) })} />
               </Field>

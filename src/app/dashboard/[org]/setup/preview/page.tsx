@@ -1,13 +1,14 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { ButtonLink, Card, CardBody, CardHeader, PageHeader } from '@/components/ui';
 import { db } from '@/server/db';
-import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
 import { markPreviewedAction } from '../actions';
 
 export default async function PreviewPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'settings.manage');
-  const [location] = await accessibleLocations(ctx);
+  const location = await currentLocation(ctx);
   const firstTable = location ? await db.restaurantTable.findFirst({ where: { locationId: location.id, isActive: true }, include: { qrTokens: { where: { isActive: true }, take: 1 } } }) : null;
   const url = `/r/${ctx.org.slug}?preview=1`;
   return (

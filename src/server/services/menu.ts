@@ -385,6 +385,8 @@ export async function getProductAdmin(ctx: TenantContext, productId: string) {
       modifierGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { orderBy: { sortOrder: 'asc' } } } },
       allergens: true,
       externalPrices: true,
+      schedules: true,
+      locationOverrides: true,
       category: { include: { translations: true } },
     },
   });

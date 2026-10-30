@@ -8,6 +8,10 @@ import { cn } from '@/lib/cn';
 import { formatCents } from '@/lib/money';
 import { nextStatuses } from '@/lib/order-state';
 import type { LiveOrder } from '@/server/services/orders';
+import type { Messages } from '@/i18n';
+
+type S = Messages['staff'];
+const f = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ''));
 
 type J<T> = T extends Date ? string : T extends (infer U)[] ? J<U>[] : T extends object ? { [K in keyof T]: J<T[K]> } : T;
 type Order = J<LiveOrder>;
@@ -15,24 +19,24 @@ type Task = { id: string; type: 'CALL_WAITER' | 'REQUEST_BILL'; status: 'OPEN' |
 type Payload = { serverTime: string; orders: Order[]; tasks: Task[] };
 
 const POLL_MS = 5000;
-const COLUMNS: { key: string; title: string; statuses: OrderStatus[] }[] = [
-  { key: 'new', title: 'New', statuses: ['NEW'] },
-  { key: 'accepted', title: 'Accepted', statuses: ['ACCEPTED'] },
-  { key: 'preparing', title: 'Preparing', statuses: ['PREPARING'] },
-  { key: 'ready', title: 'Ready', statuses: ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
-  { key: 'done', title: 'Completed today', statuses: ['COMPLETED', 'CANCELLED'] },
+const COLUMNS: { key: string; title: keyof S; statuses: OrderStatus[] }[] = [
+  { key: 'new', title: 'colNew', statuses: ['NEW'] },
+  { key: 'accepted', title: 'colAccepted', statuses: ['ACCEPTED'] },
+  { key: 'preparing', title: 'colPreparing', statuses: ['PREPARING'] },
+  { key: 'ready', title: 'colReady', statuses: ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED'] },
+  { key: 'done', title: 'colDone', statuses: ['COMPLETED', 'CANCELLED'] },
 ];
-const ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
-  ACCEPTED: 'Accept',
-  PREPARING: 'Start preparing',
-  READY: 'Mark ready',
-  OUT_FOR_DELIVERY: 'Out for delivery',
-  DELIVERED: 'Delivered',
-  COMPLETED: 'Complete',
-  CANCELLED: 'Cancel',
+const ACTION_KEY: Partial<Record<OrderStatus, keyof S>> = {
+  ACCEPTED: 'accept',
+  PREPARING: 'startPreparing',
+  READY: 'markReady',
+  OUT_FOR_DELIVERY: 'outForDelivery',
+  DELIVERED: 'delivered',
+  COMPLETED: 'complete',
+  CANCELLED: 'cancel',
 };
 
-export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: string; locationId: string; canManage: boolean; canTasks: boolean; tag: string }) {
+export function LiveBoard({ org, locationId, canManage, canTasks, tag, t }: { org: string; locationId: string; canManage: boolean; canTasks: boolean; tag: string; t: S }) {
   const { data, online, lastOk, authError, refresh } = usePolling<Payload>(`/api/dashboard/${org}/orders/live?location=${locationId}`, POLL_MS);
   const [muted, setMuted] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
@@ -87,9 +91,9 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: 
     try {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) setError(d.error === 'status_conflict' ? 'This order was already updated on another device. The board has been refreshed.' : typeof d.error === 'string' ? d.error : 'Could not update. Check the connection and try again.');
+      if (!r.ok) setError(d.error === 'status_conflict' ? t.conflict : typeof d.error === 'string' && d.error !== 'server_error' ? d.error : t.updateFailed);
     } catch {
-      setError('Connection problem. Nothing was changed — try again when the connection is back.');
+      setError(t.updateFailed);
     }
     await refresh();
     setBusy(null);
@@ -98,21 +102,21 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: 
   const changeStatus = (o: Order, to: OrderStatus) => {
     let reason: string | undefined;
     if (to === 'CANCELLED') {
-      reason = window.prompt('Reason for cancelling (shown to the guest):') ?? undefined;
+      reason = window.prompt(t.cancelPrompt) ?? undefined;
       if (!reason?.trim()) return;
     }
     post(`/api/dashboard/${org}/orders/${o.id}/status`, { to, expectedFrom: o.status, reason }, o.id);
   };
 
-  if (authError) return <Alert tone="danger" title="Session expired or access removed">Please sign in again.</Alert>;
+  if (authError) return <Alert tone="danger">{t.sessionExpired}</Alert>;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <ConnectionBadge online={online} lastOk={lastOk} intervalMs={POLL_MS} />
+        <ConnectionBadge online={online} lastOk={lastOk} intervalMs={POLL_MS} labels={{ live: t.live, lost: t.connectionLost }} />
         {unacknowledged.length > 0 && (
           <Badge tone="lime" className="animate-pulse text-sm" data-testid="unread-count">
-            {unacknowledged.length} new order{unacknowledged.length > 1 ? 's' : ''} waiting
+            {f(t.newOrdersWaiting, { n: unacknowledged.length })}
           </Badge>
         )}
         <div className="ms-auto flex flex-wrap gap-2">
@@ -126,7 +130,7 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: 
                 if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
               }}
             >
-              🔔 Enable sound & notifications
+              🔔 {t.enableSound}
             </Button>
           ) : (
             <Button
@@ -137,30 +141,30 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: 
                 setMuted(!muted);
               }}
             >
-              {muted ? '🔕 Alerts muted — unmute' : '🔔 Mute alerts'}
+              {muted ? `🔕 ${t.alertsMuted}` : `🔔 ${t.muteAlerts}`}
             </Button>
           )}
         </div>
       </div>
-      {!soundReady && <p className="text-xs text-muted">Browsers only allow sound after you tap “Enable sound”. Visual alerts always work.</p>}
+      {!soundReady && <p className="text-xs text-muted">{t.soundHint}</p>}
       {error && <Alert tone="danger">{error}</Alert>}
 
       {canTasks && tasks.length > 0 && (
         <div className="flex flex-wrap gap-2" data-testid="table-requests">
-          {tasks.map((t) => (
-            <div key={t.id} className={cn('flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm', t.status === 'OPEN' ? 'border-lime bg-lime/20' : 'border-line bg-surface')}>
-              <strong>{t.type === 'CALL_WAITER' ? '🙋 Waiter called' : '🧾 Bill requested'}</strong>
-              <span>Table {t.table?.label}</span>
-              <span className="text-xs text-muted">{elapsed(t.createdAt, now)}</span>
-              {t.status === 'OPEN' && <Button size="sm" variant="secondary" disabled={busy === t.id} onClick={() => post(`/api/dashboard/${org}/tasks/${t.id}`, { to: 'ACKNOWLEDGED' }, t.id)}>On my way</Button>}
-              <Button size="sm" variant="dark" disabled={busy === t.id} onClick={() => post(`/api/dashboard/${org}/tasks/${t.id}`, { to: 'DONE' }, t.id)}>Done</Button>
+          {tasks.map((task) => (
+            <div key={task.id} className={cn('flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm', task.status === 'OPEN' ? 'border-lime bg-lime/20' : 'border-line bg-surface')}>
+              <strong>{task.type === 'CALL_WAITER' ? `🙋 ${t.waiterCalled}` : `🧾 ${t.billRequested}`}</strong>
+              <span>{f(t.table, { label: task.table?.label ?? '?' })}</span>
+              <span className="text-xs text-muted">{elapsed(task.createdAt, now)}</span>
+              {task.status === 'OPEN' && <Button size="sm" variant="secondary" disabled={busy === task.id} onClick={() => post(`/api/dashboard/${org}/tasks/${task.id}`, { to: 'ACKNOWLEDGED' }, task.id)} data-testid="task-ack">{t.onMyWay}</Button>}
+              <Button size="sm" variant="dark" disabled={busy === task.id} onClick={() => post(`/api/dashboard/${org}/tasks/${task.id}`, { to: 'DONE' }, task.id)} data-testid="task-done">{t.done}</Button>
             </div>
           ))}
         </div>
       )}
 
       {!data ? (
-        <p className="text-sm text-muted">Loading orders…</p>
+        <p className="text-sm text-muted">{t.loading}</p>
       ) : (
         <div className="grid gap-4 overflow-x-auto pb-2 lg:grid-cols-5">
           {COLUMNS.map((col) => {
@@ -168,12 +172,12 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: 
             return (
               <section key={col.key} className="min-w-[260px] rounded-[var(--radius-card)] bg-surface-2/70 p-2" data-testid={`column-${col.key}`}>
                 <h2 className="flex items-center justify-between px-2 py-1.5 text-sm font-semibold">
-                  {col.title} <span className="rounded-full bg-surface px-2 text-xs tabular-nums">{list.length}</span>
+                  {t[col.title]} <span className="rounded-full bg-surface px-2 text-xs tabular-nums">{list.length}</span>
                 </h2>
                 <div className="space-y-2">
                   {list.length === 0 && <p className="px-2 py-4 text-center text-xs text-muted">—</p>}
                   {list.map((o) => (
-                    <OrderCard key={o.id} o={o} now={now} tag={tag} canManage={canManage} busy={busy === o.id} onStatus={(to) => changeStatus(o, to)} onAck={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'acknowledge' }, o.id)} />
+                    <OrderCard key={o.id} o={o} now={now} tag={tag} t={t} canManage={canManage} busy={busy === o.id} onStatus={(to) => changeStatus(o, to)} onAck={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'acknowledge' }, o.id)} />
                   ))}
                 </div>
               </section>
@@ -185,10 +189,10 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag }: { org: 
   );
 }
 
-function OrderCard({ o, now, tag, canManage, busy, onStatus, onAck }: { o: Order; now: number; tag: string; canManage: boolean; busy: boolean; onStatus: (to: OrderStatus) => void; onAck: () => void }) {
+function OrderCard({ o, now, tag, t, canManage, busy, onStatus, onAck }: { o: Order; now: number; tag: string; t: S; canManage: boolean; busy: boolean; onStatus: (to: OrderStatus) => void; onAck: () => void }) {
   const unack = o.status === 'NEW' && !o.acknowledgedAt;
   const ticketsPending = o.tickets.some((t) => t.status !== 'READY' && t.status !== 'CANCELLED');
-  const where = o.channel === 'TABLE' ? `Table ${o.table?.label ?? '?'}` : o.channel === 'TAKEAWAY' ? `Takeaway${o.customerName ? ` · ${o.customerName}` : ''}` : `Delivery${o.delivery ? ` · ${o.delivery.postalCode}` : ''}`;
+  const where = o.channel === 'TABLE' ? f(t.table, { label: o.table?.label ?? '?' }) : o.channel === 'TAKEAWAY' ? `${t.takeaway}${o.customerName ? ` · ${o.customerName}` : ''}` : `${t.delivery}${o.delivery ? ` · ${o.delivery.postalCode}` : ''}`;
   return (
     <article className={cn('rounded-2xl border bg-surface p-3 shadow-sm', unack ? 'border-lime ring-2 ring-lime/60' : 'border-line', o.status === 'CANCELLED' && 'opacity-60')} data-testid="order-card" data-order-number={o.number} data-status={o.status}>
       <header className="flex items-start justify-between gap-2">
@@ -212,7 +216,7 @@ function OrderCard({ o, now, tag, canManage, busy, onStatus, onAck }: { o: Order
           </li>
         ))}
       </ul>
-      {o.customerNotes && <p className="mt-2 rounded-lg bg-warning/10 px-2 py-1 text-xs text-warning">Note: {o.customerNotes}</p>}
+      {o.customerNotes && <p className="mt-2 rounded-lg bg-warning/10 px-2 py-1 text-xs text-warning">{t.note}: {o.customerNotes}</p>}
       {o.tickets.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {o.tickets.map((t) => (
@@ -222,25 +226,25 @@ function OrderCard({ o, now, tag, canManage, busy, onStatus, onAck }: { o: Order
           ))}
         </div>
       )}
-      {o.status === 'CANCELLED' && o.cancelReason && <p className="mt-2 text-xs text-danger">Cancelled: {o.cancelReason}</p>}
+      {o.status === 'CANCELLED' && o.cancelReason && <p className="mt-2 text-xs text-danger">{f(t.cancelled, { reason: o.cancelReason })}</p>}
       <div className="mt-2 flex items-center justify-between text-sm">
         <span className="font-semibold tabular-nums">{formatCents(o.totalCents, tag)}</span>
-        <Badge tone={o.paymentStatus === 'PAID' ? 'success' : o.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'neutral'}>{o.paymentStatus === 'UNPAID' ? 'Not paid' : o.paymentStatus.replace('_', ' ').toLowerCase()}</Badge>
+        <Badge tone={o.paymentStatus === 'PAID' ? 'success' : o.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'neutral'}>{o.paymentStatus === 'UNPAID' ? t.notPaid : o.paymentStatus === 'PAID' ? t.paid : o.paymentStatus === 'PARTIALLY_PAID' ? t.partiallyPaid : o.paymentStatus}</Badge>
       </div>
       {canManage && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {unack && <Button size="sm" variant="secondary" disabled={busy} onClick={onAck}>Seen</Button>}
+          {unack && <Button size="sm" variant="secondary" disabled={busy} onClick={onAck}>{t.seen}</Button>}
           {nextStatuses(o.channel, o.status).map((to) => (
             <Button
               key={to}
               size="sm"
               variant={to === 'CANCELLED' ? 'ghost' : to === 'ACCEPTED' ? 'primary' : 'dark'}
               disabled={busy || (to === 'READY' && ticketsPending)}
-              title={to === 'READY' && ticketsPending ? 'Waiting for kitchen stations' : undefined}
+              title={to === 'READY' && ticketsPending ? t.waitingStations : undefined}
               onClick={() => onStatus(to)}
               data-testid={`action-${to}`}
             >
-              {ACTION_LABEL[to]}
+              {t[ACTION_KEY[to]!]}
             </Button>
           ))}
         </div>

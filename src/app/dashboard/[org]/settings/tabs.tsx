@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
-export function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' }) {
+export function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' | 'tax' }) {
   const tabs = [
     ['details', 'Details & languages', `${base}/settings`],
     ['branding', 'Branding', `${base}/settings/branding`],
     ['channels', 'Ordering channels & links', `${base}/settings/channels`],
+    ['tax', 'Tax (IVA)', `${base}/settings/tax`],
   ] as const;
   return (
     <div className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-line bg-surface p-1">

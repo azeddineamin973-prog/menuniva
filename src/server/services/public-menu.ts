@@ -43,7 +43,7 @@ export type PublicProduct = {
 };
 export type PublicCategory = { id: string; name: string; description: string | null; products: PublicProduct[] };
 
-function scheduleAllows(schedules: { dayOfWeek: number; startMinute: number; endMinute: number }[], weekday: number, minute: number) {
+export function scheduleAllows(schedules: { dayOfWeek: number; startMinute: number; endMinute: number }[], weekday: number, minute: number) {
   if (schedules.length === 0) return true;
   return schedules.some((s) => s.dayOfWeek === weekday && minute >= s.startMinute && minute < s.endMinute);
 }

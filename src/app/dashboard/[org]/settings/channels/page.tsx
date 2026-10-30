@@ -1,14 +1,15 @@
 import { ActionForm, FieldError } from '@/components/forms/action-form';
 import { Alert, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader } from '@/components/ui';
 import { db } from '@/server/db';
-import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
 import { saveChannelSettingsAction } from '../actions';
 import { SettingsTabs } from '../tabs';
 
 export default async function ChannelsPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'settings.manage');
-  const [location] = await accessibleLocations(ctx);
+  const location = await currentLocation(ctx);
   const review = location ? await db.reviewSettings.findUnique({ where: { locationId: location.id } }) : null;
   const base = `/dashboard/${ctx.org.slug}`;
   if (!location) return <Alert tone="warning">No location found.</Alert>;

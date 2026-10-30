@@ -49,7 +49,7 @@ export default async function TranslationsPage({ params }: { params: Promise<{ o
           {rows.map((r) => {
             const src = r.cells[o.sourceLanguage];
             return (
-              <Card key={`${r.kind}-${r.id}`}>
+              <Card key={`${r.kind}-${r.id}`} data-testid="tr-row" data-name={src?.name ?? ''}>
                 <CardHeader title={src?.name ?? '(no source name)'} description={r.kind === 'category' ? 'Category' : 'Dish'} />
                 <CardBody className="grid gap-3 lg:grid-cols-2">
                   {others.map((l) => {

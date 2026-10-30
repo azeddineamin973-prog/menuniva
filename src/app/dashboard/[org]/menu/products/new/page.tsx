@@ -22,9 +22,11 @@ export default async function NewProductPage({ params, searchParams }: { params:
         languages={o.enabledLanguages}
         categories={categories.map((c) => ({ id: c.id, name: pickName(c.translations, langs) ?? 'Untitled', defaultStation: c.defaultStation?.name ?? null }))}
         stations={stations.map((s) => ({ id: s.id, name: s.name }))}
+        taxClasses={[]}
         initial={{
           categoryId: categories.find((c) => c.id === category)?.id ?? categories[0].id,
           stationId: null,
+          taxClassId: null,
           status: 'DRAFT',
           isFeatured: false,
           isPopular: false,

@@ -1,5 +1,6 @@
 'use client';
 
+import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { useActionState } from 'react';
 import { Alert, Button, Field, Input } from '@/components/ui';
 import { initialActionState } from '@/lib/action-result';
@@ -15,7 +16,7 @@ export function SetupForm({ token }: { token: string }) {
   const [state, action, pending] = useActionState(bootstrapAdminAction, initialActionState);
   const fe = state.ok ? undefined : state.fieldErrors;
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4">
       {!state.ok && state.error && state.error !== 'validation' && <Alert tone="danger">{messages[state.error] ?? 'Something went wrong.'}</Alert>}
       <input type="hidden" name="token" value={token} />
       <Field label="Full name" htmlFor="name" error={fe?.name && 'Enter your name.'}>

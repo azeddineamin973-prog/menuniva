@@ -24,6 +24,7 @@ export default defineConfig({
       APP_ENV: 'test',
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? '',
       APP_SECRET: process.env.APP_SECRET ?? 'test-secret-test-secret-test-secret-123',
+      UPLOAD_DIR: './storage/test-uploads',
     },
   },
 });

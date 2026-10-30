@@ -1,5 +1,6 @@
 'use client';
 
+import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { useActionState, useState } from 'react';
 import { Alert, Button, Field, Input, Select } from '@/components/ui';
 import { initialActionState } from '@/lib/action-result';
@@ -10,7 +11,7 @@ export function RegisterRestaurantForm() {
   const [country, setCountry] = useState<'PT' | 'ES'>('PT');
   const fe = state.ok ? undefined : state.fieldErrors;
   return (
-    <form action={action} className="space-y-4" data-testid="register-restaurant-form">
+    <form onSubmit={keepValuesOnSubmit(action)} className="space-y-4" data-testid="register-restaurant-form">
       {!state.ok && state.error && state.error !== 'validation' && <Alert tone="danger">{state.error}</Alert>}
       <Field label="Restaurant name" htmlFor="name" error={fe?.name && 'Enter the restaurant name (2–100 characters).'}>
         <Input id="name" name="name" required minLength={2} maxLength={100} placeholder="e.g. Casa de Marrocos" />

@@ -20,6 +20,7 @@ import {
 import { approveTranslation, bulkTranslateMissing, saveTranslation } from '@/server/services/translations';
 import { markOnboardingFlag } from '@/server/services/settings';
 import { storeTenantImage } from '@/server/storage';
+import { createLocation, deleteTaxClass, saveLocationOverride, saveSchedule, saveTaxClass } from '@/server/services/menu-advanced';
 
 const REVALIDATE = { revalidate: '/dashboard/[org]' };
 
@@ -133,4 +134,43 @@ export async function bulkTranslateAction(_p: ActionResult, form: FormData) {
 
 export async function markTranslationsReviewedAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'menu.edit', (ctx) => markOnboardingFlag(ctx, 'translationsReviewedAt'), REVALIDATE);
+}
+
+export async function saveLocationOverrideAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'menu.edit',
+    (ctx) =>
+      saveLocationOverride(ctx, {
+        productId: form.get('productId'),
+        locationId: form.get('locationId'),
+        isAvailable: form.get('isAvailable') === 'on',
+        soldOut: form.get('soldOut') === 'on',
+        dineIn: form.get('dineIn'),
+        takeaway: form.get('takeaway'),
+        delivery: form.get('delivery'),
+      }),
+    REVALIDATE,
+  );
+}
+
+export async function saveScheduleAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'menu.edit', (ctx) => saveSchedule(ctx, payload(form)), REVALIDATE);
+}
+
+export async function saveTaxClassAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'settings.manage',
+    (ctx) => saveTaxClass(ctx, { id: form.get('id') || undefined, name: form.get('name'), rate: form.get('rate'), approved: form.get('approved') === 'on' }),
+    REVALIDATE,
+  );
+}
+
+export async function deleteTaxClassAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => deleteTaxClass(ctx, String(form.get('id'))), REVALIDATE);
+}
+
+export async function createLocationAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => createLocation(ctx, { name: form.get('name'), city: form.get('city') || undefined }), REVALIDATE);
 }

@@ -6,6 +6,7 @@ import type { OpeningHours } from '@/lib/opening-hours';
 import { db } from '@/server/db';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
 import { saveLocationDetailsAction, saveOrganizationSettingsAction } from './actions';
+import { createLocationAction } from '../menu/actions';
 import { SettingsTabs } from './tabs';
 
 export default async function SettingsPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ location?: string }> }) {
@@ -148,6 +149,18 @@ export default async function SettingsPage({ params, searchParams }: { params: P
           </Card>
         )}
       </div>
+      {ctx.role === 'RESTAURANT_OWNER' && (
+        <Card className="mt-6">
+          <CardHeader title="Locations" description={`${locations.length} location${locations.length > 1 ? 's' : ''}. Each location has its own address, hours, tables, stations and publishing. Your plan sets how many you can add.`} />
+          <CardBody>
+            <ActionForm action={createLocationAction} submitLabel="Add location" resetOnSuccess className="grid items-end gap-3 space-y-0 sm:grid-cols-[1fr_1fr_auto]" testId="add-location-form">
+              <input type="hidden" name="org" value={ctx.org.slug} />
+              <Field label="Location name" htmlFor="newloc"><Input id="newloc" name="name" required /></Field>
+              <Field label="City" htmlFor="newcity" optionalLabel="optional"><Input id="newcity" name="city" /></Field>
+            </ActionForm>
+          </CardBody>
+        </Card>
+      )}
     </>
   );
 }

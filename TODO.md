@@ -21,12 +21,12 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M1-05** Architecture document `docs/ARCHITECTURE.md` — P0 · Deps: M1-02 · **AC** describes layers, tenancy, auth, money, i18n, adapters · **Verify** review
 - [x] **M1-06** Original MenuNiva logo, favicon and app icons — P1 · Deps: M1-02 · **AC** SVG mark (card + QR + cloche motif), `Logo` component, `icon.svg`, `apple-icon` · **Verify** visual check in browser
 - [x] **M1-07** Dashboard design tokens + UI primitives (graphite #171A1D, lime #B9FF36, light/dark) — P0 · Deps: M1-02 · **AC** Button, Card, Input, Select, Badge, Field, EmptyState, Alert primitives; accessible focus states · **Verify** render on pages; Playwright smoke
-- [~] **M1-08** Per-tenant storefront theme (CSS variables) + Moroccan preset — P1 · Deps: M1-07 · **AC** branding colors/fonts applied per restaurant; Moroccan pattern is subtle SVG · **Verify** storefront render
-- [~] **M1-09** Responsive dashboard shell (sidebar, mobile nav, theme toggle) — P0 · Deps: M1-07 · **AC** works ≥320px wide; dark mode persists · **Verify** Playwright mobile viewport
+- [x] **M1-08** Per-tenant storefront theme (CSS variables) + Moroccan preset — P1 · Deps: M1-07 · **AC** branding colors/fonts applied per restaurant; Moroccan pattern is subtle SVG · **Verify** storefront render
+- [x] **M1-09** Responsive dashboard shell (sidebar, mobile nav, theme toggle) — P0 · Deps: M1-07 · **AC** works ≥320px wide; dark mode persists · **Verify** Playwright mobile viewport
 - [x] **M1-10** i18n foundation: 5 locales (pt-PT, en, fr, ar, es), RTL for Arabic — P0 · Deps: M1-02 · **AC** central dictionaries with identical keys; `dir="rtl"` for ar · **Verify** unit test key parity + E2E
 - [x] **M1-11** Test harness: Vitest against `menuniva_test`, Playwright with system Chrome — P0 · Deps: M1-03 · **AC** `npm test` and `npm run test:e2e` run real DB tests · **Verify** test runs
 - [x] **M1-12** MenuNiva public home page (product presentation, honest claims) — P2 · Deps: M1-07 · **AC** no fake customers/testimonials · **Verify** visual check
-- [~] **M1-13** Milestone gate: typecheck, build, tests, git commit — P0 · Deps: M1-01..12 · **AC** all pass · **Verify** QA_REPORT entry
+- [x] **M1-13** Milestone gate: typecheck, build, tests, git commit — P0 · Deps: M1-01..12 · **AC** all pass · **Verify** QA_REPORT entry
 
 ## M2 — Database, Authentication, Multi-Tenancy & Super Admin
 
@@ -34,34 +34,34 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M2-02** Prisma client singleton with pg adapter, test DB switching — P0 · Deps: M2-01 · **AC** single pool in dev hot-reload; tests use TEST_DATABASE_URL · **Verify** integration test
 - [x] **M2-03** Password hashing (argon2id) and password policy — P0 · Deps: M2-02 · **AC** min 10 chars; hashes never logged · **Verify** unit test
 - [x] **M2-04** DB-backed sessions with hashed tokens, secure cookies, expiry, sliding refresh — P0 · Deps: M2-03 · **AC** httpOnly, SameSite=Lax, Secure in production; logout deletes session · **Verify** integration test
-- [~] **M2-05** Sign-up, login, logout pages — P0 · Deps: M2-04 · **AC** generic error on bad credentials; disabled users blocked · **Verify** E2E
+- [x] **M2-05** Sign-up, login, logout pages — P0 · Deps: M2-04 · **AC** generic error on bad credentials; disabled users blocked · **Verify** E2E
 - [x] **M2-06** CSRF / origin protection for mutating route handlers — P0 · Deps: M2-04 · **AC** cross-origin POST rejected; server actions use Next origin check · **Verify** integration test
 - [x] **M2-07** Rate limiting (PostgreSQL buckets) for auth and public endpoints — P0 · Deps: M2-02 · **AC** limits per IP/key; 429 response · **Verify** unit/integration test
 - [x] **M2-08** Role & permission matrix (7 roles) — P0 · Deps: M2-01 · **AC** single source of truth, server enforced · **Verify** unit test
 - [x] **M2-09** Tenant context: `requireTenant(orgSlug, permission)` on every protected page/action — P0 · Deps: M2-04, M2-08 · **AC** browser-supplied IDs always re-checked against membership · **Verify** isolation tests
 - [x] **M2-10** Audit log service — P0 · Deps: M2-02 · **AC** admin & sensitive staff actions recorded with actor, entity, metadata · **Verify** integration test
 - [x] **M2-11** Super Admin one-time bootstrap (CLI token → `/setup`) — P0 · Deps: M2-04 · **AC** no default password; token single-use, expires 1 h, hashed in DB · **Verify** integration test + manual run
-- [~] **M2-12** Super Admin dashboard: tenants, create/activate/suspend, assign plan, trials, modules — P1 · Deps: M2-11, M2-13 · **AC** non-admins get 404/403; every action audited · **Verify** E2E (TEST 16 part)
+- [x] **M2-12** Super Admin dashboard: tenants, create/activate/suspend, assign plan, trials, modules — P1 · Deps: M2-11, M2-13 · **AC** non-admins get 404/403; every action audited · **Verify** E2E (TEST 16 part)
 - [x] **M2-13** Configurable subscription plans (Starter, Growth, Pro, Enterprise) seed — P1 · Deps: M2-01 · **AC** names/limits editable; prices marked "not final" · **Verify** DB check
-- [~] **M2-14** Password reset (token; email if SMTP configured, otherwise admin-generated link) — P1 · Deps: M2-04 · **AC** token single-use, 30 min expiry; sessions revoked after reset · **Verify** integration test
+- [x] **M2-14** Password reset (token; email if SMTP configured, otherwise admin-generated link) — P1 · Deps: M2-04 · **AC** token single-use, 30 min expiry; sessions revoked after reset · **Verify** integration test
 - [x] **M2-15** Tenant isolation integration tests (TEST 1, TEST 15 base) — P0 · Deps: M2-09 · **AC** Restaurant A cannot read/mutate B data · **Verify** Vitest
-- [ ] **M2-16** Milestone gate — P0 · Deps: M2-* · **AC** all pass, commit · **Verify** QA_REPORT
+- [x] **M2-16** Milestone gate — P0 · Deps: M2-* · **AC** all pass, commit · **Verify** QA_REPORT
 
 ## M3 — Restaurant Onboarding, Settings & Staff Roles
 
 - [x] **M3-01** Restaurant registration: org + first location + owner membership + trial — P0 · Deps: M2-09, M2-13 · **AC** one transaction; slug unique · **Verify** integration test
 - [x] **M3-02** 10-step onboarding wizard framework with progress + saved drafts — P0 · Deps: M3-01 · **AC** steps: details, branding, import menu, translations, prices, tables, channels, kitchen, preview, publish · **Verify** E2E
 - [x] **M3-03** Step 1 restaurant details: country, language, address, phone, time zone, PT/ES postal validation — P0 · Deps: M3-02 · **AC** PT `NNNN-NNN`, ES `NNNNN` · **Verify** unit tests
-- [~] **M3-04** Step 2 branding: logo/cover upload, colors, theme preset — P1 · Deps: M3-05 · **AC** preview updates; only validated images stored · **Verify** E2E
-- [~] **M3-05** Safe file upload service (magic-byte check, size limit, random names, storage abstraction) — P0 · Deps: M2-09 · **AC** rejects SVG/HTML/oversized; serves with correct content-type · **Verify** unit tests
+- [x] **M3-04** Step 2 branding: logo/cover upload, colors, theme preset — P1 · Deps: M3-05 · **AC** preview updates; only validated images stored · **Verify** E2E
+- [x] **M3-05** Safe file upload service (magic-byte check, size limit, random names, storage abstraction) — P0 · Deps: M2-09 · **AC** rejects SVG/HTML/oversized; serves with correct content-type · **Verify** unit tests
 - [x] **M3-06** Restaurant & location settings pages (opening hours editor, contact, social, ordering channels) — P1 · Deps: M3-01 · **AC** opening hours entered by restaurant, never invented · **Verify** E2E
-- [~] **M3-07** Multi-location management — P2 · Deps: M3-06 · **AC** create/edit locations; plan limit respected · **Verify** integration test
+- [x] **M3-07** Multi-location management — P2 · Deps: M3-06 · **AC** create/edit locations; plan limit respected · **Verify** integration test
 - [x] **M3-08** Staff invitations + acceptance flow — P1 · Deps: M3-01 · **AC** role + location scope; link shown if no SMTP · **Verify** integration test
 - [x] **M3-09** Staff management (change role, disable, remove) — P1 · Deps: M3-08 · **AC** managers cannot promote to owner; last owner protected · **Verify** integration test
-- [~] **M3-10** Role-based navigation + role landing pages — P0 · Deps: M2-08 · **AC** kitchen sees KDS only; delivery staff sees deliveries only; server still enforces · **Verify** E2E
+- [x] **M3-10** Role-based navigation + role landing pages — P0 · Deps: M2-08 · **AC** kitchen sees KDS only; delivery staff sees deliveries only; server still enforces · **Verify** E2E
 - [x] **M3-11** Casa de Marrocos tenant bootstrap (`npm run setup:casa`) — P0 · Deps: M3-01 · **AC** real name/address/phone; areas Main dining room, Moroccan seating area, Indoor terrace, Moroccan tent/café; stations Downstairs kitchen, Café; Europe/Lisbon; NO dishes, prices, tables, hours · **Verify** DB check
-- [~] **M3-12** Tests: onboarding, invitations, permissions — P0 · Deps: M3-* · **AC** pass · **Verify** Vitest/Playwright
-- [ ] **M3-13** Milestone gate — P0
+- [x] **M3-12** Tests: onboarding, invitations, permissions — P0 · Deps: M3-* · **AC** pass · **Verify** Vitest/Playwright
+- [x] **M3-13** Milestone gate — P0
 
 ## M4 — Menu Management, Five Languages & Translation System
 
@@ -69,18 +69,18 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M4-02** Menu service: categories & products CRUD, tenant-scoped — P0 · Deps: M2-09 · **AC** every query filters by organizationId · **Verify** integration tests
 - [x] **M4-03** Category management UI (reorder, translations, default station) — P0 · Deps: M4-02 · **Verify** E2E
 - [x] **M4-04** Product editor (per-language names/descriptions/ingredients, image, tags, featured/popular, station) — P0 · Deps: M4-02, M3-05 · **Verify** E2E
-- [~] **M4-05** Channel prices DINE_IN/TAKEAWAY/DELIVERY + location overrides — P0 · Deps: M4-01 · **AC** imported platform prices never overwrite in-house prices · **Verify** integration test
+- [x] **M4-05** Channel prices DINE_IN/TAKEAWAY/DELIVERY + location overrides — P0 · Deps: M4-01 · **AC** imported platform prices never overwrite in-house prices · **Verify** integration test
 - [x] **M4-06** Variants and modifier groups (min/max, required/optional, option max qty) — P0 · Deps: M4-04 · **Verify** integration test
 - [x] **M4-07** Allergen declarations (14 EU allergens) with explicit verification — P0 · Deps: M4-04 · **AC** unverified/imported/AI suggestions never shown to customers as statements · **Verify** integration test
-- [~] **M4-08** Availability schedules, temporary sold-out, archive, display order — P1 · Deps: M4-04 · **Verify** integration test (TEST 17 part)
-- [~] **M4-09** Quick mobile price & availability editor — P1 · Deps: M4-05 · **Verify** Playwright mobile
+- [x] **M4-08** Availability schedules, temporary sold-out, archive, display order — P1 · Deps: M4-04 · **Verify** integration test (TEST 17 part)
+- [x] **M4-09** Quick mobile price & availability editor — P1 · Deps: M4-05 · **Verify** Playwright mobile
 - [x] **M4-10** Translation provider abstraction (none / DeepL / LibreTranslate) with honest status — P0 · Deps: M4-02 · **AC** without config: original kept, others "Translation required"; machine output marked MACHINE (unreviewed) · **Verify** unit tests
-- [~] **M4-11** Translation editor grid + bulk translate when configured — P0 · Deps: M4-10 · **AC** never translates allergen/ingredient safety data automatically · **Verify** E2E
-- [~] **M4-12** Review-before-publish screen for menu & translations — P0 · Deps: M4-11 · **Verify** E2E
-- [~] **M4-13** Language settings: default, enabled, source language — P0 · Deps: M4-02 · **Verify** E2E
-- [ ] **M4-14** Tax classes per country (restaurant-approved, no single hardcoded rate) — P1 · Deps: M4-02 · **Verify** integration test
-- [~] **M4-15** Localize key admin screens in 5 languages — P1 · Deps: M1-10 · **Verify** key parity test
-- [ ] **M4-16** Tests + milestone gate — P0
+- [x] **M4-11** Translation editor grid + bulk translate when configured — P0 · Deps: M4-10 · **AC** never translates allergen/ingredient safety data automatically · **Verify** E2E
+- [x] **M4-12** Review-before-publish screen for menu & translations — P0 · Deps: M4-11 · **Verify** E2E
+- [x] **M4-13** Language settings: default, enabled, source language — P0 · Deps: M4-02 · **Verify** E2E
+- [x] **M4-14** Tax classes per country (restaurant-approved, no single hardcoded rate) — P1 · Deps: M4-02 · **Verify** integration test
+- [x] **M4-15** Localize key admin screens in 5 languages — P1 · Deps: M1-10 · **Verify** key parity test
+- [x] **M4-16** Tests + milestone gate — P0
 
 ## M5 — Magic Import Studio (executed after M7)
 
@@ -106,16 +106,16 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M6-01** Dining areas & tables service (tenant/location scoped) — P0 · Deps: M3-01
 - [x] **M6-02** Tables & areas dashboard (bulk add, labels, seats, active) — P0 · Deps: M6-01
 - [x] **M6-03** Secure QR tokens (random 128-bit, rotatable) + SVG/PNG download — P0 · **AC** no DB IDs in QR URL · **Verify** unit test
-- [~] **M6-04** Printable QR sheet (HTML print + PDF with table labels) — P1
-- [~] **M6-05** Public storefront `/r/[restaurant]` and `/r/[restaurant]/[location]` with branding + SEO (title, description, OG, JSON-LD Restaurant, canonical) — P0
+- [x] **M6-04** Printable QR sheet (HTML print + PDF with table labels) — P1
+- [x] **M6-05** Public storefront `/r/[restaurant]` and `/r/[restaurant]/[location]` with branding + SEO (title, description, OG, JSON-LD Restaurant, canonical) — P0
 - [x] **M6-06** Table entry `/t/[token]`: resolve location+table, open/attach table session — P0
 - [x] **M6-07** Mobile customer menu: categories, products, images, verified allergens only, language switch, RTL — P0
-- [~] **M6-08** Product customization sheet (variants, modifiers with min/max) — P0
+- [x] **M6-08** Product customization sheet (variants, modifiers with min/max) — P0
 - [x] **M6-09** Cart (per location+channel, persisted locally, editable) — P0
 - [x] **M6-10** Server pricing engine (`quoteOrder`) — authoritative integer-cent totals — P0 · **AC** client prices ignored · **Verify** unit/integration tests
 - [x] **M6-11** Checkout review: allergy notice, kitchen notes, totals from server — P0
 - [x] **M6-12** Tests: TEST 3 (5 languages + RTL), quote tampering test — P0
-- [ ] **M6-13** Milestone gate — P0
+- [x] **M6-13** Milestone gate — P0
 
 ## M7 — Direct Ordering, Live Dashboard, Kitchen & Café
 
@@ -123,22 +123,22 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M7-02** Order state machine per channel (explicit valid transitions, event log) — P0
 - [x] **M7-03** Customer order tracking via scoped token (polling, real status) — P0
 - [x] **M7-04** Live orders Kanban (New, Accepted, Preparing, Ready, Completed) with labelled polling — P0
-- [~] **M7-05** Alerts: unread counter, persistent NEW until acknowledged, sound, browser notification, mute setting — P0
+- [x] **M7-05** Alerts: unread counter, persistent NEW until acknowledged, sound, browser notification, mute setting — P0
 - [x] **M7-06** Kitchen stations management — P0
 - [x] **M7-07** Station routing: product station → category default → none (expo) — P0
 - [x] **M7-08** KDS per station: fullscreen, pending/preparing/ready, notes, elapsed time — P0
 - [x] **M7-09** Order readiness aggregation (READY only when every station ticket is ready) — P0
-- [~] **M7-10** Connection health indicator, reconnection, duplicate-safe status updates — P0
+- [x] **M7-10** Connection health indicator, reconnection, duplicate-safe status updates — P0
 - [x] **M7-11** Tests: TEST 4, 5, 6, 7, 17 — P0
 - [x] **M7-12** Vertical slice E2E (menu → QR → order → kitchen/café → complete) — P0
-- [ ] **M7-13** Milestone gate — P0
+- [x] **M7-13** Milestone gate — P0
 
 ## M8 — Table Sessions, Bills, Waiter Requests & Kitchen Printing
 
 - [ ] **M8-01** Table session lifecycle (open on first scan/order, staff close) — P0
 - [ ] **M8-02** Merge all orders in an active session into one bill view — P0
 - [x] **M8-03** Customer "Call waiter" / "Request bill" → StaffTask (throttled) — P0
-- [~] **M8-04** Waiter tasks panel (acknowledge, done) — P0
+- [x] **M8-04** Waiter tasks panel (acknowledge, done) — P0
 - [ ] **M8-05** Modify/cancel order items with audit trail — P1
 - [ ] **M8-06** Transfer open session to another table (audited) — P1
 - [ ] **M8-07** Split bill by items or by amount; partial payments — P1

@@ -3,13 +3,14 @@ import { InlineAction } from '@/components/forms/inline-action';
 import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Select } from '@/components/ui';
 import { db } from '@/server/db';
 import { listTablesForLocation } from '@/server/services/tables';
-import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
 import { createTablesAction, rotateQrAction, saveAreaAction } from './actions';
 
 export default async function TablesPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'tables.view');
-  const [location] = await accessibleLocations(ctx);
+  const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const [areas, tables] = await Promise.all([
     db.diningArea.findMany({ where: { locationId: location.id, organizationId: ctx.org.id }, orderBy: { sortOrder: 'asc' } }),

@@ -1,13 +1,14 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, PageHeader } from '@/components/ui';
 import { publishChecks } from '@/server/services/publish';
-import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
 import { publishAction, unpublishAction } from '../actions';
 
 export default async function PublishPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'settings.manage');
-  const [loc] = await accessibleLocations(ctx);
+  const loc = await currentLocation(ctx);
   if (!loc) return <Alert tone="warning">No location.</Alert>;
   const { location, blockers, warnings } = await publishChecks(ctx, loc.id);
   return (

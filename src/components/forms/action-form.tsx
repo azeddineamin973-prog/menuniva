@@ -1,5 +1,6 @@
 'use client';
 
+import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { createContext, useActionState, useContext, useEffect, useRef, useState } from 'react';
 import { Alert, Button } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
@@ -85,7 +86,7 @@ export function ActionForm({
   const fieldErrors = !state.ok && state.fieldErrors ? state.fieldErrors : {};
   return (
     <FieldErrorsContext.Provider value={fieldErrors}>
-      <form ref={ref} action={formAction} className={cn('space-y-4', className)} data-testid={testId}>
+      <form ref={ref} onSubmit={keepValuesOnSubmit(formAction)} className={cn('space-y-4', className)} data-testid={testId}>
         {children}
         <div className={cn('flex flex-wrap items-center gap-3', hiddenSubmit && 'hidden')}>
           <Button type="submit" disabled={pending} variant={submitVariant}>

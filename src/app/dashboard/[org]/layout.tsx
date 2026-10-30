@@ -7,7 +7,9 @@ import { dirOf, getMessages, LANGUAGE_TAG } from '@/i18n';
 import { NAV_ITEMS } from '@/lib/nav';
 import { db } from '@/server/db';
 import { listUserOrganizations } from '@/server/services/organizations';
-import { requireTenantPage } from '@/server/tenant';
+import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
+import { LocationSwitcher } from '@/components/dashboard/location-switcher';
 
 export default async function DashboardLayout({ children, params }: { children: React.ReactNode; params: Promise<{ org: string }> }) {
   const { org } = await params;
@@ -15,6 +17,7 @@ export default async function DashboardLayout({ children, params }: { children: 
   const m = getMessages(ctx.user.preferredLanguage);
   const base = `/dashboard/${ctx.org.slug}`;
 
+  const [locations, current] = await Promise.all([accessibleLocations(ctx), currentLocation(ctx)]);
   const [newOrders, openTasks, orgs] = await Promise.all([
     ctx.can('orders.view')
       ? db.order.count({ where: { organizationId: ctx.org.id, status: 'NEW', acknowledgedAt: null, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
@@ -37,13 +40,17 @@ export default async function DashboardLayout({ children, params }: { children: 
     <div lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)} className="min-h-dvh lg:flex">
       <Sidebar
         links={links}
+        groupLabels={{ operate: m.staff.groupOperate, menu: m.staff.groupMenu, grow: m.staff.groupGrow, manage: m.staff.groupManage }}
         orgName={ctx.org.name}
         orgSwitcher={
-          orgs.length > 1 ? (
-            <Link href="/dashboard?choose=1" className="mt-1 inline-block text-xs text-muted underline-offset-2 hover:underline">
-              Switch restaurant
-            </Link>
-          ) : null
+          <>
+            {locations.length > 1 && current && <LocationSwitcher orgSlug={ctx.org.slug} current={current.id} locations={locations.map((l) => ({ id: l.id, name: l.name }))} />}
+            {orgs.length > 1 && (
+              <Link href="/dashboard?choose=1" className="mt-1 inline-block text-xs text-muted underline-offset-2 hover:underline">
+                Switch restaurant
+              </Link>
+            )}
+          </>
         }
         footer={
           <div className="space-y-1">

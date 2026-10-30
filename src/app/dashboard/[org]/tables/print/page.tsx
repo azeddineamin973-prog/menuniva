@@ -1,12 +1,13 @@
 import { PrintButton } from '@/components/print-button';
 import { db } from '@/server/db';
 import { qrSvg, tableQrUrl } from '@/server/services/tables';
-import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { requireTenantPage } from '@/server/tenant';
+import { currentLocation } from '@/server/current-location';
 
 export default async function PrintQrPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'tables.view');
-  const [location] = await accessibleLocations(ctx);
+  const location = await currentLocation(ctx);
   const tables = location
     ? await db.restaurantTable.findMany({
         where: { locationId: location.id, organizationId: ctx.org.id, isActive: true },

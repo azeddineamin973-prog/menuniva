@@ -123,7 +123,7 @@ test('restaurant setup → QR table order → kitchen & café → completed', as
   await page.goto(`${base}/orders`);
   const card = page.getByTestId('column-new').getByTestId('order-card');
   await expect(card).toHaveCount(1);
-  await expect(card).toContainText('Table 01');
+  await expect(card).toContainText('Mesa 01'); // staff UI follows the owner's language (pt-PT)
   await expect(card).toContainText('Prato de teste');
   await expect(card).toContainText('19,40');
   await expect(page.getByTestId('unread-count')).toBeVisible();
