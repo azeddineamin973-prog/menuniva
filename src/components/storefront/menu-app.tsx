@@ -415,7 +415,9 @@ function CartSheet({
   onSubmitted: (trackingToken: string) => void;
 }) {
   const c = m.customer;
-  const [quote, setQuote] = useState<{ subtotalCents: number; issues: QuoteIssue[] } | null>(null);
+  const [quote, setQuote] = useState<{ subtotalCents: number; discountCents?: number; totalCents?: number; discounts?: { description: string; amountCents: number }[]; couponStatus?: string; issues: QuoteIssue[] } | null>(null);
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState('');
   const [notes, setNotes] = useState('');
   const [tableCode, setTableCode] = useState('');
   const [contact, setContact] = useState({ name: '', phone: '', address: '', postalCode: '', city: '', deliveryNotes: '' });
@@ -443,7 +445,7 @@ function CartSheet({
     fetch('/api/public/quote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel, language: lang, qrToken: scope.qrToken, orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, items }),
+      body: JSON.stringify({ channel, language: lang, qrToken: scope.qrToken, orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, items, couponCode: coupon || undefined }),
       signal: ctrl.signal,
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -451,7 +453,7 @@ function CartSheet({
       .catch(() => {});
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(items), channel, lang]);
+  }, [JSON.stringify(items), channel, lang, coupon]);
 
   useEffect(() => {
     if (channel !== 'DELIVERY' || contact.postalCode.replace(/\D/g, '').length < 5 || lines.length === 0) return setDq(null);
@@ -460,7 +462,7 @@ function CartSheet({
       fetch('/api/public/delivery/quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, postalCode: contact.postalCode, language: lang, items }),
+        body: JSON.stringify({ orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, postalCode: contact.postalCode, language: lang, items, couponCode: coupon || undefined }),
         signal: ctrl.signal,
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -472,14 +474,14 @@ function CartSheet({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact.postalCode, JSON.stringify(items), channel]);
+  }, [contact.postalCode, JSON.stringify(items), channel, coupon]);
 
   const issueText = (i: QuoteIssue) => (i.code === 'selection_rules' && i.group ? fmt(m.validation.chooseOption, { group: i.group }) : fmt(c.itemNoLongerAvailable, { name: i.name ?? lines[i.index]?.name ?? '' }));
 
   const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const common = { idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined };
+    const common = { idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined, couponCode: coupon || undefined };
     const body = JSON.stringify(
       channel === 'TABLE'
         ? { ...common, qrToken: scope.qrToken, tableCode: tableCode.trim() || undefined }
@@ -511,6 +513,7 @@ function CartSheet({
         else if (data.error === 'invalid_postal_code') setError(checkout?.country === 'ES' ? m.validation.invalidPostalCodeES : m.validation.invalidPostalCodePT);
         else if (data.error === 'delivery_busy') setError(c.deliveryBusy);
         else if (data.error === 'validation_failed') setError(m.validation.required);
+        else if (data.error === 'coupon_invalid' || data.error === 'promotion_unavailable') setError(c.promoInvalid);
         else if (res.status >= 500) {
           await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
           continue;
@@ -624,12 +627,23 @@ function CartSheet({
               <p className="font-medium">{c.allergyNoticeTitle}</p>
               <p className="opacity-80">{allergyNotice}</p>
             </div>
+            {!checkout?.whatsapp?.only && (
+              <div className="flex gap-2">
+                <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase().slice(0, 30))} placeholder={c.promoCode} aria-label={c.promoCode} className="h-11 flex-1 rounded-xl border border-black/10 bg-white/80 px-3 text-sm uppercase" data-testid="coupon-input" />
+                <button type="button" onClick={() => setCoupon(couponInput.trim())} className="rounded-xl px-4 text-sm font-medium ring-1 ring-black/10" data-testid="coupon-apply">{c.apply}</button>
+              </div>
+            )}
+            {coupon && quote?.couponStatus && quote.couponStatus !== 'valid' && <p className="text-sm text-red-700" role="alert" data-testid="coupon-error">{c.promoInvalid}</p>}
             <div className="space-y-1 rounded-2xl bg-white/80 p-4">
               <div className="flex justify-between text-sm"><span>{c.subtotal}</span><span className="tabular-nums">{quote ? money(quote.subtotalCents) : '…'}</span></div>
+              {quote?.discounts?.map((d, i) => (
+                <div key={i} className="flex justify-between text-sm text-emerald-800" data-testid="discount-line"><span>{c.discount}: {d.description}</span><span className="tabular-nums">−{money(d.amountCents)}</span></div>
+              ))}
               {channel === 'DELIVERY' && (
                 <div className="flex justify-between text-sm"><span>{c.deliveryFee}</span><span className="tabular-nums" data-testid="delivery-fee">{dq?.covered ? (dq.feeCents === 0 ? c.deliveryFee0 : money(dq.feeCents)) : '—'}</span></div>
               )}
-              <div className="flex justify-between text-lg font-semibold"><span>{c.total}</span><span className="tabular-nums" data-testid="cart-total">{channel === 'DELIVERY' && dq?.covered ? money(dq.totalCents) : quote ? money(quote.subtotalCents) : '…'}</span></div>
+              <div className="flex justify-between text-lg font-semibold"><span>{c.total}</span><span className="tabular-nums" data-testid="cart-total">{channel === 'DELIVERY' && dq?.covered ? money(dq.totalCents) : quote ? money(quote.totalCents ?? quote.subtotalCents) : '…'}</span></div>
+              {!!quote?.discountCents && <p className="text-sm font-medium text-emerald-800" data-testid="you-save">{fmt(c.youSave, { amount: money(quote.discountCents) })}</p>}
               {pricesIncludeVat && <p className="text-xs opacity-60">{c.pricesIncludeVat}</p>}
               <p className="text-xs opacity-60">{channel === 'DELIVERY' ? `${c.paymentNote}` : `${c.paymentNote} ${channel === 'TABLE' ? c.payToWaiter : c.payAtCounter}.`}</p>
             </div>

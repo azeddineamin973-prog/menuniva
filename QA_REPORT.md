@@ -148,3 +148,20 @@ Still manual: printing on a real thermal printer (ESC/POS network sending is not
 
 Defects fixed: WhatsApp message could be built before the server total loaded (now uses the cart estimate as fallback); driver dropdown offered roles that cannot open the driver screen (now delivery staff only).
 Not provided by design: GPS/live location tracking, automatic Glovo/Uber courier dispatch, distance-based fees.
+
+## Run 6 — 2026-10-30 (session 3): M10 Promotions, coupons & reservations
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Unit + integration | `npm test` | ✅ 18 files, **173 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **23 tests passed** |
+
+| File | Covers |
+|---|---|
+| `tests/unit/promotions.test.ts` (8) | Engine: % per line with half-up rounding, 2×1 by unit groups (cheapest free), category-restricted 2×1, fixed amount capped, combo for complete sets, minimum order, non-combinable → single best/priority promotion, combinable stack on the remaining amount only, never above subtotal |
+| `tests/integration/promotions.test.ts` (7) | **TEST 11** 10 % table order (OrderDiscount snapshot) and tea 2×1 for takeaway only; client-sent `discountCents` ignored; no double discount; promo code required/wrong code refused; **code usage limit under 3 concurrent orders → 1 succeeds**; start date and minimum; free-delivery threshold after discounts; cross-tenant dishes refused |
+| `tests/integration/reservations.test.ts` (8) | Slots only inside bookable hours where the whole visit fits, nothing without hours, closed day, party too large, out of booking window; capacity of overlapping requested/confirmed visits, rejected ones free capacity; **4 concurrent requests for 10 seats → exactly 2 accepted**; idempotency + private token; status transitions + stale updates; **TEST 12** same table cannot hold overlapping reservations incl. buffer, cancellation frees it; **2 simultaneous assignments of one table → 1 succeeds**; tenant isolation |
+| `tests/e2e/promotions-reservations.spec.ts` (2) | Owner creates 10 % and a code promotion; guest cart shows discount line and “Poupa 1,30 €”, total 11,70 €; wrong code error; valid code (higher priority, not combined) → 11,00 €, stored order 13,00 − 2,00 = 11,00; guest requests reservation from storefront, staff assign table + confirm, guest page shows CONFIRMED; overlapping second reservation cannot take the same table; full time slot disabled for the next guest |
+
+Note: the first M10 E2E attempt failed only because two Playwright runs were started at the same time (shared port/test DB); the sequential full run passed.

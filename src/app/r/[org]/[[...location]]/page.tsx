@@ -13,7 +13,7 @@ import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storef
 
 export const dynamic = 'force-dynamic';
 
-const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: false };
+const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: true };
 
 type Params = { org: string; location?: string[] };
 
@@ -76,10 +76,9 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   };
 
   const actions: { label: string; href: string; external?: boolean; primary?: boolean }[] = [];
-  // Reservations (M10) link appears once that module ships.
   if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, primary: true });
   if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, primary: true });
-  if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled) actions.push({ label: m.customer.reserveTable, href: `${base}/reserve` });
+  if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled) actions.push({ label: m.customer.reserveTable, href: `/r/${org.slug}/reserve${lq}` });
   if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}` });
   if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, external: true });
   if (location.uberEatsUrl) actions.push({ label: m.customer.orderOnUberEats, href: location.uberEatsUrl, external: true });

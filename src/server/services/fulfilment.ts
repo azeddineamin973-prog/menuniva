@@ -14,6 +14,7 @@ import { rateLimit } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { createOrderRecord, OrderRejectedError, trackingTokenFor } from './orders';
 import { cartSchema, quoteCart } from './pricing';
+import { computeDiscounts, consumeUsage } from './promotions';
 
 // =============================================================== shared
 
@@ -117,6 +118,7 @@ export const submitPickupSchema = z.object({
   items: cartSchema,
   notes: z.string().trim().max(300).optional(),
   pickup: z.string().max(40),
+  couponCode: z.string().trim().max(30).optional(),
   ...contactSchema,
 });
 
@@ -153,6 +155,8 @@ export async function submitPickupOrder(input: unknown, clientKey: string, now =
     if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
     const min = location.takeawaySettings?.minOrderCents ?? 0;
     if (quote.subtotalCents < min) throw new OrderRejectedError('below_minimum', [], { minOrderCents: min });
+    const promo = await computeDiscounts(tx, { organizationId: org.id, locationId: location.id, channel: 'TAKEAWAY', couponCode: d.couponCode, lines: quote.lines, subtotalCents: quote.subtotalCents, now });
+    if (d.couponCode && promo.couponStatus === 'invalid') throw new OrderRejectedError('coupon_invalid');
     const { orderSequence } = await tx.restaurantLocation.update({ where: { id: location.id }, data: { orderSequence: { increment: 1 } }, select: { orderSequence: true } });
     const order = await createOrderRecord(tx, {
       organizationId: org.id,
@@ -167,7 +171,9 @@ export async function submitPickupOrder(input: unknown, clientKey: string, now =
       idempotencyKey: d.idempotencyKey,
       trackingToken,
       quote,
+      discountCents: promo.totalCents,
     });
+    await consumeUsage(tx, org.id, order.id, promo.discounts);
     await tx.order.update({ where: { id: order.id }, data: { paymentMethodIntent: 'PAY_AT_COUNTER' } });
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'NEW_ORDER', title: `New takeaway order #${order.number} — ${d.customerName}`, entityId: order.id } });
     return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false };
@@ -271,19 +277,22 @@ export type DeliveryQuote = {
   minOrderCents: number;
   freeFromCents: number | null;
   subtotalCents: number;
+  discountCents: number;
   totalCents: number;
   meetsMinimum: boolean;
   estimatedMinutes: number;
   issues: Awaited<ReturnType<typeof quoteCart>>['issues'];
 };
 
-export async function quoteDelivery(pl: PublicLocation, postal: string, lang: LanguageCode, items: unknown, now = new Date()): Promise<DeliveryQuote> {
+export async function quoteDelivery(pl: PublicLocation, postal: string, lang: LanguageCode, items: unknown, now = new Date(), couponCode?: string): Promise<DeliveryQuote> {
   const { location } = pl;
   const q = await quoteCart({ locationId: location.id, channel: 'DELIVERY', lang, items: cartSchema.parse(items), now });
+  const promo = await computeDiscounts(db, { organizationId: location.organizationId, locationId: location.id, channel: 'DELIVERY', couponCode, lines: q.lines, subtotalCents: q.subtotalCents, now });
+  const after = q.subtotalCents - promo.totalCents;
   const { valid, zone } = findZone(location.country, location.deliveryZones, postal);
   const est = zone?.estimatedMinutes ?? (location.deliverySettings?.prepEstimateMinutes ?? 25) + (location.deliverySettings?.deliveryEstimateMinutes ?? 30);
-  if (!zone) return { valid, covered: false, feeCents: 0, minOrderCents: 0, freeFromCents: null, subtotalCents: q.subtotalCents, totalCents: q.subtotalCents, meetsMinimum: false, estimatedMinutes: est, issues: q.issues };
-  const free = zone.freeDeliveryThresholdCents !== null && q.subtotalCents >= zone.freeDeliveryThresholdCents;
+  if (!zone) return { valid, covered: false, feeCents: 0, minOrderCents: 0, freeFromCents: null, subtotalCents: q.subtotalCents, discountCents: promo.totalCents, totalCents: after, meetsMinimum: false, estimatedMinutes: est, issues: q.issues };
+  const free = zone.freeDeliveryThresholdCents !== null && after >= zone.freeDeliveryThresholdCents;
   const fee = free ? 0 : zone.feeCents;
   return {
     valid,
@@ -293,7 +302,8 @@ export async function quoteDelivery(pl: PublicLocation, postal: string, lang: La
     minOrderCents: zone.minOrderCents,
     freeFromCents: zone.freeDeliveryThresholdCents,
     subtotalCents: q.subtotalCents,
-    totalCents: q.subtotalCents + fee,
+    discountCents: promo.totalCents,
+    totalCents: after + fee,
     meetsMinimum: q.subtotalCents >= zone.minOrderCents,
     estimatedMinutes: est,
     issues: q.issues,
@@ -313,6 +323,7 @@ export const submitDeliverySchema = z.object({
   city: z.string().trim().min(2, 'required').max(80),
   deliveryNotes: z.string().trim().max(300).optional(),
   paymentMethod: z.enum(['CASH_ON_DELIVERY', 'CARD_TERMINAL']),
+  couponCode: z.string().trim().max(30).optional(),
 });
 
 /** Restaurant delivery order. Coverage, fee and totals are computed on the server only. */
@@ -338,8 +349,12 @@ export async function submitDeliveryOrder(input: unknown, clientKey: string, now
     if (active >= (settings?.maxActiveOrders ?? 10)) throw new OrderRejectedError('delivery_busy');
     const quote = await quoteCart({ locationId: location.id, channel: 'DELIVERY', lang: d.language, items: d.items, now }, tx);
     if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
+    // Minimum order uses the goods subtotal; the free-delivery threshold uses the amount after discounts.
     if (quote.subtotalCents < zone.minOrderCents) throw new OrderRejectedError('below_minimum', [], { minOrderCents: zone.minOrderCents });
-    const fee = zone.freeDeliveryThresholdCents !== null && quote.subtotalCents >= zone.freeDeliveryThresholdCents ? 0 : zone.feeCents;
+    const promo = await computeDiscounts(tx, { organizationId: org.id, locationId: location.id, channel: 'DELIVERY', couponCode: d.couponCode, lines: quote.lines, subtotalCents: quote.subtotalCents, now });
+    if (d.couponCode && promo.couponStatus === 'invalid') throw new OrderRejectedError('coupon_invalid');
+    const afterDiscount = quote.subtotalCents - promo.totalCents;
+    const fee = zone.freeDeliveryThresholdCents !== null && afterDiscount >= zone.freeDeliveryThresholdCents ? 0 : zone.feeCents;
     const { orderSequence } = await tx.restaurantLocation.update({ where: { id: location.id }, data: { orderSequence: { increment: 1 } }, select: { orderSequence: true } });
     const order = await createOrderRecord(tx, {
       organizationId: org.id,
@@ -354,7 +369,9 @@ export async function submitDeliveryOrder(input: unknown, clientKey: string, now
       trackingToken,
       quote,
       deliveryFeeCents: fee,
+      discountCents: promo.totalCents,
     });
+    await consumeUsage(tx, org.id, order.id, promo.discounts);
     await tx.order.update({ where: { id: order.id }, data: { paymentMethodIntent: d.paymentMethod } });
     await tx.deliveryOrderDetails.create({
       data: { orderId: order.id, zoneId: zone.id, recipientName: d.customerName, addressLine: d.address, postalCode: normalizePostalCode(location.country, d.postalCode), city: d.city, phone: d.phone, notes: d.deliveryNotes?.trim() || null },

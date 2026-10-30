@@ -166,16 +166,16 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M10 — Promotions, Coupons & Reservations
 
-- [ ] **M10-01** Promotion engine: percentage, fixed, 2×1 / buy X get Y, combo, category, min order, channels, dates, priority, combinability, no negatives — P0
-- [ ] **M10-02** Coupons with atomic usage limits — P1
-- [ ] **M10-03** Promotions manager UI — P1
-- [ ] **M10-04** Customer savings display — P1
-- [ ] **M10-05** Reservation settings (slots, max party, capacity, buffer, notice) — P1
-- [ ] **M10-06** Server-side availability check — P1
-- [ ] **M10-07** Customer reservation request form (5 languages) — P1
-- [ ] **M10-08** Reservation management: day calendar, accept/reject/confirm/cancel/arrived/no-show — P1
-- [ ] **M10-09** Table assignment with double-booking prevention (transaction + overlap check) — P1
-- [ ] **M10-10** Tests: TEST 11, 12 + milestone gate — P0
+- [x] **M10-01** Promotion engine: percentage, fixed, 2×1 / buy X get Y, combo, category, min order, channels, dates, priority, combinability, no negatives — P0
+- [x] **M10-02** Coupons with atomic usage limits — P1
+- [x] **M10-03** Promotions manager UI — P1
+- [x] **M10-04** Customer savings display — P1
+- [x] **M10-05** Reservation settings (slots, max party, capacity, buffer, notice) — P1
+- [x] **M10-06** Server-side availability check — P1
+- [x] **M10-07** Customer reservation request form (5 languages) — P1
+- [x] **M10-08** Reservation management: day calendar, accept/reject/confirm/cancel/arrived/no-show — P1
+- [x] **M10-09** Table assignment with double-booking prevention (transaction + overlap check) — P1
+- [x] **M10-10** Tests: TEST 11, 12 + milestone gate — P0
 
 ## M11 — Smart Reviews, Complaint Recovery, Loyalty & Upsell
 

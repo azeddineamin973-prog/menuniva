@@ -54,8 +54,8 @@ Status values (never a generic "Complete"):
 | 10 | Takeaway (pickup hours, lead time, min, pause) | M9 | M9-01..03 | `services/fulfilment.ts`, `r/[org]/order/[mode]`, `dashboard/[org]/takeaway` | TEST 8 (integration + E2E) | TESTED |
 | 11 | Delivery zones (PT/ES postal codes), fees, workflow, driver view | M9 | M9-04..08, M9-11 | `services/fulfilment.ts`, `dashboard/[org]/delivery`, `dashboard/[org]/driver` | TEST 9, 10 (integration + E2E) | TESTED (no GPS, no courier dispatch — by design) |
 | 12 | WhatsApp prefilled ordering + external links | M9 | M9-09, M9-10 | `buildWhatsAppText` in `menu-app.tsx`, storefront links | takeaway-delivery.spec.ts | TESTED |
-| 13 | Promotions & coupons (server-side) | M10 | M10-01..04 | — | TEST 11 | NOT STARTED |
-| 14 | Reservations with double-booking prevention | M10 | M10-05..09 | — | TEST 12 | NOT STARTED |
+| 13 | Promotions & coupons (server-side) | M10 | M10-01..04 | `src/lib/promotions.ts`, `services/promotions.ts`, `dashboard/[org]/promotions` | TEST 11 (unit + integration + E2E) | TESTED |
+| 14 | Reservations with double-booking prevention | M10 | M10-05..09 | `services/reservations.ts`, `r/[org]/reserve`, `reservation/[token]`, `dashboard/[org]/reservations` | TEST 12 (integration + E2E) | TESTED (no SMS by design) |
 | 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | — | TEST 13, 14 | NOT STARTED |
 | 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | — | — | NOT STARTED |
 | 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | — | — | NOT STARTED |

@@ -168,6 +168,13 @@ const en = {
     CANCELLED: 'Cancelled',
   },
   reservation: {
+    chooseTime: "Choose a time",
+    trackTitle: "Your reservation",
+    hoursNotSet: "Online reservations are not available yet. Please call the restaurant.",
+    keepPage: "No SMS or email is sent. Keep this page to check whether the restaurant confirmed your reservation.",
+    guests: "{n} guests",
+    dateTooFar: "Please choose a date within the booking window.",
+    invalidTime: "This time is no longer available. Please choose another.",
     title: 'Reserve a table',
     date: 'Date',
     time: 'Time',

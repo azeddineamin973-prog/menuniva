@@ -2,7 +2,7 @@
 
 ## Current status (session 3 — 2026-10-30)
 
-**Task completion (from TODO.md):** 126 of 169 tasks verified (74.6 %) · 0 in progress · 43 not started.
+**Task completion (from TODO.md):** 136 of 169 tasks verified (80.5 %) · 0 in progress · 33 not started.
 
 | Milestone | Verified | Not started | Total | Gate |
 |---|---|---|---|---|
@@ -15,14 +15,15 @@
 | M7 Ordering, live dashboard, KDS | 13 | 0 | 13 | ✅ closed |
 | M8 Sessions, bills, waiter requests, printing | 13 | 0 | 13 | ✅ closed (thermal printer hardware untested) |
 | M9 Takeaway, delivery, WhatsApp | 12 | 0 | 12 | ✅ closed |
-| M10 Promotions, reservations | 0 | 10 | 10 | next |
-| M11 Reviews, loyalty, upsell | 0 | 11 | 11 | |
+| M10 Promotions, reservations | 10 | 0 | 10 | ✅ closed |
+| M11 Reviews, loyalty, upsell | 0 | 11 | 11 | next |
 | M12 Analytics, subscriptions, admin | 0 | 10 | 10 | |
 | M13 Security, backups, deployment | 1 | 12 | 13 | |
 
-Tests: 150 unit/integration + 21 browser E2E passing (QA_REPORT.md, Run 5).
+Tests: 173 unit/integration + 23 browser E2E passing (QA_REPORT.md, Run 6).
 
 ## Completed in session 3
+- M10: deterministic integer promotion engine (%, fixed, buy X get Y, combo, category, minimum, channels, dates, priority, combinability), promo codes with atomic usage limits, promotions manager, savings in cart/order; reservations with configurable hours/capacity/buffer/notice, server-side availability under lock, guest request + private status page, day view with confirm/reject/arrived/no-show and double-booking-safe table assignment.
 - M9: takeaway settings and pickup slots (location time zone), takeaway checkout, PT/ES postal-code delivery zones with fees/minimum/free threshold, delivery checkout with server-side coverage and totals, delivery hours/pause/active-order limit, cash or card on delivery, driver assignment and mobile driver view (cash collection recorded), WhatsApp prefilled orders (not stored), storefront ordering links.
 - M8: table sessions (open/close/transfer), merged bills, item reduce/void with audit, split payments by item or amount with row locks, payment voiding, internal receipt (not an invoice), kitchen/café ticket print page + PDF + ESC/POS formatter, optional 4-digit table code, payment and certified-invoicing provider interfaces (not connected).
 

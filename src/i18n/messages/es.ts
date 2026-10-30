@@ -168,6 +168,13 @@ const es: Messages = {
     CANCELLED: 'Cancelado',
   },
   reservation: {
+    chooseTime: "Elige una hora",
+    trackTitle: "Tu reserva",
+    hoursNotSet: "Las reservas en línea aún no están disponibles. Llama al restaurante.",
+    keepPage: "No se envía SMS ni correo. Guarda esta página para comprobar si el restaurante confirmó tu reserva.",
+    guests: "{n} personas",
+    dateTooFar: "Elige una fecha dentro del periodo de reservas.",
+    invalidTime: "Esta hora ya no está disponible. Elige otra.",
     title: 'Reservar mesa',
     date: 'Fecha',
     time: 'Hora',

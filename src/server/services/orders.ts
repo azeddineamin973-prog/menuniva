@@ -14,6 +14,7 @@ import { rateLimit } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { cartSchema, quoteCart, type QuoteIssue } from './pricing';
 import { orderingState } from './public-menu';
+import { computeDiscounts, consumeUsage } from './promotions';
 
 /**
  * Customer tracking token. Derived with HMAC from the location and the client's
@@ -41,6 +42,7 @@ export const submitTableOrderSchema = z.object({
   items: cartSchema,
   notes: z.string().trim().max(300).optional(),
   tableCode: z.string().trim().max(8).optional(),
+  couponCode: z.string().trim().max(30).optional(),
 });
 
 export type SubmittedOrder = { orderNumber: number; trackingToken: string; status: OrderStatus; duplicate: boolean };
@@ -94,8 +96,11 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
       if (!session && location.tableCodeRequired) throw new OrderRejectedError('table_not_open');
       session ??= await tx.tableSession.create({ data: { organizationId: location.organizationId, locationId: location.id, tableId: table.id } });
 
+      const promo = await computeDiscounts(tx, { organizationId: location.organizationId, locationId: location.id, channel: 'TABLE', couponCode: data.couponCode, lines: quote.lines, subtotalCents: quote.subtotalCents });
+      if (data.couponCode && promo.couponStatus === 'invalid') throw new OrderRejectedError('coupon_invalid');
       const { orderSequence } = await tx.restaurantLocation.update({ where: { id: location.id }, data: { orderSequence: { increment: 1 } }, select: { orderSequence: true } });
       const order = await createOrderRecord(tx, {
+        discountCents: promo.totalCents,
         organizationId: location.organizationId,
         locationId: location.id,
         number: orderSequence,
@@ -108,6 +113,7 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
         trackingToken,
         quote,
       });
+      await consumeUsage(tx, location.organizationId, order.id, promo.discounts);
       await tx.notification.create({
         data: { organizationId: location.organizationId, locationId: location.id, type: 'NEW_ORDER', title: `New order #${order.number} — table ${table.label}`, entityId: order.id },
       });

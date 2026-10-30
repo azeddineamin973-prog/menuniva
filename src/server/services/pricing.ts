@@ -26,6 +26,7 @@ export type QuoteIssue = { index: number; code: 'unavailable' | 'sold_out' | 'in
 
 export type QuotedLine = {
   productId: string;
+  categoryId: string;
   variantId: string | null;
   stationId: string | null;
   nameSnapshot: string;
@@ -120,6 +121,7 @@ export async function quoteCart(params: { locationId: string; channel: OrderChan
     if (perUnit < 0) return void issues.push({ index, code: 'invalid_option', name: nameCustomer });
     lines.push({
       productId: p.id,
+      categoryId: p.categoryId,
       variantId: item.variantId ?? null,
       stationId: p.stationId ?? p.category.defaultStationId ?? null,
       nameSnapshot: nameSource,

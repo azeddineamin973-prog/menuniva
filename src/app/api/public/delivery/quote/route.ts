@@ -7,7 +7,7 @@ import { assertSameOrigin, handleRouteError } from '@/server/http';
 import { rateLimit } from '@/server/rate-limit';
 import { publicLocation, quoteDelivery } from '@/server/services/fulfilment';
 
-const schema = z.object({ orgSlug: z.string().max(60), locationSlug: z.string().max(60).optional(), postalCode: z.string().max(12), language: z.enum(LANGUAGES as [LanguageCode, ...LanguageCode[]]), items: z.unknown() });
+const schema = z.object({ orgSlug: z.string().max(60), locationSlug: z.string().max(60).optional(), postalCode: z.string().max(12), language: z.enum(LANGUAGES as [LanguageCode, ...LanguageCode[]]), items: z.unknown(), couponCode: z.string().trim().max(30).optional() });
 
 // Public: delivery coverage + fee + totals for a postal code (no order is created).
 export async function POST(req: Request) {
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const d = schema.parse(await req.json().catch(() => null));
     const pl = await publicLocation(d.orgSlug, d.locationSlug);
     if (!pl || !pl.location.deliveryEnabled) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-    return NextResponse.json(await quoteDelivery(pl, d.postalCode, d.language, d.items));
+    return NextResponse.json(await quoteDelivery(pl, d.postalCode, d.language, d.items, new Date(), d.couponCode));
   } catch (e) {
     return handleRouteError('public-delivery-quote', e);
   }
