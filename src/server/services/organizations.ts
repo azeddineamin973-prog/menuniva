@@ -4,7 +4,8 @@ import type { CountryCode, LanguageCode } from '@/generated/prisma/enums';
 import { RESERVED_SLUGS, slugify } from '@/lib/slug';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
-import { DEFAULT_TRIAL_DAYS, ensureDefaultPlans } from './plans';
+import { ensureDefaultPlans } from './plans';
+import { getPlatformConfig } from './platform-config';
 
 export const COUNTRY_DEFAULTS: Record<CountryCode, { timeZone: string; language: LanguageCode; currency: string }> = {
   PT: { timeZone: 'Europe/Lisbon', language: 'pt', currency: 'EUR' },
@@ -41,6 +42,7 @@ export async function createRestaurant(
 ) {
   const data = createRestaurantSchema.parse(input);
   await ensureDefaultPlans();
+  const { defaultTrialDays } = await getPlatformConfig();
   const defaults = COUNTRY_DEFAULTS[data.country];
   const lang = data.defaultLanguage ?? defaults.language;
   return db.$transaction(async (tx) => {
@@ -61,7 +63,7 @@ export async function createRestaurant(
           create: {
             planId: starter.id,
             status: 'TRIALING',
-            trialEndsAt: new Date(Date.now() + DEFAULT_TRIAL_DAYS * 86400_000),
+            trialEndsAt: new Date(Date.now() + defaultTrialDays * 86400_000),
             provider: 'manual',
           },
         },

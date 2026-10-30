@@ -4,6 +4,7 @@ import { getMessages } from '@/i18n';
 import { fmt } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
 import { myDeliveries } from '@/server/services/fulfilment';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { driverUpdateAction } from '../delivery/actions';
 
@@ -11,6 +12,7 @@ import { driverUpdateAction } from '../delivery/actions';
 export default async function DriverPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'delivery.driver');
+  await requireModulePage(ctx, 'delivery');
   const m = getMessages(ctx.user.preferredLanguage);
   const t = m.staff;
   const orders = await myDeliveries(ctx);

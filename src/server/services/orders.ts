@@ -8,6 +8,7 @@ import { canTransition, ACTIVE_STATUSES } from '@/lib/order-state';
 import { audit } from '../audit';
 import { hashToken, safeEqual } from '../crypto';
 import { db, type Tx } from '../db';
+import { assertModule, hasModule } from '../modules';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
@@ -72,6 +73,7 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
   const location = table.location;
   const state = orderingState(location, location.organization.status, 'TABLE');
   if (!state.canOrder) throw new OrderRejectedError(`ordering_${state.reason}`);
+  if (!(await hasModule(location.organizationId, 'table_ordering'))) throw new OrderRejectedError('module_not_available');
 
   const trackingToken = trackingTokenFor(location.id, data.idempotencyKey);
   const existing = await db.order.findUnique({ where: { locationId_idempotencyKey: { locationId: location.id, idempotencyKey: data.idempotencyKey } } });
@@ -353,6 +355,7 @@ export async function liveOrders(ctx: TenantContext, locationId: string, since: 
 
 /** Tickets for one station's display. */
 export async function stationTickets(ctx: TenantContext, stationId: string) {
+  await assertModule(ctx.org.id, 'kds');
   const station = await db.kitchenStation.findFirst({ where: { id: stationId, organizationId: ctx.org.id } });
   if (!station) throw new UserFacingError('Station not found.', 404);
   await assertLocationAccess(ctx, station.locationId);

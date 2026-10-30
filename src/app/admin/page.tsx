@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Badge, ButtonLink, Card, EmptyState, PageHeader, Stat } from '@/components/ui';
+import { formatCents } from '@/lib/money';
 import { listTenants, platformMetrics } from '@/server/services/admin';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,12 @@ export default async function AdminHome() {
         <Stat label="Suspended" value={metrics.suspended} />
         <Stat label="Orders (30 days)" value={metrics.orders30} hint="Excludes demo tenants" />
         <Stat label="Errors (7 days)" value={metrics.errors7} />
+        <Stat label="New tenants (30 days)" value={metrics.newTenants30} />
+        <Stat label="Trials ending in 7 days" value={metrics.trialsEndingSoon} />
+        <Stat label="Past due" value={metrics.pastDue} />
+        <Stat label="Open support issues" value={metrics.openTickets} />
+        <Stat label="Recorded billing (30 days)" value={formatCents(metrics.billedCents30)} hint="Manual records of payments received" />
+        <Stat label="Tenants by plan" value={<span className="text-sm font-normal">{metrics.tenantsByPlan.map((p) => `${p.plan}: ${p.count}`).join(' · ') || '—'}</span>} />
       </div>
       {tenants.length === 0 ? (
         <EmptyState title="No restaurants yet" description="Create the first tenant or let an owner register." action={<ButtonLink href="/admin/tenants/new">Create tenant</ButtonLink>} />

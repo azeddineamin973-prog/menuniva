@@ -4,6 +4,7 @@ import { Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, 
 import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
 import { loyaltyMembers, rewardText } from '@/server/services/loyalty';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { deleteMemberAction, redeemAction, saveLoyaltyProgramAction, withdrawMarketingAction } from './actions';
 
@@ -11,6 +12,7 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
   const { org } = await params;
   const sp = await searchParams;
   const ctx = await requireTenantPage(org, 'loyalty.manage');
+  await requireModulePage(ctx, 'loyalty');
   const m = getMessages(ctx.user.preferredLanguage);
   const [program, orgRow, members] = await Promise.all([
     db.loyaltyProgram.findUnique({ where: { organizationId: ctx.org.id } }),

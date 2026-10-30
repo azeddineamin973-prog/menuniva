@@ -5,6 +5,7 @@ import { parseMoneyToCents } from '@/lib/money';
 import { applyPromotions, type AppliedDiscount, type PromoRule } from '@/lib/promotions';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
+import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
 import type { TenantContext } from '../tenant';
 import type { QuotedLine } from './pricing';
@@ -45,7 +46,9 @@ export async function computeDiscounts(
   tx: Tx | typeof db,
   p: { organizationId: string; locationId: string; channel: OrderChannel; couponCode?: string | null; lines: QuotedLine[]; subtotalCents: number; now?: Date },
 ) {
-  const { rules, couponStatus } = await loadRules(tx, p);
+  // Without the promotions module no promotion applies; a typed code is reported as invalid.
+  const enabled = await hasModule(p.organizationId, 'promotions');
+  const { rules, couponStatus } = enabled ? await loadRules(tx, p) : { rules: [], couponStatus: p.couponCode ? ('invalid' as const) : ('none' as const) };
   const res = applyPromotions(
     p.lines.map((l, i) => ({ key: String(i), productId: l.productId, categoryId: l.categoryId, unitCents: l.unitPriceCents + l.modifiersUnitCents, quantity: l.quantity })),
     rules,
@@ -118,6 +121,7 @@ export const promotionSchema = z
   });
 
 export async function savePromotion(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'promotions');
   const d = promotionSchema.parse(input);
   const [products, categories] = await Promise.all([
     db.menuProduct.count({ where: { id: { in: d.productIds }, organizationId: ctx.org.id } }),

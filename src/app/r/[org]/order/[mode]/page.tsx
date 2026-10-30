@@ -9,6 +9,7 @@ import type { OpeningHours } from '@/lib/opening-hours';
 import { isOpenAt } from '@/lib/opening-hours';
 import { zonedParts } from '@/lib/time';
 import { db } from '@/server/db';
+import { orgModules } from '@/server/modules';
 import { pickupOptions, publicLocation } from '@/server/services/fulfilment';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { upsellRulesFor } from '@/server/services/upsell';
@@ -28,6 +29,8 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   const pl = await publicLocation(orgSlug, sp.l);
   if (!pl) notFound();
   const { org, location } = pl;
+  const modules = await orgModules(org.id);
+  if ((mode === 'pickup' && !modules.has('takeaway')) || (mode === 'delivery' && !modules.has('delivery'))) notFound();
   const [branding, settings] = await Promise.all([db.restaurantBranding.findUnique({ where: { organizationId: org.id } }), db.restaurantSettings.findUnique({ where: { organizationId: org.id } })]);
   const lang = await resolveGuestLanguage(org, sp.lang);
   const m = getMessages(lang);

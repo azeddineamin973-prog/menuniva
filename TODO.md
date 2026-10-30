@@ -193,16 +193,16 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M12 — Analytics, Subscriptions, Plans & SaaS Administration
 
-- [ ] **M12-01** Analytics queries (channels, counts, AOV, popular items/categories, hours, zones, discounts, reservations, ratings, complaints, upsell) in location time zone — P1
-- [ ] **M12-02** Analytics dashboard (Today, 7d, 30d, custom) — P1
-- [ ] **M12-03** Separate order value / collected payments / cancelled value / unpaid — P0
-- [ ] **M12-04** CSV export — P1
-- [ ] **M12-05** Owner subscription page (plan, status, trial, limits, genuine billing history) — P1
-- [ ] **M12-06** Plan limit enforcement — P1
-- [ ] **M12-07** Billing provider adapter (manual now; processor + verified webhooks later) — P2 · **NEEDS CONFIGURATION**
-- [ ] **M12-08** Super Admin: platform metrics (privacy-preserving), errors, integration health, support issues, platform config — P1
-- [ ] **M12-09** Feature module toggles per tenant — P1
-- [ ] **M12-10** Tests: TEST 16, 18 + milestone gate — P0
+- [x] **M12-01** Analytics queries (channels, counts, AOV, popular items/categories, hours, zones, discounts, reservations, ratings, complaints, upsell) in location time zone — P1
+- [x] **M12-02** Analytics dashboard (Today, 7d, 30d, custom) — P1
+- [x] **M12-03** Separate order value / collected payments / cancelled value / unpaid — P0
+- [x] **M12-04** CSV export — P1
+- [x] **M12-05** Owner subscription page (plan, status, trial, limits, genuine billing history) — P1
+- [x] **M12-06** Plan limit enforcement — P1
+- [x] **M12-07** Billing provider adapter (manual now; processor + verified webhooks later) — P2 · **NEEDS CONFIGURATION**
+- [x] **M12-08** Super Admin: platform metrics (privacy-preserving), errors, integration health, support issues, platform config — P1
+- [x] **M12-09** Feature module toggles per tenant — P1
+- [x] **M12-10** Tests: TEST 16, 18 + milestone gate — P0
 
 ## M13 — Security, Testing, Backups, Deployment & Release Preparation
 

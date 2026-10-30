@@ -4,6 +4,7 @@ import type { LanguageCode } from '@/generated/prisma/enums';
 import { audit } from '../audit';
 import { hashToken } from '../crypto';
 import { db, type Tx } from '../db';
+import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
 import type { TenantContext } from '../tenant';
@@ -50,6 +51,7 @@ export const programSchema = z
   .refine((d) => !d.enabled || !!d.rewardText, { path: ['rewardText'], message: 'Describe the reward before switching loyalty on.' });
 
 export async function updateLoyaltyProgram(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'loyalty');
   const d = programSchema.parse(input);
   const { sourceLanguage: lang } = await db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true } });
   const data = { enabled: d.enabled, type: d.type, stampsForReward: d.stampsForReward, pointsPerEuro: d.pointsPerEuro, expiryDays: d.expiryDays, rewardDescription: d.rewardText ? { [lang]: d.rewardText } : undefined };
@@ -81,7 +83,7 @@ export async function loyaltyForOrder(token: string, lang: LanguageCode) {
   const order = await orderByToken(token);
   if (!order) return null;
   const [program, org] = await Promise.all([db.loyaltyProgram.findUnique({ where: { organizationId: order.organizationId } }), db.restaurantOrganization.findUniqueOrThrow({ where: { id: order.organizationId } })]);
-  if (!program?.enabled) return null;
+  if (!program?.enabled || !(await hasModule(order.organizationId, 'loyalty'))) return null;
   const account = order.loyaltyAccount && !order.loyaltyAccount.deletedAt ? order.loyaltyAccount : null;
   if (account) await expireLoyalty(order.organizationId, new Date(), account.id);
   const fresh = account ? await db.loyaltyAccount.findUnique({ where: { id: account.id } }) : null;
@@ -107,6 +109,7 @@ export async function enrolFromOrder(input: unknown, clientKey: string) {
   if (!order || order.status === 'CANCELLED') throw new UserFacingError('not_found', 404);
   const program = await db.loyaltyProgram.findUnique({ where: { organizationId: order.organizationId } });
   if (!program?.enabled) throw new UserFacingError('loyalty_disabled', 422);
+  await assertModule(order.organizationId, 'loyalty');
   if (order.loyaltyAccountId && order.loyaltyAccount && !order.loyaltyAccount.deletedAt) throw new UserFacingError('already_joined', 409);
   const now = new Date();
   await db.$transaction(async (tx) => {
@@ -215,6 +218,7 @@ export async function loyaltyMembers(ctx: TenantContext, search?: string) {
 }
 
 export async function redeemReward(ctx: TenantContext, accountId: string) {
+  await assertModule(ctx.org.id, 'loyalty');
   const program = await db.loyaltyProgram.findUnique({ where: { organizationId: ctx.org.id } });
   if (!program) throw new UserFacingError('Loyalty is not set up.');
   const a = await ownedAccount(ctx, accountId);

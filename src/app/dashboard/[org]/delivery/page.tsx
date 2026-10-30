@@ -9,12 +9,14 @@ import { centsToInputValue, formatCents } from '@/lib/money';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { listDrivers } from '@/server/services/fulfilment';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { assignDriverAction, deleteZoneAction, saveDeliverySettingsAction, saveZoneAction } from './actions';
 
 export default async function DeliveryPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'delivery.manage');
+  await requireModulePage(ctx, 'delivery');
   const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const m = getMessages(ctx.user.preferredLanguage);

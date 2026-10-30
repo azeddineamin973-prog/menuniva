@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { db } from '@/server/db';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { getMessages } from '@/i18n';
 
 export default async function KitchenChooser({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'kds.view');
+  await requireModulePage(ctx, 'kds');
   const stations = await db.kitchenStation.findMany({
     where: { organizationId: ctx.org.id, isActive: true, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) },
     orderBy: { sortOrder: 'asc' },

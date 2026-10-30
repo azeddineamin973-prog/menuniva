@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/forms/action-form';
 import { Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui';
 import { adapterStatuses, listImportJobs } from '@/server/import/service';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { createImportJobAction } from './actions';
 
@@ -12,6 +13,7 @@ const JOB_TONE = { DRAFT: 'neutral', NEEDS_REVIEW: 'warning', PUBLISHED: 'succes
 export default async function ImportStudioPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'import.manage');
+  await requireModulePage(ctx, 'import');
   const [jobs, adapters] = await Promise.all([listImportJobs(ctx), Promise.resolve(adapterStatuses())]);
   const base = `/dashboard/${ctx.org.slug}`;
   return (

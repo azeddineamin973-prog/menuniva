@@ -7,6 +7,7 @@ import { LANGUAGE_NATIVE_NAME } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
 import { UserFacingError } from '@/server/errors';
 import { getImportPreview } from '@/server/import/service';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { cancelImportAction, chooseCanonicalAction, publishImportAction, setDecisionAction } from '../actions';
 import { AddSourceForm } from './source-form';
@@ -18,6 +19,7 @@ const METHOD: Record<string, string> = { STRUCTURED_FILE: 'Structured file', NAT
 export default async function ImportJobPage({ params }: { params: Promise<{ org: string; jobId: string }> }) {
   const { org, jobId } = await params;
   const ctx = await requireTenantPage(org, 'import.manage');
+  await requireModulePage(ctx, 'import');
   let data;
   try {
     data = await getImportPreview(ctx, jobId);

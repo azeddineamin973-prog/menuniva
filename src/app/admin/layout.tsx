@@ -14,6 +14,7 @@ const LINKS = [
   ['/admin/health', 'Integrations & errors'],
   ['/admin/support', 'Support'],
   ['/admin/audit', 'Audit log'],
+  ['/admin/settings', 'Platform settings'],
 ] as const;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

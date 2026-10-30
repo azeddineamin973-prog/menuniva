@@ -5,6 +5,7 @@ import { centsToInputValue, formatCents } from '@/lib/money';
 import { db } from '@/server/db';
 import { pickName } from '@/server/services/menu';
 import { listPromotions } from '@/server/services/promotions';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { savePromotionAction } from './actions';
 
@@ -17,6 +18,7 @@ type Promo = Awaited<ReturnType<typeof listPromotions>>[number];
 export default async function PromotionsPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'promotions.manage');
+  await requireModulePage(ctx, 'promotions');
   const m = getMessages(ctx.user.preferredLanguage);
   const [promos, products, categories, o] = await Promise.all([
     listPromotions(ctx),

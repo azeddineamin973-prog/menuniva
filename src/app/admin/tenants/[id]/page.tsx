@@ -2,8 +2,11 @@ import { notFound } from 'next/navigation';
 import { ActionForm } from '@/components/forms/action-form';
 import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, Select } from '@/components/ui';
 import { db } from '@/server/db';
-import { MODULES } from '@/server/services/admin';
-import { setModulesAction, setTenantStatusAction, updateSubscriptionAction } from '../../actions';
+import { orgModules } from '@/server/modules';
+import { MODULE_LABELS, MODULES } from '@/lib/modules';
+import { InlineAction } from '@/components/forms/inline-action';
+import { formatCents } from '@/lib/money';
+import { recordBillingAction, setModulesAction, setTenantStatusAction, updateSubscriptionAction, voidBillingAction } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,16 +17,17 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const org = await db.restaurantOrganization.findUnique({
     where: { id },
     include: {
-      subscription: { include: { plan: true } },
+      subscription: { include: { plan: true, billingRecords: { orderBy: { createdAt: 'desc' }, take: 24 } } },
       locations: true,
       memberships: { include: { user: { select: { email: true, name: true } } } },
       _count: { select: { products: true, orders: true, feedback: true } },
     },
   });
   if (!org) notFound();
-  const [plans, logs] = await Promise.all([
+  const [plans, logs, modules] = await Promise.all([
     db.subscriptionPlan.findMany({ orderBy: { sortOrder: 'asc' } }),
     db.auditLog.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: 'desc' }, take: 25 }),
+    orgModules(org.id),
   ]);
   const sub = org.subscription;
   return (
@@ -88,14 +92,16 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         </Card>
 
         <Card>
-          <CardHeader title="Feature modules" description="Extra modules enabled for this tenant in addition to its plan." />
+          <CardHeader title="Feature modules" description="Ticked = available to this tenant. Plan modules can be switched off; others can be added on. During an active trial every module is available unless switched off here (Platform settings)." />
           <CardBody>
             <ActionForm action={setModulesAction} submitLabel="Save modules">
               <input type="hidden" name="organizationId" value={org.id} />
               <div className="grid gap-2 sm:grid-cols-2">
-                {MODULES.map((m) => (
-                  <Checkbox key={m} name="modules" value={m} label={m.replace('_', ' ')} defaultChecked={org.enabledModules.includes(m)} description={sub?.plan.features.includes(m) ? 'Included in plan' : undefined} />
-                ))}
+                {MODULES.map((m) => {
+                  const inPlan = !!sub?.plan.features.includes(m);
+                  const on = modules.has(m);
+                  return <Checkbox key={m} name="modules" value={m} label={MODULE_LABELS[m]} defaultChecked={on} description={org.disabledModules.includes(m) ? 'Switched off by Super Admin' : org.enabledModules.includes(m) ? 'Add-on' : inPlan ? 'Included in plan' : 'Not in plan'} data-testid={`module-${m}`} />;
+                })}
               </div>
             </ActionForm>
           </CardBody>
@@ -122,6 +128,35 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         </Card>
       </div>
 
+      <Card className="mt-6">
+        <CardHeader title="Billing records (manual)" description="Record only payments really received (e.g. bank transfer). The owner sees this list as their billing history." />
+        <CardBody className="space-y-4">
+          {sub ? (
+            <ActionForm action={recordBillingAction} submitLabel="Record payment received" resetOnSuccess testId="billing-form" className="grid gap-3 space-y-0 sm:grid-cols-5 sm:items-end">
+              <input type="hidden" name="organizationId" value={org.id} />
+              <Field label="Amount (€)" htmlFor="b-amount"><Input id="b-amount" name="amount" inputMode="decimal" placeholder="49,00" /></Field>
+              <Field label="Period from" htmlFor="b-from"><Input id="b-from" name="periodStart" type="date" /></Field>
+              <Field label="Period to" htmlFor="b-to"><Input id="b-to" name="periodEnd" type="date" /></Field>
+              <Field label="Note" htmlFor="b-note" optionalLabel="optional"><Input id="b-note" name="note" maxLength={300} placeholder="Transfer reference" /></Field>
+            </ActionForm>
+          ) : (
+            <p className="text-sm text-muted">No subscription yet.</p>
+          )}
+          {sub && sub.billingRecords.length > 0 && (
+            <ul className="divide-y divide-line text-sm">
+              {sub.billingRecords.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-3 py-2" data-testid="billing-record">
+                  <span className="font-medium tabular-nums">{formatCents(r.amountCents)}</span>
+                  <span className="text-muted">{d(r.periodStart)} → {d(r.periodEnd)}</span>
+                  <Badge tone={r.status === 'VOIDED' ? 'danger' : 'success'}>{r.status.toLowerCase().replace(/_/g, ' ')}</Badge>
+                  {r.note && <span className="text-xs text-muted">{r.note}</span>}
+                  {r.status !== 'VOIDED' && <span className="ms-auto"><InlineAction action={voidBillingAction} fields={{ recordId: r.id, reason: 'Recorded by mistake' }} label="Void" variant="ghost" confirm="Void this billing record (recorded by mistake)?" /></span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
       <Card className="mt-6">
         <CardHeader title="Recent audit log" />
         <ul className="divide-y divide-line text-sm">

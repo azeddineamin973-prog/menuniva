@@ -189,3 +189,25 @@ Defects found and fixed in this run:
 
 Note: an intermediate run failed because Vitest and Playwright were started at the same time on the shared test database; the sequential runs above passed.
 
+## Run 8 — 2026-10-30 (session 4): M12 Analytics, subscriptions, plans & SaaS administration
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Unit + integration | `npm test` | ✅ 25 files, **218 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **28 tests passed** |
+| Migration | `tenant_disabled_modules` | ✅ applied to dev and test |
+
+| File | Covers |
+|---|---|
+| `tests/unit/modules-analytics.test.ts` (5) | Effective modules (plan, add-ons, switched off, trial with/without all modules, no plan); "today" differs between Lisbon and Madrid at the same instant; 7/30-day ranges include today; custom range inclusive and ordered; 25-hour DST day; invalid dates fall back; >1 year refused; CSV quoting and formula neutralisation |
+| `tests/integration/analytics.test.ts` (5) | **TEST 18** order value 67,60 vs collected 21,90 (voided payment excluded) vs unpaid 45,70 (16,90 on a completed order) vs cancelled 16,90; payments by method; average order; channels; top dish/category. Orders at 22:30 and 23:30 UTC fall on different Madrid days and hours. Reservations, feedback and suggestion figures from stored rows. CSV columns and values incl. cancelled row. **TEST 15** analytics/CSV isolation |
+| `tests/integration/plans-modules.test.ts` (7) | **TEST 16 (modules)** new tenant trial → all 12 modules; expired trial → starter modules only; ACTIVE starter refuses takeaway orders, promotions, suggestions, loyalty and stops applying an existing promotion while table ordering still works; Super Admin add-on + switch-off stored relative to the base and kept after upgrade; switching off a non-plan module during a trial persists after upgrade until switched on; platform config (trial length used for new tenants, trials limited to plan, validation); dish limit for new and un-archived dishes with live usage; manual billing record/void, metrics, processor webhook refused (501) |
+| `tests/e2e/analytics-subscription.spec.ts` (2) | Guest order 13,00 → analytics shows order value 13,00, collected 0,00, unpaid 13,00; after a 5,00 payment collected 5,00 / unpaid 8,00 / order value unchanged; 7-day view; CSV download row with value/paid/unpaid. Super Admin switches Promotions off and records a 49,00 payment → owner nav hides Promotions, direct URL explains it is not in the plan, subscription page shows Starter / trialing / promotions off / loyalty on (trial) / dishes 2 / 250 / billing row; waiter cannot open Subscription; pausing self-registration shows the closed notice |
+
+Master-spec test status after Run 8: TEST 1–19 ✅ · TEST 20 pending (M13 demo environment).
+
+Defects found and fixed in this run:
+- Super Admin module checkboxes ignored the trial: switching off a module outside the plan during a trial was silently not saved. Module changes are now stored as differences from what the tenant gets anyway.
+- A new E2E that promoted a user to Super Admin broke the first-admin bootstrap test; the spec now restores the user's role afterwards.
+

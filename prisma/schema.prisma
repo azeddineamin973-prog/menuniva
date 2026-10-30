@@ -379,7 +379,8 @@ model RestaurantOrganization {
   isDemo            Boolean            @default(false) // demo tenants hold clearly labelled fake data
   onboardingStep    Int                @default(1)
   onboardingData    Json?
-  enabledModules    String[]           @default([])
+  enabledModules    String[]           @default([]) // add-on modules switched on by Super Admin beyond the plan
+  disabledModules   String[]           @default([]) // plan modules switched off by Super Admin for this tenant
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 

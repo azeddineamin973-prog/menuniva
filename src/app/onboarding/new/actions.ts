@@ -5,10 +5,12 @@ import { zodFieldErrors, type ActionResult } from '@/lib/action-result';
 import { getCurrentUser, clientIp } from '@/server/auth/session';
 import { rateLimit, RateLimitError } from '@/server/rate-limit';
 import { createRestaurant, createRestaurantSchema } from '@/server/services/organizations';
+import { getPlatformConfig } from '@/server/services/platform-config';
 
 export async function registerRestaurantAction(_prev: ActionResult, form: FormData): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/onboarding/new');
+  if (!(await getPlatformConfig()).signupsOpen) return { ok: false, error: 'New restaurant registrations are paused. Please contact MenuNiva support.' };
   try {
     await rateLimit(`register-restaurant:${user.id}:${await clientIp()}`, 5, 3600);
   } catch (e) {

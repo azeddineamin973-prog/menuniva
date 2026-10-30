@@ -5,6 +5,7 @@ import { LANGUAGES } from '@/i18n/config';
 import { audit } from '../audit';
 import { hashToken } from '../crypto';
 import { db } from '../db';
+import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
@@ -61,6 +62,7 @@ export async function submitFeedback(input: unknown, clientKey: string) {
   if (!target) throw new UserFacingError('not_found', 404);
   const { org, location, order } = target;
   if (org.settings && !org.settings.feedbackEnabled) throw new UserFacingError('feedback_disabled', 422);
+  await assertModule(org.id, 'feedback');
   await rateLimit(`feedback:${location.id}:${clientKey}`, 5, 3600);
   if (order && (await db.customerFeedback.findFirst({ where: { orderId: order.id } }))) throw new UserFacingError('already_submitted', 409);
   const settings = await db.reviewSettings.findUnique({ where: { locationId: location.id } });

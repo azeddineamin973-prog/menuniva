@@ -6,6 +6,8 @@ import { env } from '../env';
 import { UserFacingError } from '../errors';
 import { createInvitationRecord } from './invitations';
 import { createRestaurant } from './organizations';
+import { isModuleKey, MODULES } from '@/lib/modules';
+import { orgModuleState } from '../modules';
 
 /**
  * Platform Super Admin operations. Every function here must be called only after
@@ -35,7 +37,18 @@ export async function platformMetrics() {
     db.order.count({ where: { createdAt: { gte: since }, organization: { isDemo: false } } }),
     db.errorLog.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86400_000) } } }),
   ]);
-  return { tenants, active, suspended, trialing, users, orders30, errors7 };
+  const soon = new Date(Date.now() + 7 * 86400_000);
+  const [pastDue, trialsEndingSoon, newTenants30, openTickets, byPlan, billed30] = await Promise.all([
+    db.subscription.count({ where: { status: 'PAST_DUE', organization: { isDemo: false } } }),
+    db.subscription.count({ where: { status: 'TRIALING', trialEndsAt: { gte: new Date(), lte: soon }, organization: { isDemo: false } } }),
+    db.restaurantOrganization.count({ where: { isDemo: false, createdAt: { gte: since } } }),
+    db.supportTicket.count({ where: { status: { not: 'CLOSED' } } }),
+    db.subscription.groupBy({ by: ['planId'], where: { organization: { isDemo: false } }, _count: { _all: true } }),
+    db.billingRecord.aggregate({ where: { status: { not: 'VOIDED' }, createdAt: { gte: since } }, _sum: { amountCents: true } }),
+  ]);
+  const plans = await db.subscriptionPlan.findMany({ select: { id: true, name: true } });
+  const tenantsByPlan = byPlan.map((b) => ({ plan: plans.find((p) => p.id === b.planId)?.name ?? b.planId, count: b._count._all }));
+  return { tenants, active, suspended, trialing, users, orders30, errors7, pastDue, trialsEndingSoon, newTenants30, openTickets, tenantsByPlan, billedCents30: billed30._sum.amountCents ?? 0 };
 }
 
 export const adminCreateTenantSchema = z.object({
@@ -109,12 +122,35 @@ export async function updateSubscription(adminId: string, input: unknown) {
   });
 }
 
-export const MODULES = ['table_ordering', 'kds', 'translations', 'import', 'feedback', 'takeaway', 'delivery', 'promotions', 'reservations', 'upsell', 'loyalty', 'analytics_export'] as const;
+export { MODULES };
 
+/**
+ * Saves the modules Super Admin wants ON for a tenant. Only modules whose state changed are
+ * recorded, relative to what the tenant gets anyway (plan, or everything during a trial):
+ * switching on something outside that base makes it an add-on; switching off something in the
+ * base marks it switched off. Untouched modules keep following the plan, so upgrades still work.
+ */
 export async function setTenantModules(adminId: string, organizationId: string, modules: string[]) {
-  const clean = modules.filter((m): m is (typeof MODULES)[number] => (MODULES as readonly string[]).includes(m));
-  await db.restaurantOrganization.update({ where: { id: organizationId }, data: { enabledModules: clean } });
-  await audit({ organizationId, actorUserId: adminId, action: 'platform.modules_updated', entityType: 'RestaurantOrganization', entityId: organizationId, metadata: { modules: clean } });
+  const wanted = new Set(modules.filter(isModuleKey));
+  const state = await orgModuleState(organizationId);
+  if (!state) throw new UserFacingError('Tenant not found.');
+  const enabled = new Set(state.enabled.filter(isModuleKey));
+  const disabled = new Set(state.disabled.filter(isModuleKey));
+  for (const m of MODULES) {
+    const on = wanted.has(m);
+    if (on === state.effective.has(m)) continue;
+    if (on) {
+      disabled.delete(m);
+      if (!state.base.has(m)) enabled.add(m);
+    } else {
+      enabled.delete(m);
+      if (state.base.has(m)) disabled.add(m);
+    }
+  }
+  const enabledModules = MODULES.filter((m) => enabled.has(m));
+  const disabledModules = MODULES.filter((m) => disabled.has(m));
+  await db.restaurantOrganization.update({ where: { id: organizationId }, data: { enabledModules, disabledModules } });
+  await audit({ organizationId, actorUserId: adminId, action: 'platform.modules_updated', entityType: 'RestaurantOrganization', entityId: organizationId, metadata: { addOns: enabledModules, switchedOff: disabledModules } });
 }
 
 export const planUpdateSchema = z.object({

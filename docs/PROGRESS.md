@@ -2,7 +2,7 @@
 
 ## Current status (session 3 — 2026-10-30)
 
-**Task completion (from TODO.md):** 147 of 169 tasks verified (87.0 %) · 0 in progress · 22 not started.
+**Task completion (from TODO.md):** 157 of 169 tasks verified (92.9 %) · 0 in progress · 12 not started.
 
 | Milestone | Verified | Not started | Total | Gate |
 |---|---|---|---|---|
@@ -17,12 +17,13 @@
 | M9 Takeaway, delivery, WhatsApp | 12 | 0 | 12 | ✅ closed |
 | M10 Promotions, reservations | 10 | 0 | 10 | ✅ closed |
 | M11 Reviews, loyalty, upsell | 11 | 0 | 11 | ✅ closed |
-| M12 Analytics, subscriptions, admin | 0 | 10 | 10 | next |
-| M13 Security, backups, deployment | 1 | 12 | 13 | |
+| M12 Analytics, subscriptions, admin | 10 | 0 | 10 | ✅ closed (billing processor needs configuration) |
+| M13 Security, backups, deployment | 1 | 12 | 13 | next |
 
-Tests: 201 unit/integration + 26 browser E2E passing (QA_REPORT.md, Run 7).
+Tests: 218 unit/integration + 28 browser E2E passing (QA_REPORT.md, Run 8).
 
 ## Completed in session 3
+- M12: analytics per location in its time zone (Today / 7 / 30 days / custom) with order value, collected payments, unpaid and cancelled value kept separate, channels, hours, days, dishes, categories, zones, promotions, payment methods, reservations, feedback and suggestions; CSV export with formula-safe cells. Owner subscription page (plan, status, trial, live usage vs limits, features, genuine billing history). Dish limit enforced (new, imported and un-archived dishes). Feature modules enforced server-side and in navigation: plan modules, all modules during a trial (configurable), Super Admin add-ons and switch-offs that survive plan changes. Manual billing adapter: Super Admin records/voids payments received; processor webhooks refused until configured. Super Admin metrics (new tenants, trials ending, past due, open support, tenants by plan, recorded billing) and platform settings (self-registration on/off, trial length, trials include all modules, support email).
 - M11: private guest feedback (stars, categories, comment, optional follow-up contact) with the official Google review link shown identically to every guest whatever the rating; low-rating manager alerts (configurable threshold, nav badge); feedback inbox with statuses, internal notes, 30-day stats and repeated issues. Loyalty: stamps or points, voluntary enrolment on the order page with explicit consent, separate marketing and birthday opt-ins, earn only when completed and fully paid (reversed if a payment is voided), staff redeem, FIFO expiry, member deletion; not linked to reviews. Cart suggestions: product/category rules, only available dishes with a channel price, never auto-added, “No, thanks”, anonymous SHOWN/ACCEPTED counts.
 - M10: deterministic integer promotion engine (%, fixed, buy X get Y, combo, category, minimum, channels, dates, priority, combinability), promo codes with atomic usage limits, promotions manager, savings in cart/order; reservations with configurable hours/capacity/buffer/notice, server-side availability under lock, guest request + private status page, day view with confirm/reject/arrived/no-show and double-booking-safe table assignment.
 - M9: takeaway settings and pickup slots (location time zone), takeaway checkout, PT/ES postal-code delivery zones with fees/minimum/free threshold, delivery checkout with server-side coverage and totals, delivery hours/pause/active-order limit, cash or card on delivery, driver assignment and mobile driver view (cash collection recorded), WhatsApp prefilled orders (not stored), storefront ordering links.
@@ -53,10 +54,12 @@ Tests: 201 unit/integration + 26 browser E2E passing (QA_REPORT.md, Run 7).
 2. **Owner email for Casa de Marrocos:** run `npm run setup:casa -- --owner-email=YOUR_EMAIL` to receive the owner invitation link.
 3. Real business data still to be entered by the restaurant: postal code, opening hours, dishes, prices, allergens, tables, Google review link.
 
-## Known limitations (M11)
+## Known limitations
+- Analytics "collected" counts payments recorded in the period (by payment date); "unpaid" refers to orders placed in the period.
+- SaaS billing is manual. No processor is integrated; `/api/billing/webhook` answers 501.
+- Trial access to every module is a platform setting (on by default), not final commercial policy.
+### M11
 - Loyalty expiry runs when the loyalty page, a member's order page or a redemption is opened (no background scheduler yet; M13 adds scheduled jobs).
 - The loyalty card on the order page updates on reload, not on every status poll.
-- Plan/module gating of loyalty and upsell is enforced in M12 (M12 module toggles, TEST 16).
 ## Next tasks (in order)
-1. M12: analytics in the location time zone (order value / collected / cancelled / unpaid separate, TEST 18), CSV export, owner subscription page, plan limits, manual billing adapter, Super Admin metrics, module toggles (TEST 16).
-2. M13: security audit, GDPR export/deletion, backups, monitoring, demo seed, deployment docs, full TEST 1–20, release.
+1. M13: automated route authorization audit, GDPR export/deletion + retention, error monitoring hook, backups/restore, environments, safe migrations, mobile pass, demo seed, deployment guide, full TEST 1–20, final QA, release tag.

@@ -4,6 +4,7 @@ import type { LanguageCode } from '@/generated/prisma/enums';
 import { LANGUAGES } from '@/i18n/config';
 import { audit } from '../audit';
 import { db } from '../db';
+import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
 import type { TenantContext } from '../tenant';
 import { getTranslationProvider, TranslationUnavailableError } from '../translation';
@@ -92,6 +93,7 @@ export async function approveTranslation(ctx: TenantContext, kind: 'category' | 
  * provider is configured. Ingredients are deliberately excluded (safety-critical).
  */
 export async function bulkTranslateMissing(ctx: TenantContext): Promise<{ created: number }> {
+  await assertModule(ctx.org.id, 'translations');
   const provider = getTranslationProvider();
   if (!provider.isConfigured()) throw new UserFacingError('No translation provider is configured. Use the manual editor.');
   const org = await db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true } });

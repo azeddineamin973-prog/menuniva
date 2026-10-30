@@ -5,6 +5,7 @@ import { LANGUAGES } from '@/i18n/config';
 import { parseMoneyToCents } from '@/lib/money';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
+import { assertMenuItemCapacity } from './limits';
 import { UserFacingError } from '../errors';
 import type { TenantContext } from '../tenant';
 
@@ -187,6 +188,7 @@ export async function saveProduct(ctx: TenantContext, input: unknown) {
       await assertProduct(ctx, productId, tx);
       await tx.menuProduct.update({ where: { id: productId }, data: fields });
     } else {
+      await assertMenuItemCapacity(ctx.org.id, 1, tx);
       const max = await tx.menuProduct.aggregate({ where: { organizationId: ctx.org.id, categoryId: category.id }, _max: { sortOrder: true } });
       productId = (await tx.menuProduct.create({ data: { organizationId: ctx.org.id, ...fields, sortOrder: (max._max.sortOrder ?? 0) + 1 } })).id;
     }
@@ -242,6 +244,7 @@ export async function setSoldOut(ctx: TenantContext, productId: string, soldOut:
 
 export async function setProductStatus(ctx: TenantContext, productId: string, status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED') {
   const p = await assertProduct(ctx, productId);
+  if (p.status === 'ARCHIVED' && status !== 'ARCHIVED') await assertMenuItemCapacity(ctx.org.id, 1);
   if (status === 'ACTIVE') {
     const dineIn = await db.channelPrice.findUnique({ where: { productId_channel: { productId, channel: 'DINE_IN' } } });
     if (!dineIn) throw new UserFacingError('Set the dine-in price before making this dish visible.');

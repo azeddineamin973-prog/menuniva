@@ -9,6 +9,7 @@ import { zonedParts, zonedTimeToUtc } from '@/lib/time';
 import { audit } from '../audit';
 import { hashToken } from '../crypto';
 import { db, type Tx } from '../db';
+import { assertModule, hasModule } from '../modules';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
@@ -41,6 +42,7 @@ export const reservationSettingsSchema = z.object({
 });
 
 export async function updateReservationSettings(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'reservations');
   const d = reservationSettingsSchema.parse(input);
   await assertLocationAccess(ctx, d.locationId);
   const { locationId, bookableHours, ...rest } = d;
@@ -136,6 +138,7 @@ export async function requestReservation(input: unknown, clientKey: string, now 
   const d = reservationRequestSchema.parse(input);
   const org = await db.restaurantOrganization.findUnique({ where: { slug: d.orgSlug } });
   if (!org || org.status === 'SUSPENDED' || org.status === 'ARCHIVED') throw new ReservationRejectedError('not_found');
+  if (!(await hasModule(org.id, 'reservations'))) throw new ReservationRejectedError('module_not_available');
   const location = await db.restaurantLocation.findFirst({ where: { organizationId: org.id, isPublished: true, reservationsEnabled: true, ...(d.locationSlug ? { slug: d.locationSlug } : {}) }, include: { reservationSettings: true }, orderBy: { createdAt: 'asc' } });
   if (!location) throw new ReservationRejectedError('not_found');
   const token = reservationTokenFor(location.id, d.idempotencyKey);

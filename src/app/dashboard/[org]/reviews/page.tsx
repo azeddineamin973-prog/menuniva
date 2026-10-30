@@ -7,6 +7,7 @@ import { formatTimeInZone } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { feedbackInbox, feedbackStats } from '@/server/services/feedback';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { feedbackNoteAction, feedbackStatusAction, reviewSettingsAction } from './actions';
 
@@ -17,6 +18,7 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
   const { org } = await params;
   const sp = await searchParams;
   const ctx = await requireTenantPage(org, 'reviews.view');
+  await requireModulePage(ctx, 'feedback');
   const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const m = getMessages(ctx.user.preferredLanguage);

@@ -9,6 +9,7 @@ import { formatTimeInZone, zonedParts } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { reservationsForDay } from '@/server/services/reservations';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { assignTableAction, reservationStatusAction, saveReservationSettingsAction, unassignTableAction } from './actions';
 
@@ -29,6 +30,7 @@ export default async function ReservationsPage({ params, searchParams }: { param
   const { org } = await params;
   const sp = await searchParams;
   const ctx = await requireTenantPage(org, 'reservations.manage');
+  await requireModulePage(ctx, 'reservations');
   const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const m = getMessages(ctx.user.preferredLanguage);

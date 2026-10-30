@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { UpsellRuleView } from '@/lib/upsell';
 import { audit } from '../audit';
 import { db } from '../db';
+import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
 import type { TenantContext } from '../tenant';
@@ -21,6 +22,7 @@ export const ruleSchema = z
   });
 
 export async function createUpsellRule(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'upsell');
   const d = ruleSchema.parse(input);
   const suggested = await db.menuProduct.findFirst({ where: { id: d.suggestedProductId, organizationId: ctx.org.id, status: { not: 'ARCHIVED' } } });
   if (!suggested) throw new UserFacingError('Choose a dish to suggest.');
@@ -73,6 +75,7 @@ export async function upsellRulesAdmin(ctx: TenantContext) {
 export async function upsellRulesFor(organizationId: string): Promise<UpsellRuleView[]> {
   const settings = await db.restaurantSettings.findUnique({ where: { organizationId } });
   if (settings && !settings.upsellEnabled) return [];
+  if (!(await hasModule(organizationId, 'upsell'))) return [];
   const rules = await db.upsellRule.findMany({ where: { organizationId, isActive: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }], take: 100 });
   return rules.map((r) => ({ id: r.id, triggerProductId: r.triggerProductId, triggerCategoryId: r.triggerCategoryId, suggestedProductId: r.suggestedProductId }));
 }

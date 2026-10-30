@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/server/db';
+import { requireModulePage } from '@/server/modules';
 import { assertLocationAccess, requireTenantPage } from '@/server/tenant';
 import { KdsBoard } from './kds-board';
 import { getMessages } from '@/i18n';
@@ -7,6 +8,7 @@ import { getMessages } from '@/i18n';
 export default async function StationDisplayPage({ params }: { params: Promise<{ org: string; stationId: string }> }) {
   const { org, stationId } = await params;
   const ctx = await requireTenantPage(org, 'kds.view');
+  await requireModulePage(ctx, 'kds');
   const station = await db.kitchenStation.findFirst({ where: { id: stationId, organizationId: ctx.org.id } });
   if (!station) notFound();
   try {

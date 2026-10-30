@@ -5,6 +5,7 @@ import { StorefrontShell } from '@/components/storefront/shell';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { db } from '@/server/db';
+import { hasModule } from '@/server/modules';
 import { resolveTableToken } from '@/server/services/orders';
 import { getPublicMenu, orderingState } from '@/server/services/public-menu';
 import { upsellRulesFor } from '@/server/services/upsell';
@@ -35,7 +36,8 @@ export default async function TablePage({ params, searchParams }: { params: Prom
   }
 
   const [menu, upsellRules] = await Promise.all([getPublicMenu(location.id, lang, 'TABLE'), upsellRulesFor(org.id)]);
-  const state = orderingState(location, org.status, 'TABLE');
+  const base = orderingState(location, org.status, 'TABLE');
+  const state = base.canOrder && !(await hasModule(org.id, 'table_ordering')) ? { canOrder: false as const, reason: 'channel_disabled' as const } : base;
   const orderingMessage = state.canOrder ? undefined : state.reason === 'paused' ? m.customer.orderingPaused : m.customer.tableOrderingDisabled;
 
   return (

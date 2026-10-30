@@ -106,7 +106,7 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
 
       <div className="flex flex-col gap-2">
         {!done && initial.channel === 'TABLE' && <Link href={orderMoreHref} className="rounded-2xl bg-sf-primary py-3 text-center font-medium text-white">{m.customer.orderMore}</Link>}
-        <Link href={feedbackHref} className="rounded-2xl py-3 text-center font-medium ring-1 ring-black/10">{m.customer.leaveFeedback}</Link>
+        {feedbackHref && <Link href={feedbackHref} className="rounded-2xl py-3 text-center font-medium ring-1 ring-black/10">{m.customer.leaveFeedback}</Link>}
       </div>
       {status !== 'CANCELLED' && loyalty}
     </div>

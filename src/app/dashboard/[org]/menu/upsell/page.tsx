@@ -5,12 +5,14 @@ import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, Pag
 import { db } from '@/server/db';
 import { getMenuAdmin, pickName } from '@/server/services/menu';
 import { upsellRulesAdmin } from '@/server/services/upsell';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { createUpsellRuleAction, deleteUpsellRuleAction, toggleUpsellRuleAction, upsellEnabledAction } from './actions';
 
 export default async function UpsellPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'menu.edit');
+  await requireModulePage(ctx, 'upsell');
   const [{ categories, org: o }, rules, settings] = await Promise.all([getMenuAdmin(ctx), upsellRulesAdmin(ctx), db.restaurantSettings.findUnique({ where: { organizationId: ctx.org.id } })]);
   const langs = [o.sourceLanguage, o.defaultLanguage, ...o.enabledLanguages];
   const enabled = settings?.upsellEnabled ?? true;

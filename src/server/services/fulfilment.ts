@@ -9,6 +9,7 @@ import { parseMoneyToCents } from '@/lib/money';
 import { zonedParts, zonedTimeToUtc } from '@/lib/time';
 import { audit } from '../audit';
 import { db } from '../db';
+import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { rateLimit } from '../rate-limit';
 import { syncLoyaltyForOrder } from './loyalty';
@@ -65,6 +66,7 @@ export const takeawaySettingsSchema = z.object({
 });
 
 export async function updateTakeawaySettings(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'takeaway');
   const d = takeawaySettingsSchema.parse(input);
   await assertLocationAccess(ctx, d.locationId);
   const data = { leadTimeMinutes: d.leadTimeMinutes, slotMinutes: d.slotMinutes, minOrderCents: d.minOrder ?? 0, paused: d.paused, pickupHours: d.pickupHours ?? Prisma.DbNull };
@@ -145,6 +147,7 @@ export async function submitPickupOrder(input: unknown, clientKey: string, now =
   const { location, org } = pl;
   const blocked = channelAvailable(pl, 'TAKEAWAY', now);
   if (blocked) throw new OrderRejectedError(`ordering_${blocked}`);
+  if (!(await hasModule(org.id, 'takeaway'))) throw new OrderRejectedError('module_not_available');
   const trackingToken = trackingTokenFor(location.id, d.idempotencyKey);
   const existing = await db.order.findUnique({ where: { locationId_idempotencyKey: { locationId: location.id, idempotencyKey: d.idempotencyKey } } });
   if (existing) return { orderNumber: existing.number, trackingToken, status: existing.status, duplicate: true };
@@ -195,6 +198,7 @@ export const deliverySettingsSchema = z.object({
 });
 
 export async function updateDeliverySettings(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'delivery');
   const d = deliverySettingsSchema.parse(input);
   await assertLocationAccess(ctx, d.locationId);
   const { locationId, deliveryHours, ...rest } = d;
@@ -335,6 +339,7 @@ export async function submitDeliveryOrder(input: unknown, clientKey: string, now
   const { location, org } = pl;
   const blocked = channelAvailable(pl, 'DELIVERY', now);
   if (blocked) throw new OrderRejectedError(`ordering_${blocked}`);
+  if (!(await hasModule(org.id, 'delivery'))) throw new OrderRejectedError('module_not_available');
   const settings = location.deliverySettings;
   if (d.paymentMethod === 'CASH_ON_DELIVERY' && !(settings?.cashOnDeliveryEnabled ?? true)) throw new OrderRejectedError('payment_method_unavailable');
   if (d.paymentMethod === 'CARD_TERMINAL' && !settings?.cardOnDeliveryEnabled) throw new OrderRejectedError('payment_method_unavailable');

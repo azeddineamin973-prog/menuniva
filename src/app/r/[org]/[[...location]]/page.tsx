@@ -7,6 +7,7 @@ import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { getCurrentUser } from '@/server/auth/session';
 import { db } from '@/server/db';
+import { orgModules } from '@/server/modules';
 import { env } from '@/server/env';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storefront';
@@ -57,7 +58,7 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   const lang = await resolveGuestLanguage(org, sp.lang);
   const m = getMessages(lang);
   const menu = await getPublicMenu(location.id, lang, 'TABLE');
-  const review = await db.reviewSettings.findUnique({ where: { locationId: location.id } });
+  const [review, modules] = await Promise.all([db.reviewSettings.findUnique({ where: { locationId: location.id } }), orgModules(org.id)]);
   const base = `/r/${org.slug}${org.locations.length > 1 ? `/${location.slug}` : ''}`;
   const lq = org.locations.length > 1 ? `?l=${location.slug}` : '';
   const wa = location.whatsappOrderingEnabled && location.whatsappNumber ? location.whatsappNumber.replace(/[^\d]/g, '') : null;
@@ -76,9 +77,9 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   };
 
   const actions: { label: string; href: string; external?: boolean; primary?: boolean }[] = [];
-  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, primary: true });
-  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, primary: true });
-  if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled) actions.push({ label: m.customer.reserveTable, href: `/r/${org.slug}/reserve${lq}` });
+  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled && modules.has('takeaway')) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, primary: true });
+  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled && modules.has('delivery')) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, primary: true });
+  if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled && modules.has('reservations')) actions.push({ label: m.customer.reserveTable, href: `/r/${org.slug}/reserve${lq}` });
   if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}` });
   if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, external: true });
   if (location.uberEatsUrl) actions.push({ label: m.customer.orderOnUberEats, href: location.uberEatsUrl, external: true });
@@ -112,7 +113,7 @@ export default async function StorefrontPage({ params, searchParams }: { params:
           {location.instagramUrl && <a href={location.instagramUrl} target="_blank" rel="noopener noreferrer" className="underline">Instagram</a>}
           {location.facebookUrl && <a href={location.facebookUrl} target="_blank" rel="noopener noreferrer" className="underline">Facebook</a>}
           {location.tiktokUrl && <a href={location.tiktokUrl} target="_blank" rel="noopener noreferrer" className="underline">TikTok</a>}
-          <Link href={`/r/${org.slug}/feedback?l=${location.slug}`} className="underline">{m.customer.leaveFeedback}</Link>
+          {modules.has('feedback') && <Link href={`/r/${org.slug}/feedback?l=${location.slug}`} className="underline">{m.customer.leaveFeedback}</Link>}
           {review?.googleReviewUrl && <a href={review.googleReviewUrl} target="_blank" rel="noopener noreferrer" className="underline">Google</a>}
         </div>
       </div>

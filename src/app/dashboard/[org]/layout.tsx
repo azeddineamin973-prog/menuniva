@@ -9,6 +9,7 @@ import { db } from '@/server/db';
 import { listUserOrganizations } from '@/server/services/organizations';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
+import { orgModules } from '@/server/modules';
 import { LocationSwitcher } from '@/components/dashboard/location-switcher';
 
 export default async function DashboardLayout({ children, params }: { children: React.ReactNode; params: Promise<{ org: string }> }) {
@@ -17,7 +18,7 @@ export default async function DashboardLayout({ children, params }: { children: 
   const m = getMessages(ctx.user.preferredLanguage);
   const base = `/dashboard/${ctx.org.slug}`;
 
-  const [locations, current] = await Promise.all([accessibleLocations(ctx), currentLocation(ctx)]);
+  const [locations, current, modules] = await Promise.all([accessibleLocations(ctx), currentLocation(ctx), orgModules(ctx.org.id)]);
   const [newOrders, openTasks, lowRatings, orgs] = await Promise.all([
     ctx.can('orders.view')
       ? db.order.count({ where: { organizationId: ctx.org.id, status: 'NEW', acknowledgedAt: null, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
@@ -31,7 +32,7 @@ export default async function DashboardLayout({ children, params }: { children: 
     listUserOrganizations(ctx.userId),
   ]);
 
-  const links: SidebarLink[] = NAV_ITEMS.filter((i) => ctx.can(i.permission)).map((i) => ({
+  const links: SidebarLink[] = NAV_ITEMS.filter((i) => ctx.can(i.permission) && (!i.module || modules.has(i.module))).map((i) => ({
     href: `${base}${i.path}`,
     label: m.nav[i.key],
     group: i.group,

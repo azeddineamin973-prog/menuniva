@@ -4,6 +4,7 @@ import { StorefrontShell } from '@/components/storefront/shell';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { db } from '@/server/db';
+import { hasModule } from '@/server/modules';
 import { loyaltyForOrder } from '@/server/services/loyalty';
 import { trackOrder } from '@/server/services/orders';
 import { resolveGuestLanguage } from '@/server/services/storefront';
@@ -42,7 +43,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
           items: order.items.map((i) => ({ name: i.customerNameSnapshot ?? i.nameSnapshot, variant: i.variantNameSnapshot, quantity: i.quantity, lineTotalCents: i.lineTotalCents, modifiers: i.modifiers.map((x) => x.nameSnapshot) })),
         }}
         orderMoreHref={tableToken ? `/t/${tableToken}` : `/r/${org.slug}`}
-        feedbackHref={`/r/${org.slug}/feedback?o=${encodeURIComponent(token)}`}
+        feedbackHref={(await hasModule(org.id, 'feedback')) ? `/r/${org.slug}/feedback?o=${encodeURIComponent(token)}` : ''}
         loyalty={loyalty ? <LoyaltyCard token={token} restaurant={org.name} view={loyalty} m={{ loyalty: m.loyalty, common: m.common }} /> : undefined}
       />
     </StorefrontShell>

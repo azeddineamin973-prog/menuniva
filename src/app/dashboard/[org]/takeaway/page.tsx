@@ -9,12 +9,14 @@ import { formatTimeInZone, startOfDayInZone } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
 import { pickupOptions } from '@/server/services/fulfilment';
+import { requireModulePage } from '@/server/modules';
 import { requireTenantPage } from '@/server/tenant';
 import { saveTakeawaySettingsAction } from '../delivery/actions';
 
 export default async function TakeawayPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'takeaway.manage');
+  await requireModulePage(ctx, 'takeaway');
   const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const m = getMessages(ctx.user.preferredLanguage);

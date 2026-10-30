@@ -9,6 +9,8 @@ import { adminCreateTenant, setTenantModules, setTenantStatus, updatePlan, updat
 import { createPasswordResetLink } from '@/server/auth/reset';
 import { requirePlatformAdminAction } from '@/server/tenant';
 import { UserFacingError } from '@/server/errors';
+import { recordManualBilling, voidBillingRecord } from '@/server/billing';
+import { updatePlatformConfig } from '@/server/services/platform-config';
 
 async function adminRun<T>(fn: (adminId: string) => Promise<T>): Promise<ActionResult<T>> {
   try {
@@ -63,4 +65,22 @@ export async function updateSupportTicketAction(_p: ActionResult, form: FormData
     await db.supportTicket.update({ where: { id }, data: { status } });
     await audit({ actorUserId: adminId, action: 'platform.support_ticket_updated', entityType: 'SupportTicket', entityId: id, metadata: { status } });
   });
+}
+export async function recordBillingAction(_p: ActionResult, form: FormData) {
+  return adminRun(async (adminId) => {
+    await recordManualBilling(adminId, Object.fromEntries(form));
+  });
+}
+export async function voidBillingAction(_p: ActionResult, form: FormData) {
+  return adminRun((adminId) => voidBillingRecord(adminId, String(form.get('recordId')), String(form.get('reason') ?? '')));
+}
+export async function updatePlatformConfigAction(_p: ActionResult, form: FormData) {
+  return adminRun((adminId) =>
+    updatePlatformConfig(adminId, {
+      signupsOpen: form.get('signupsOpen') === 'on',
+      trialIncludesAllModules: form.get('trialIncludesAllModules') === 'on',
+      defaultTrialDays: form.get('defaultTrialDays'),
+      supportEmail: form.get('supportEmail'),
+    }),
+  );
 }

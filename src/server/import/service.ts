@@ -4,6 +4,8 @@ import type { ImportDecisionType, ImportSourceType, LanguageCode } from '@/gener
 import { LANGUAGES } from '@/i18n/config';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
+import { assertMenuItemCapacity } from '../services/limits';
+import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { newPublicToken } from '../crypto';
 import { sniffImage, storage } from '../storage';
@@ -23,6 +25,7 @@ async function ownedJob(ctx: TenantContext, jobId: string, tx: Tx | typeof db = 
 }
 
 export async function createImportJob(ctx: TenantContext) {
+  await assertModule(ctx.org.id, 'import');
   const org = await db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true } });
   const job = await db.importJob.create({ data: { organizationId: ctx.org.id, createdById: ctx.userId, sourceLanguage: org.sourceLanguage } });
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'import.job_created', entityType: 'ImportJob', entityId: job.id });
@@ -38,6 +41,7 @@ export const addSourceSchema = z.object({
 
 /** Parses one source into the job. Nothing reaches the menu until the owner publishes. */
 export async function addImportSource(ctx: TenantContext, jobId: string, input: unknown, bytes?: Uint8Array) {
+  await assertModule(ctx.org.id, 'import');
   const d = addSourceSchema.parse(input);
   const job = await ownedJob(ctx, jobId);
   if (job.status !== 'DRAFT' && job.status !== 'NEEDS_REVIEW') throw new UserFacingError('This import is closed.');
@@ -229,6 +233,7 @@ export const publishSchema = z.object({ confirm: z.literal(true), makeVisible: z
  * - allergens are never imported as verified; images only with confirmed rights.
  */
 export async function publishImport(ctx: TenantContext, jobId: string, input: unknown) {
+  await assertModule(ctx.org.id, 'import');
   const opts = publishSchema.parse(input);
   const job = await ownedJob(ctx, jobId);
   if (job.status !== 'NEEDS_REVIEW') throw new UserFacingError('This import cannot be published (it is not waiting for review).');
@@ -242,6 +247,7 @@ export async function publishImport(ctx: TenantContext, jobId: string, input: un
       const creates = products.filter((p) => p.decisions[0]?.decision === 'CREATE');
       const merges = products.filter((p) => ['MERGE_WITH_IMPORTED', 'MERGE_INTO_EXISTING'].includes(p.decisions[0]?.decision ?? ''));
       if (creates.length + merges.length === 0) throw new UserFacingError('Nothing to publish: every item is skipped.');
+      await assertMenuItemCapacity(ctx.org.id, creates.length, tx);
 
       const menu = (await tx.menu.findFirst({ where: { organizationId: ctx.org.id, isActive: true }, orderBy: { createdAt: 'asc' } })) ?? (await tx.menu.create({ data: { organizationId: ctx.org.id, name: 'Menu' } }));
       const cats = await tx.menuCategory.findMany({ where: { organizationId: ctx.org.id }, include: { translations: { where: { language: lang } } } });

@@ -59,14 +59,14 @@ Status values (never a generic "Complete"):
 | 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | `services/feedback.ts`, `api/public/feedback`, `r/[org]/feedback`, `dashboard/[org]/reviews` | TEST 13, 14 (integration + E2E) | TESTED |
 | 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | `services/loyalty.ts`, `api/public/loyalty`, `o/[token]/loyalty-card.tsx`, `dashboard/[org]/loyalty` | `loyalty.test.ts` (integration) + E2E | TESTED |
 | 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | `src/lib/upsell.ts`, `services/upsell.ts`, `api/public/upsell`, `dashboard/[org]/menu/upsell`, cart in `menu-app.tsx` | unit + integration + E2E | TESTED |
-| 18 | Analytics (paid vs unpaid), CSV export | M12 | M12-01..04 | — | TEST 18 | NOT STARTED |
+| 18 | Analytics (paid vs unpaid), CSV export | M12 | M12-01..04 | `services/analytics.ts`, `dashboard/[org]/analytics`, `api/dashboard/[org]/analytics/export` | TEST 18 (unit + integration + E2E) | TESTED |
 | 19 | Pay at counter / waiter / cash on delivery, manual payment records | M8/M9 | M8-08, M9-11 | `services/bills.ts` (recordPayment, voidPayment) | bills.test.ts, bills.spec.ts | TESTED (cash on delivery checkout pending M9) |
 | 19 | Online payments (MB WAY, Multibanco, cards, Bizum) | — | — | `server/payments/providers.ts` (interface, not connected) | — | BLOCKED BY EXTERNAL APPROVAL |
 | 19 | Certified invoicing (PT AT / ES Verifactu) | — | — | `server/payments/providers.ts` (interface); receipt labelled not an invoice | bills.spec.ts | BLOCKED BY EXTERNAL APPROVAL |
-| 19 | SaaS plans, trials, manual subscriptions | M12 | M2-13, M12-05..06 | `services/plans.ts`, `admin/plans`, `admin/tenants/[id]` | integration (trial) | WORKING |
-| 19 | Automated SaaS billing + webhooks | M12 | M12-07 | — | — | FUTURE INTEGRATION |
-| 20 | Restaurant dashboard sections + role navigation | M3–M12 | M3-10 | `dashboard/[org]/layout.tsx` (sections without pages show 404 until built) | — | IN PROGRESS |
-| 21 | Super Admin (secure bootstrap, audit, tenants, plans, metrics) | M2/M12 | M2-11, M2-12, M12-08 | `src/app/admin/*`, `services/admin.ts`, `platform-setup.ts` | bootstrap integration | TESTED |
+| 19 | SaaS plans, trials, manual subscriptions, limits, module toggles | M12 | M2-13, M12-05..06, M12-09 | `services/plans.ts`, `services/limits.ts`, `src/lib/modules.ts`, `server/modules.ts`, `dashboard/[org]/subscription`, `admin/tenants/[id]` | `plans-modules.test.ts` + TEST 16 E2E | TESTED |
+| 19 | SaaS billing adapter (manual records today; processor webhooks refused) | M12 | M12-07 | `src/server/billing/index.ts`, `api/billing/webhook`, admin billing records | integration | NEEDS CONFIGURATION (processor) |
+| 20 | Restaurant dashboard sections + role navigation | M3–M12 | M3-10, M12-09 | `dashboard/[org]/layout.tsx` (filtered by permission and module; every section has a page) | role E2E + TEST 16 E2E | TESTED |
+| 21 | Super Admin (secure bootstrap, audit, tenants, plans, metrics, platform settings) | M2/M12 | M2-11, M2-12, M12-08 | `src/app/admin/*`, `services/admin.ts`, `platform-setup.ts`, `services/platform-config.ts` | bootstrap + plans-modules integration, TEST 16 E2E | TESTED |
 | 22 | Public storefront `/r/[slug]`, SEO, custom-domain ready | M6 | M6-05 | `r/[org]/[[...location]]` (title, description, OG, JSON-LD, canonical) | — | TESTED |
 | 24 | Normalized schema, migrations, indexes | M2 | M2-01 | `prisma/schema.prisma`, `prisma/migrations/` | migration applied | WORKING |
 | 25 | Auth, sessions, CSRF, rate limiting, audit, uploads | M2/M3 | M2-03..10, M3-05 | `src/server/auth/*`, `http.ts`, `rate-limit.ts`, `audit.ts`, `storage.ts` | integration + curl | TESTED |

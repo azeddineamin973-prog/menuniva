@@ -56,4 +56,3 @@ export async function ensureDefaultPlans() {
   }
 }
 
-export const DEFAULT_TRIAL_DAYS = 30;

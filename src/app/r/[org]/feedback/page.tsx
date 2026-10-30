@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { StorefrontShell } from '@/components/storefront/shell';
 import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
+import { orgModules } from '@/server/modules';
 import { feedbackLocation, googleReviewLinkFor } from '@/server/services/feedback';
 import { resolveGuestLanguage } from '@/server/services/storefront';
 import { FeedbackForm } from './feedback-form';
@@ -17,6 +18,7 @@ export default async function FeedbackPage({ params, searchParams }: { params: P
   const target = await feedbackLocation(slug, sp.l, sp.o);
   if (!target) notFound();
   const { org, location } = target;
+  if (!(await orgModules(org.id)).has('feedback')) notFound();
   const branding = await db.restaurantBranding.findUnique({ where: { organizationId: org.id } });
   const lang = await resolveGuestLanguage(org, sp.lang);
   const m = getMessages(lang);
