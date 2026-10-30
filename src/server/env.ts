@@ -9,6 +9,10 @@ const schema = z.object({
   APP_ENV: z.enum(['development', 'test', 'demo', 'staging', 'production']).default('development'),
   APP_BASE_URL: z.string().url().default('http://localhost:3000'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /** Root CA of the database (PEM or base64 of PEM) for hosts without a certificate file, e.g. Vercel. */
+  DATABASE_CA_CERT: z.string().optional(),
+  /** Connections per app instance. Serverless hosts run many instances: keep it small there (e.g. 3). */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   APP_SECRET: z.string().min(32, 'APP_SECRET must be at least 32 characters'),
   UPLOAD_DIR: z.string().default('./storage/uploads'),
   UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
@@ -99,8 +103,16 @@ export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'D
   if (e.APP_ENV !== 'test' && dbName.includes('test')) problems.push('DATABASE_URL: the test database is wiped by automated tests; use it only with APP_ENV=test');
   return problems;
 }
+/**
+ * On Vercel, APP_BASE_URL may be left unset: the project's production domain (a Vercel system
+ * variable) is used. Set APP_BASE_URL explicitly once a custom domain exists (QR codes use it).
+ */
+export function withPlatformDefaults(source: Record<string, string | undefined>): Record<string, string | undefined> {
+  if (source.APP_BASE_URL || !source.VERCEL_PROJECT_PRODUCTION_URL) return source;
+  return { ...source, APP_BASE_URL: `https://${source.VERCEL_PROJECT_PRODUCTION_URL}` };
+}
 function load(): Env {
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse(withPlatformDefaults(process.env));
   const issues = parsed.success ? [...environmentProblems(parsed.data), ...storageProblems(parsed.data)] : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
   if (!parsed.success || issues.length) {
     throw new Error(`MenuNiva configuration error. Check your .env file:\n${issues.map((i) => `  - ${i}`).join('\n')}`);

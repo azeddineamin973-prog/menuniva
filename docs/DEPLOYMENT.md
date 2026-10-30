@@ -134,6 +134,21 @@ two environments share one bucket.
 Switching an existing installation from `local` to `supabase` requires copying the files of `UPLOAD_DIR`
 into the bucket with the same keys first (paths in the database stay the same).
 
+### 2.3 Vercel (staging)
+
+- `vercel.json` pins functions to `fra1` (Frankfurt, next to the Supabase database in eu-central-1).
+- Database: Vercel has no IPv6, so use the Supabase **transaction pooler** (port 6543,
+  user `postgres.<project-ref>`). Prisma's pg adapter sends unnamed statements, so transaction pooling
+  works (tested: queries, repeated parameterized queries, interactive transactions).
+  `DATABASE_CA_CERT` (base64 of the Supabase root CA) gives verified TLS without a certificate file;
+  `DATABASE_POOL_MAX=3` keeps many function instances under the pooler's limits.
+- `UPLOAD_MAX_BYTES=4194304`: Vercel rejects request bodies over 4.5 MB.
+- `APP_BASE_URL` may stay unset until a custom domain exists; the app then uses Vercel's production domain.
+- `node scripts/vercel-env.mjs` writes `.env.vercel` (git-ignored) with all values, after testing the pooler
+  connection and the storage key. Paste it into Vercel → Settings → Environment Variables, **Production** only.
+- Migrations are not run by Vercel: run `prisma migrate deploy` against Supabase before deploying new migrations.
+- Not on Vercel yet: the daily `npm run retention` and `npm run backup` jobs.
+
 ## 3. First deployment
 ```bash
 git clone <repo> menuniva && cd menuniva

@@ -19,7 +19,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
   return new Response(new Uint8Array(data), {
     headers: {
       'Content-Type': CONTENT_TYPES[ext],
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      // Browsers keep images for a year (keys never change). Shared CDNs (e.g. Vercel's) keep them
+      // for a day, so a removed image stops being served at its old address within 24 hours.
+      'Cache-Control': 'public, max-age=31536000, s-maxage=86400, immutable',
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'",
     },

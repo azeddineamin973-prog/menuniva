@@ -1,6 +1,7 @@
 import 'server-only';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
+import { databasePoolConfig } from './db-config';
 import { env } from './env';
 
 /**
@@ -10,7 +11,7 @@ import { env } from './env';
 const globalForPrisma = globalThis as unknown as { __menunivaPrisma?: PrismaClient };
 
 function createClient() {
-  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL, max: 10 });
+  const adapter = new PrismaPg(databasePoolConfig(env.DATABASE_URL, env.DATABASE_CA_CERT, env.DATABASE_POOL_MAX));
   return new PrismaClient({ adapter, log: ['warn', 'error'] });
 }
 
