@@ -9,7 +9,7 @@ const TEST_DB = process.env.TEST_DATABASE_URL;
 if (!TEST_DB?.includes('menuniva_test')) throw new Error('test DB only');
 const APP = 3102, PROXY = 3103;
 const app = spawn('npx', ['next', 'start', '--port', String(APP)], {
-  env: { ...process.env, NEXT_DIST_DIR: '.next-e2e', APP_ENV: 'test', DATABASE_URL: TEST_DB, APP_BASE_URL: `http://localhost:${APP}`, UPLOAD_DIR: './storage/e2e-uploads', TRUST_PROXY_HOPS: '1' },
+  env: { ...process.env, NEXT_DIST_DIR: '.next-e2e', APP_ENV: 'test', DATABASE_URL: TEST_DB, APP_BASE_URL: `http://localhost:${APP}`, UPLOAD_DIR: './storage/e2e-uploads', STORAGE_DRIVER: 'local', TRUST_PROXY_HOPS: '1' },
   stdio: 'ignore',
 });
 const proxy = http.createServer((req, res) => {

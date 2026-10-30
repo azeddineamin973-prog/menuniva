@@ -4,7 +4,6 @@ import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
 import { UserFacingError } from '@/server/errors';
 import {
-  addProductImage,
   deleteCategory,
   moveCategory,
   moveProduct,
@@ -17,10 +16,10 @@ import {
   setCategoryStation,
   setProductStatus,
   setSoldOut,
+  uploadProductImage,
 } from '@/server/services/menu';
 import { approveTranslation, bulkTranslateMissing, saveTranslation } from '@/server/services/translations';
 import { markOnboardingFlag } from '@/server/services/settings';
-import { storeTenantImage } from '@/server/storage';
 import { createLocation, deleteTaxClass, saveLocationOverride, saveSchedule, saveTaxClass } from '@/server/services/menu-advanced';
 
 const REVALIDATE = { revalidate: '/dashboard/[org]' };
@@ -104,12 +103,7 @@ export async function uploadProductImageAction(_p: ActionResult, form: FormData)
     form.get('org'),
     'menu.edit',
     async (ctx) => {
-      const file = form.get('image');
-      if (!(file instanceof File)) throw new UserFacingError('Please choose a photo.');
-      const rights = form.get('rightsConfirmed') === 'on';
-      if (!rights) throw new UserFacingError('Please confirm you have the right to publish this photo.');
-      const url = await storeTenantImage(ctx.org.id, file, 'products');
-      await addProductImage(ctx, String(form.get('productId')), url, rights);
+      await uploadProductImage(ctx, String(form.get('productId')), form.get('image'), form.get('rightsConfirmed') === 'on');
     },
     REVALIDATE,
   );

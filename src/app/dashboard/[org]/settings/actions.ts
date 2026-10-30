@@ -2,9 +2,8 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
-import { storeTenantImage } from '@/server/storage';
 import { eraseGuestData, findGuestData, updateRetention } from '@/server/services/privacy';
-import { updateBranding, updateChannelSettings, updateLocationDetails, updateOrganizationSettings } from '@/server/services/settings';
+import { saveBrandingWithImages, updateChannelSettings, updateLocationDetails, updateOrganizationSettings } from '@/server/services/settings';
 
 export async function saveOrganizationSettingsAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
   return runTenantAction(form.get('org'), 'settings.manage', (ctx) =>
@@ -38,13 +37,8 @@ export async function saveBrandingAction(_p: ActionResult, form: FormData): Prom
     form.get('org'),
     'settings.manage',
     async (ctx) => {
-      const logo = form.get('logo');
-      const cover = form.get('cover');
-      const files = {
-        logo: logo instanceof File && logo.size > 0 ? await storeTenantImage(ctx.org.id, logo, 'branding') : undefined,
-        cover: cover instanceof File && cover.size > 0 ? await storeTenantImage(ctx.org.id, cover, 'branding') : undefined,
-      };
-      await updateBranding(ctx, Object.fromEntries(form), files);
+      const { logo, cover, ...fields } = Object.fromEntries(form);
+      await saveBrandingWithImages(ctx, fields, { logo, cover });
     },
     { revalidate: '/dashboard/[org]' },
   );

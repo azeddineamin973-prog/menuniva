@@ -7,6 +7,8 @@ import { audit } from '../audit';
 import { db, type Tx } from '../db';
 import { assertMenuItemCapacity } from './limits';
 import { UserFacingError } from '../errors';
+import { deleteTenantMedia, withStoredImages } from '../media';
+import { mediaKeyFromPath } from '../storage';
 import type { TenantContext } from '../tenant';
 
 /**
@@ -412,15 +414,30 @@ export function pickName(translations: { language: string; name: string }[], pre
   return translations[0]?.name ?? null;
 }
 
+/** Links an already stored image to a product. `url` must be a dish-photo path of THIS tenant. */
 export async function addProductImage(ctx: TenantContext, productId: string, url: string, rightsConfirmed: boolean) {
   if (!rightsConfirmed) throw new UserFacingError('Please confirm you have the right to publish this photo.');
+  if (!mediaKeyFromPath(url)?.startsWith(`${ctx.org.id}/products/`)) throw new UserFacingError('Image not found.', 404);
   await assertProduct(ctx, productId);
   const max = await db.productImage.aggregate({ where: { productId }, _max: { sortOrder: true } });
-  await db.productImage.create({ data: { productId, url, rightsConfirmed: true, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
+  return db.productImage.create({ data: { productId, url, rightsConfirmed: true, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
 }
 
+/**
+ * Uploads a dish photo. Rights and product ownership are checked before anything is stored;
+ * if saving fails afterwards the stored file is removed again.
+ */
+export async function uploadProductImage(ctx: TenantContext, productId: string, file: unknown, rightsConfirmed: boolean) {
+  if (!(file instanceof File)) throw new UserFacingError('Please choose a photo.');
+  if (!rightsConfirmed) throw new UserFacingError('Please confirm you have the right to publish this photo.');
+  await assertProduct(ctx, productId);
+  return withStoredImages(ctx.org.id, { image: { file, folder: 'products' } }, (paths) => addProductImage(ctx, productId, paths.image!, rightsConfirmed));
+}
+
+/** Removes a dish photo of this tenant and deletes the stored file. */
 export async function removeProductImage(ctx: TenantContext, imageId: string) {
   const img = await db.productImage.findFirst({ where: { id: imageId, product: { organizationId: ctx.org.id } } });
   if (!img) throw new UserFacingError('Image not found.', 404);
   await db.productImage.delete({ where: { id: img.id } });
+  await deleteTenantMedia(ctx.org.id, [img.url]);
 }

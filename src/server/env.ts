@@ -12,6 +12,15 @@ const schema = z.object({
   APP_SECRET: z.string().min(32, 'APP_SECRET must be at least 32 characters'),
   UPLOAD_DIR: z.string().default('./storage/uploads'),
   UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
+  /** Where uploaded images live: `local` (UPLOAD_DIR, development default) or `supabase` (Supabase Storage). */
+  STORAGE_DRIVER: z.enum(['local', 'supabase']).default('local'),
+  /** Project URL, e.g. https://<project-ref>.supabase.co (Supabase driver only). */
+  SUPABASE_URL: z.string().optional(),
+  /** Server-side secret key (sb_secret_…). Never sent to the browser; never prefix it with NEXT_PUBLIC_. */
+  SUPABASE_SECRET_KEY: z.string().optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().default('restaurant-media'),
+  /** Folder inside the bucket for every object (empty in production). Test runs use `test-tmp/<run>/`. */
+  SUPABASE_STORAGE_PREFIX: z.string().default(''),
   TRANSLATION_PROVIDER: z.enum(['none', 'deepl', 'libretranslate']).default('none'),
   DEEPL_API_KEY: z.string().optional(),
   LIBRETRANSLATE_URL: z.string().optional(),
@@ -37,6 +46,38 @@ export type Env = z.infer<typeof schema>;
  * production/staging never point at a dev/test/demo database, demo only at a *demo* database,
  * and public environments must use https and a real secret.
  */
+/**
+ * Supabase Storage settings (only checked when STORAGE_DRIVER=supabase). The key must be a
+ * server-side key: a publishable/anon key cannot write to a private bucket and must not be used.
+ */
+export function storageProblems(e: Partial<Pick<Env, 'APP_ENV' | 'STORAGE_DRIVER' | 'SUPABASE_URL' | 'SUPABASE_SECRET_KEY' | 'SUPABASE_STORAGE_BUCKET' | 'SUPABASE_STORAGE_PREFIX'>>): string[] {
+  if (e.STORAGE_DRIVER !== 'supabase') return [];
+  const problems: string[] = [];
+  let url: URL | null = null;
+  try {
+    url = new URL(e.SUPABASE_URL ?? '');
+  } catch {}
+  if (!url || url.protocol !== 'https:' || url.pathname.replace(/\/+$/, '') !== '') problems.push('SUPABASE_URL: set the project URL, e.g. https://<project-ref>.supabase.co (Project Settings → Data API / Connect)');
+  const key = e.SUPABASE_SECRET_KEY ?? '';
+  if (!key) problems.push('SUPABASE_SECRET_KEY: required when STORAGE_DRIVER=supabase (Project Settings → API Keys → Secret keys)');
+  else if (key.startsWith('sb_publishable_')) problems.push('SUPABASE_SECRET_KEY: this is the publishable key; use a secret key (sb_secret_…)');
+  else if (!key.startsWith('sb_secret_') && legacyJwtRole(key) !== 'service_role') problems.push('SUPABASE_SECRET_KEY: not a Supabase secret key (expected sb_secret_… or the legacy service_role key)');
+  if (!/^[a-z0-9][a-z0-9._-]{1,62}$/.test(e.SUPABASE_STORAGE_BUCKET ?? 'restaurant-media')) problems.push('SUPABASE_STORAGE_BUCKET: invalid bucket name');
+  const prefix = e.SUPABASE_STORAGE_PREFIX ?? '';
+  if (prefix && !/^([a-z0-9][a-z0-9-]{0,62}\/){1,4}$/.test(prefix)) problems.push('SUPABASE_STORAGE_PREFIX: lowercase folders ending with "/", e.g. test-tmp/run-1/');
+  // Automated tests write into a disposable folder only, never next to real restaurant files.
+  if (e.APP_ENV === 'test' && !prefix.startsWith('test-tmp/')) problems.push('SUPABASE_STORAGE_PREFIX: tests must use a temporary folder starting with "test-tmp/"');
+  if (e.APP_ENV !== 'test' && prefix.startsWith('test-tmp/')) problems.push('SUPABASE_STORAGE_PREFIX: "test-tmp/" is reserved for automated tests');
+  return problems;
+}
+function legacyJwtRole(key: string): string | null {
+  try {
+    return JSON.parse(Buffer.from(key.split('.')[1] ?? '', 'base64url').toString('utf8')).role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'> & Partial<Pick<Env, 'TRUST_PROXY_HOPS'>>): string[] {
   const problems: string[] = [];
   let dbName = '';
@@ -60,7 +101,7 @@ export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'D
 }
 function load(): Env {
   const parsed = schema.safeParse(process.env);
-  const issues = parsed.success ? environmentProblems(parsed.data) : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+  const issues = parsed.success ? [...environmentProblems(parsed.data), ...storageProblems(parsed.data)] : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
   if (!parsed.success || issues.length) {
     throw new Error(`MenuNiva configuration error. Check your .env file:\n${issues.map((i) => `  - ${i}`).join('\n')}`);
   }

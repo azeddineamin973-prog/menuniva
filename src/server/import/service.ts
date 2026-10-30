@@ -8,6 +8,7 @@ import { assertMenuItemCapacity } from '../services/limits';
 import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { newPublicToken } from '../crypto';
+import { deleteTenantMedia } from '../media';
 import { sniffImage, storage } from '../storage';
 import type { TenantContext } from '../tenant';
 import { ADAPTERS, PLATFORM_SOURCES } from './adapters';
@@ -367,6 +368,7 @@ export async function publishImport(ctx: TenantContext, jobId: string, input: un
   // Images are copied after the commit (network calls never run inside a DB transaction).
   let imagesSaved = 0;
   for (const img of images) {
+    let stored: string | null = null;
     try {
       if (!/^https:\/\//.test(img.url)) continue;
       const res = await safeFetch(img.url, { maxBytes: 5 * 1024 * 1024 });
@@ -374,10 +376,12 @@ export async function publishImport(ctx: TenantContext, jobId: string, input: un
       if (!kind) continue;
       const key = `${ctx.org.id}/products/${newPublicToken()}.${kind.ext}`;
       await storage.put(key, res.body, kind.contentType);
-      await db.productImage.create({ data: { productId: img.productId, url: `/media/${key}`, rightsConfirmed: true, origin: 'IMPORTED' } });
+      stored = `/media/${key}`;
+      await db.productImage.create({ data: { productId: img.productId, url: stored, rightsConfirmed: true, origin: 'IMPORTED' } });
       imagesSaved++;
     } catch {
       // Skipped images are reported in the summary; the dish is still created.
+      if (stored) await deleteTenantMedia(ctx.org.id, [stored], { force: true });
     }
   }
   if (images.length) await db.importJob.update({ where: { id: job.id }, data: { summary: { ...result, imagesSaved } } });

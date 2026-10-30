@@ -6,6 +6,7 @@ import { isValidPostalCode, normalizePostalCode } from '@/lib/postal';
 import { audit } from '../audit';
 import { UserFacingError } from '../errors';
 import { db } from '../db';
+import { deleteTenantMedia, withStoredImages } from '../media';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 
 const optText = (max: number) =>
@@ -175,21 +176,56 @@ export const THEME_PRESETS: Record<string, { primaryColor: string; accentColor: 
   bistro: { primaryColor: '#7A2E1F', accentColor: '#D4A64A', backgroundColor: '#FFF8F0', textColor: '#2A1A14', headingFont: 'serif' },
 };
 
-export async function updateBranding(ctx: TenantContext, input: unknown, files: { logo?: string; cover?: string }) {
+const checked = (v: unknown) => v === 'on' || v === true || v === 'true';
+
+/**
+ * Saves branding. `files` are media paths already stored for THIS tenant (see saveBrandingWithImages);
+ * image paths are never read from `input`. `removeLogo` / `removeCover` in `input` clear an image.
+ * Replaced or removed images are deleted from storage after the change is committed.
+ */
+export async function updateBranding(ctx: TenantContext, input: unknown, files: { logo?: string; cover?: string } = {}) {
   const data = brandingSchema.parse(input);
-  await db.$transaction(async (tx) => {
+  const flags = (input ?? {}) as Record<string, unknown>;
+  const logoUrl = files.logo ?? (checked(flags.removeLogo) ? null : undefined);
+  const coverUrl = files.cover ?? (checked(flags.removeCover) ? null : undefined);
+  const previous = await db.$transaction(async (tx) => {
+    // Serializes concurrent branding saves so a replaced image is always the one actually overwritten.
+    await tx.$executeRaw`SELECT 1 FROM "RestaurantBranding" WHERE "organizationId" = ${ctx.org.id} FOR UPDATE`;
+    const prev = await tx.restaurantBranding.findUnique({ where: { organizationId: ctx.org.id }, select: { logoUrl: true, coverUrl: true } });
     await tx.restaurantBranding.upsert({
       where: { organizationId: ctx.org.id },
-      update: { ...data, tagline: data.tagline ?? null, ...(files.logo ? { logoUrl: files.logo } : {}), ...(files.cover ? { coverUrl: files.cover } : {}) },
-      create: { organizationId: ctx.org.id, ...data, tagline: data.tagline ?? null, logoUrl: files.logo, coverUrl: files.cover },
+      update: { ...data, tagline: data.tagline ?? null, ...(logoUrl !== undefined ? { logoUrl } : {}), ...(coverUrl !== undefined ? { coverUrl } : {}) },
+      create: { organizationId: ctx.org.id, ...data, tagline: data.tagline ?? null, logoUrl: logoUrl ?? null, coverUrl: coverUrl ?? null },
     });
     const org = await tx.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id } });
     await tx.restaurantOrganization.update({
       where: { id: ctx.org.id },
       data: { onboardingData: { ...((org.onboardingData as object) ?? {}), brandingSaved: true } },
     });
-    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'settings.branding_updated', entityType: 'RestaurantBranding' }, tx);
+    const change = (next: string | null | undefined, old: string | null | undefined) => (next === undefined || next === old ? undefined : next === null ? 'removed' : old ? 'replaced' : 'added');
+    await audit(
+      {
+        organizationId: ctx.org.id,
+        actorUserId: ctx.userId,
+        action: 'settings.branding_updated',
+        entityType: 'RestaurantBranding',
+        metadata: { logo: change(logoUrl, prev?.logoUrl) ?? null, cover: change(coverUrl, prev?.coverUrl) ?? null },
+      },
+      tx,
+    );
+    return prev;
   });
+  await deleteTenantMedia(ctx.org.id, [
+    logoUrl !== undefined && previous?.logoUrl !== logoUrl ? previous?.logoUrl : null,
+    coverUrl !== undefined && previous?.coverUrl !== coverUrl ? previous?.coverUrl : null,
+  ]);
+}
+
+/** Validates the form, stores new logo/cover files for this tenant, then saves (new files are removed again on failure). */
+export async function saveBrandingWithImages(ctx: TenantContext, input: unknown, uploads: { logo?: unknown; cover?: unknown }) {
+  brandingSchema.parse(input); // reject invalid input before storing anything
+  const file = (v: unknown) => (v instanceof File && v.size > 0 ? { file: v, folder: 'branding' as const } : undefined);
+  await withStoredImages(ctx.org.id, { logo: file(uploads.logo), cover: file(uploads.cover) }, (paths) => updateBranding(ctx, input, paths));
 }
 
 export async function markOnboardingFlag(ctx: TenantContext, flag: 'previewedAt' | 'translationsReviewedAt') {

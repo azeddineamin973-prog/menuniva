@@ -19,7 +19,12 @@ const env = {
   APP_BASE_URL: `http://localhost:${port}`,
   APP_SECRET: process.env.APP_SECRET || (mode === 'test' ? 'e2e-secret-e2e-secret-e2e-secret-123456' : ''),
   UPLOAD_DIR: mode === 'demo' ? './storage/demo-uploads' : './storage/e2e-uploads',
+  // Local files unless the run explicitly opts in: E2E_STORAGE_DRIVER=supabase npx playwright test …
+  STORAGE_DRIVER: mode === 'test' && process.env.E2E_STORAGE_DRIVER === 'supabase' ? 'supabase' : 'local',
+  // Disposable bucket folder for Supabase browser runs (env.ts refuses anything else in test).
+  SUPABASE_STORAGE_PREFIX: process.env.E2E_STORAGE_PREFIX || `test-tmp/e2e-${Date.now()}/`,
 };
+if (env.STORAGE_DRIVER === 'supabase') console.log(`[test-server] Supabase Storage folder: ${env.SUPABASE_STORAGE_PREFIX}`);
 const build = spawnSync('npx', ['next', 'build'], { env, stdio: 'inherit' });
 if (build.status !== 0) process.exit(build.status ?? 1);
 const server = spawn('npx', ['next', 'start', '--port', port], { env, stdio: 'inherit' });
