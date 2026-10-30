@@ -17,6 +17,16 @@ async function addToCart(p: Page, name: string, extra = 0) {
   for (let i = 0; i < extra; i++) await p.getByRole('button', { name: '+' }).click();
   await p.getByTestId('add-to-cart').click();
 }
+
+/** Review step: every category without a station gets one (drinks → Café F, everything else → Cozinha F). */
+async function chooseStations(page: Page) {
+  const selects = page.getByTestId('import-station-select');
+  for (let i = 0; i < (await selects.count()); i++) {
+    const label = (await selects.nth(i).getAttribute('aria-label')) ?? '';
+    await selects.nth(i).selectOption({ label: /bebida|drink/i.test(label) ? 'Café F' : 'Cozinha F' });
+  }
+  return selects.count();
+}
 const money = (s: string) => new RegExp(`^(€\\s?${s.replace(',', '[.,]')}|${s.replace(',', '[.,]')}\\s?€)$`);
 
 test('TAKEAWAY: pickup time chosen, accepted, prepared on the KDS, ready, ticket printable, completed', async ({ page, browser }) => {
@@ -344,6 +354,7 @@ test('MENU IMPORT: real CSV, XLSX and text PDF → review → publish; prices pr
   const items = await page.getByTestId('import-item').allInnerTexts();
   await shot(page, 'f-import-review');
   const publish = page.getByTestId('publish-import-form');
+  const stationChoices = await chooseStations(page);
   await publish.getByLabel('Make dishes visible to guests now').check();
   await publish.getByLabel('I reviewed the items above.').check();
   await publish.getByRole('button', { name: /Publish \d+ new dishes/ }).click();
@@ -355,13 +366,14 @@ test('MENU IMPORT: real CSV, XLSX and text PDF → review → publish; prices pr
   );
   const expected: Record<string, number> = { 'Harira CSV (audit)': 650, 'Cuscuz CSV (audit)': 1490, 'Chá CSV (audit)': 220, 'Briouats XLSX (audit)': 725, 'Pastilla XLSX (audit)': 1840, 'Zaalouk PDF (audit)': 580, 'Salada PDF (audit)': 490, 'Tajine PDF (audit)': 1560 };
   for (const [name, cents] of Object.entries(expected)) expect(prices.find((p) => p.name.startsWith(name.replace(' (audit)', '')))?.cents, name).toBe(cents);
+  expect(prices.filter((p) => !p.station).map((p) => p.name)).toEqual([]); // GAP-01: every imported dish reaches a station
   const g = await guest(browser);
   await g.page.goto(r.tableHrefs[0]);
   await expect(g.page.getByTestId('customer-product').filter({ hasText: 'Pastilla XLSX' })).toContainText('18,40');
   await expect(g.page.getByTestId('customer-product').filter({ hasText: 'Tajine PDF' })).toContainText('15,60');
   await shot(g.page, 'f-import-guest-menu');
   await g.ctx.close();
-  ev.add('import', { countsAfterEachSource: counts, items, summary, prices });
+  ev.add('import', { countsAfterEachSource: counts, items, summary, prices, stationChoices });
 });
 
 test('EXTERNAL IMPORT: Glovo / Uber Eats status, store link refused, merchant export kept as reference price', async ({ page }) => {
@@ -385,6 +397,7 @@ test('EXTERNAL IMPORT: Glovo / Uber Eats status, store link refused, merchant ex
   await form.getByRole('button', { name: 'Read this source' }).click();
   await expect(page.getByTestId('import-item')).toHaveCount(1);
   const publish = page.getByTestId('publish-import-form');
+  await chooseStations(page);
   await publish.getByLabel('I reviewed the items above.').check();
   await publish.getByRole('button', { name: /Publish \d+ new dishes/ }).click();
   await expect(page.getByTestId('publish-summary')).toBeVisible();

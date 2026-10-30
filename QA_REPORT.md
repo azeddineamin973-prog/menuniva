@@ -292,3 +292,31 @@ Note: in the first full E2E run the first test (analytics) got a 404 for a just-
 
 Not built (documented as FUTURE INTEGRATION): promotions restricted to identified customers, because MenuNiva has no verified customer identity (no SMS/email verification); a typed phone number could belong to anyone.
 
+
+## Run 11 — independent audit (2026-10-30, session 7)
+
+Fresh, retries disabled: type check 0 errors · build OK · Vitest 246/246 · E2E 37/37 · demo 1/1. The audit
+then found 12 bugs and 5 gaps (audit/AUDIT_REPORT.md), including BUG-01: 10+ simultaneous orders all failed.
+The earlier "sporadic 404" was reproduced and traced to Vitest and Playwright sharing `menuniva_test`.
+
+## Run 12 — audit follow-up verification (2026-10-30, session 8)
+
+All logs in `audit/logs/s4/` (local, git-ignored). Retries disabled for every first run.
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit --incremental false` | 0 errors |
+| Production build | `NEXT_DIST_DIR=.next-e2e npm run build` | OK (includes `ƒ Proxy (Middleware)` for the guest cookie) |
+| Unit + integration | `npx vitest run` | **284 passed** (111 unit, 173 integration), 0 failed, 0 skipped |
+| Browser E2E | `npx playwright test --retries=0` | **49 passed**, 0 failed, 0 flaky; JSON report contains no DB URL or secret |
+| Casa de Marrocos demo | `npx playwright test --config playwright.demo.config.ts --retries=0` | **1 passed** |
+| Audit acceptance (demo DB) | `npx playwright test --config audit/playwright.audit.config.ts --retries=0` | 29 passed, **2 failed** (import flows did not yet pick a station — the new GAP-01 rule); tests updated; rerun **2 passed** (`6-audit-acceptance.log`, `6b-audit-import-rerun.log`) |
+| Load | `audit/phaseG-concurrency.mjs` 10/20/40/80/100 simultaneous orders | every order stored (100 in 522 ms) |
+| Table sessions | `audit/phaseG-session-race.mjs` 9 simultaneous first orders × 6 tables | 1 open session per table |
+| Takeaway | 15 simultaneous takeaway orders, different phones | 15 stored (same phone: per-phone cap after 8, as designed) |
+| Trusted proxy | `audit/phaseG-proxy-sim.mjs` (TRUST_PROXY_HOPS=1 + appending proxy) | spoofing client stopped at the per-IP limit (61st refused); direct to app port: spoofing works → app port must stay private (docs/DEPLOYMENT.md §2.1) |
+| Data safety | `audit/dev-fingerprint.mjs`, `audit/integrity-check.mjs` | development DB identical before/after; test/demo/dev: 0 duplicate open sessions, 0 duplicate payments, 0 over-payments, 0 discounts above subtotal, 0 totals mismatching |
+
+New regression suites: `concurrency`, `rate-limits`, `import-stations`, `discount-recalculation`,
+`promotion-timezones`, `gaps` (integration); `client-identity` (unit); `import-routing`, `restaurant-wifi`,
+`uploads`, `checkout-recovery` (browser).

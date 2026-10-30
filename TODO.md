@@ -231,3 +231,41 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **AUD-08** TEST 20 runs the Casa de Marrocos layout in the demo environment (fictitious dishes) — Part 28
 - [ ] **AUD-09** Promotions limited to identified customers — FUTURE INTEGRATION: needs verified customer identity (e.g. SMS/email verification); without it anyone could type someone else's phone — Part 13
 
+
+## Independent audit follow-up (sessions 7–8, 2026-10-30) — see audit/AUDIT_REPORT.md and docs/OPEN_BUGS.md
+
+Fixed and verified (automated regression test named in each line):
+- [x] **FIX-01** BUG-01 (critical) 10+ simultaneous orders failed — pool starvation inside the order transaction · `tests/integration/concurrency.test.ts`
+- [x] **FIX-02** BUG-02 sporadic E2E 404 — suites shared `menuniva_test`; advisory lock per test DB · `concurrency.test.ts` (lock), lock check runs
+- [x] **FIX-03** BUG-03 simultaneous first orders split a table's bill — per-table row lock · `concurrency.test.ts`
+- [x] **FIX-04** BUG-04 checkout validation error shown as "prices changed" · `tests/e2e/takeaway-delivery.spec.ts`
+- [x] **FIX-05** BUG-12 E2E and demo suites shared one build folder · demo uses `.next-demo`
+- [x] **FIX-06** GAP-01 (P0) imported dishes reached no Kitchen/Café screen — station choice in review, publish confirmation, menu warning + one-click fix, live-board flag · `tests/integration/import-stations.test.ts`, `tests/e2e/import-routing.spec.ts`
+- [x] **FIX-07** BUG-05a (P0) guests on one Wi-Fi/phone model blocked each other — per-guest cookie buckets + per-IP/table/phone/location ceilings, abuse log · `tests/integration/rate-limits.test.ts`, `tests/e2e/restaurant-wifi.spec.ts`
+- [x] **FIX-08** BUG-05b (P0) X-Forwarded-For trusted blindly — `TRUST_PROXY_HOPS`, required in production/staging; docs/DEPLOYMENT.md §2.1 · `tests/unit/client-identity.test.ts`, `audit/phaseG-proxy-sim.mjs`
+- [x] **FIX-09** BUG-11 (P1) discounts kept after items were reduced — applied promotions re-evaluated · `tests/integration/discount-recalculation.test.ts`
+- [x] **FIX-10** BUG-06 (P1) oversized photo crashed the page — browser + server checks, localized message · `tests/e2e/uploads.spec.ts`
+- [x] **FIX-11** BUG-07 (P1) promotion times used the server's time zone — restaurant IANA zone, DST-aware · `tests/integration/promotion-timezones.test.ts`
+- [x] **FIX-12** BUG-08 (P2) valid coupon flashed "not valid" · `tests/e2e/checkout-recovery.spec.ts`
+- [x] **FIX-13** BUG-09 (P2) name/phone lost when reopening the cart · `checkout-recovery.spec.ts`
+- [x] **FIX-14** BUG-10 (P2) misleading "reconnecting…" after a lost answer; no recovery path — clear message, safe "check and try again", auto-check when online · `checkout-recovery.spec.ts`
+- [x] **FIX-15** GAP-04 takeaway/delivery accepted orders at any hour when no hours were set — hours required to enable/publish · `tests/integration/gaps.test.ts`
+- [x] **FIX-16** GAP-05 table plan limit could be exceeded by parallel requests · `gaps.test.ts`
+- [x] **FIX-17** Demo environment created non-demo tenants · `gaps.test.ts`
+- [x] **FIX-18** Playwright config carried DB URLs/APP_SECRET (printed by the JSON reporter) · `scripts/test-server.mjs`
+
+Open — needs an owner decision, hardware, a provider or hosting (never mark done without a working connection):
+- [ ] **EXT-01** Hosting, domain, TLS, managed EU PostgreSQL with PITR — **BLOCKED (not chosen)**; then verify `TRUST_PROXY_HOPS` per docs/DEPLOYMENT.md §2.1
+- [ ] **EXT-02** Scheduled, encrypted, off-site backups + restore drill on the production database — **BLOCKED (hosting)**; `npm run backup/restore` work today
+- [ ] **EXT-03** Error monitoring endpoint (`ERROR_MONITORING_DSN`) — **NEEDS CONFIGURATION**
+- [ ] **EXT-04** Email (SMTP) for invitations, password resets, low-rating alerts — **NOT IMPLEMENTED / NEEDS PROVIDER** (links are shown on screen; alerts are in-app)
+- [ ] **EXT-05** SMS / WhatsApp Business messages — **NOT IMPLEMENTED / NEEDS PROVIDER** (WhatsApp is a prefilled `wa.me` link only)
+- [ ] **EXT-06** Direct thermal printer (ESC/POS over network) — **NOT IMPLEMENTED, BLOCKED (hardware)**; browser print + PDF tickets work
+- [ ] **EXT-07** Photo OCR — **NEEDS CONFIGURATION (no engine)**
+- [ ] **EXT-08** Automatic translation (DeepL/LibreTranslate) — **NEEDS CONFIGURATION**, client code never run against a real provider
+- [ ] **EXT-09** Glovo / Uber Eats partner APIs — **BLOCKED (partner approval)**; merchant-export import works
+- [ ] **EXT-10** Online payments (MB WAY, Multibanco, cards, Bizum) — **BLOCKED (provider contract)**
+- [ ] **EXT-11** Certified invoicing (PT AT-certified software / ES Verifactu) — **BLOCKED (certified provider)**
+- [ ] **EXT-12** SaaS billing processor — **NEEDS CONFIGURATION** (manual billing works)
+- [ ] **AUD-09** Promotions limited to identified customers — **FUTURE (needs verified customer identity)**
+- [ ] **OPS-01** Casa de Marrocos real data and owner account — see docs/CASA_PILOT_CHECKLIST.md

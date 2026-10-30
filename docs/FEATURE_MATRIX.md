@@ -32,6 +32,7 @@ Status values (never a generic "Complete"):
 | 5 | Glovo partner API import | M5 | M5-08 | — | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | BLOCKED BY EXTERNAL APPROVAL (merchant export import TESTED) |
 | 5 | Uber Eats Menu API import | M5 | M5-09 | — | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | BLOCKED BY EXTERNAL APPROVAL (merchant export import TESTED) |
 | 5 | Image OCR | M5 | M5-07 | `ImageMenuImporter` in `adapters.ts` | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | NEEDS CONFIGURATION (honest fallback TESTED) |
+| 5 | Imported dishes get an explicit Kitchen/Café station before publishing; unrouted dishes flagged (audit GAP-01) | Audit | FIX-06 | `import/service.ts`, `import/[jobId]/page.tsx`, `services/publish.ts`, menu page, live board | import-stations.test.ts, import-routing.spec.ts | TESTED |
 | 5 | Duplicate detection/merge, preview, publish, rollback | M5 | M5-11..14 | `src/server/import/{dedupe,service}.ts`, `dashboard/[org]/import/*` | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | TESTED |
 | 5, 25 | SSRF protection for URL import | M5 | M5-10 | `src/server/import/safe-fetch.ts` | import-parsers.test.ts, import.test.ts, import-studio.spec.ts | TESTED |
 | 6 | Categories, products, photos, tags, featured, display order | M4 | M4-02..04 | `services/menu.ts`, `dashboard/[org]/menu/*` | E2E + integration | TESTED |
@@ -50,13 +51,13 @@ Status values (never a generic "Complete"):
 | 9 | KDS stations, routing, readiness aggregation | M7 | M7-06..09 | `stations/page.tsx`, `kitchen/*`, `services/orders.ts` | TEST 5 (E2E) | TESTED |
 | Add-1 | Session merge, item modify/cancel w/ audit, transfer, split bills, partial payments | M8 | M8-01..08, M8-12 | `services/bills.ts`, `dashboard/[org]/bills/*` | bills.test.ts, bills.spec.ts | TESTED |
 | Add-2 | Kitchen/café ticket printing (PDF/print first) | M8 | M8-10 | `server/printing`, `services/tickets.ts`, `kitchen/tickets/*/print`, ticket PDF route | bills.test.ts, bills.spec.ts | TESTED |
-| Add-2 | Direct thermal printer integration | M8 | M8-11 | ESC/POS formatter in `server/printing` (sending not enabled) | unit (bytes) | NEEDS CONFIGURATION (hardware untested) |
+| Add-2 | Direct thermal printer integration | M8 | M8-11 | ESC/POS formatter in `server/printing` only; **no code sends to a printer**, no printer settings | unit (bytes) | NOT IMPLEMENTED — BLOCKED (needs a printer to build and test against); browser print + PDF tickets are the working path |
 | 10 | Takeaway (pickup hours, lead time, min, pause) | M9 | M9-01..03 | `services/fulfilment.ts`, `r/[org]/order/[mode]`, `dashboard/[org]/takeaway` | TEST 8 (integration + E2E) | TESTED |
 | 11 | Delivery zones (PT/ES postal codes), fees, workflow, driver view | M9 | M9-04..08, M9-11 | `services/fulfilment.ts`, `dashboard/[org]/delivery`, `dashboard/[org]/driver` | TEST 9, 10 (integration + E2E) | TESTED (no GPS, no courier dispatch — by design) |
 | 12 | WhatsApp prefilled ordering + external links | M9 | M9-09, M9-10 | `buildWhatsAppText` in `menu-app.tsx`, storefront links | takeaway-delivery.spec.ts | TESTED |
 | 13 | Promotions & coupons (server-side) | M10 | M10-01..04 | `src/lib/promotions.ts`, `services/promotions.ts`, `dashboard/[org]/promotions` | TEST 11 (unit + integration + E2E) | TESTED |
 | 14 | Reservations with double-booking prevention | M10 | M10-05..09 | `services/reservations.ts`, `r/[org]/reserve`, `reservation/[token]`, `dashboard/[org]/reservations` | TEST 12 (integration + E2E) | TESTED (no SMS by design) |
-| 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | `services/feedback.ts`, `api/public/feedback`, `r/[org]/feedback`, `dashboard/[org]/reviews` | TEST 13, 14 (integration + E2E) | TESTED |
+| 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | `services/feedback.ts`, `api/public/feedback`, `r/[org]/feedback`, `dashboard/[org]/reviews` | TEST 13, 14 (integration + E2E) | TESTED (manager alert is in-app only; no email/SMS) |
 | 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | `services/loyalty.ts`, `api/public/loyalty`, `o/[token]/loyalty-card.tsx`, `dashboard/[org]/loyalty` | `loyalty.test.ts` (integration) + E2E | TESTED |
 | 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | `src/lib/upsell.ts`, `services/upsell.ts`, `api/public/upsell`, `dashboard/[org]/menu/upsell`, cart in `menu-app.tsx` | unit + integration + E2E | TESTED |
 | 18 | Analytics (paid vs unpaid), CSV export | M12 | M12-01..04 | `services/analytics.ts`, `dashboard/[org]/analytics`, `api/dashboard/[org]/analytics/export` | TEST 18 (unit + integration + E2E) | TESTED |
@@ -70,6 +71,10 @@ Status values (never a generic "Complete"):
 | 22 | Public storefront `/r/[slug]`, SEO, custom-domain ready | M6 | M6-05 | `r/[org]/[[...location]]` (title, description, OG, JSON-LD, canonical) | — | TESTED |
 | 24 | Normalized schema, migrations, indexes, safe migration procedure | M2/M13 | M2-01, M13-07 | `prisma/schema.prisma`, `prisma/migrations/`, `scripts/migrate-safe.mjs` | migrations.test.ts (lint), backup-restore.test.ts, scratch-DB run | TESTED |
 | 25 | Auth, sessions, CSRF, rate limiting, audit, uploads | M2/M3 | M2-03..10, M3-05 | `src/server/auth/*`, `http.ts`, `rate-limit.ts`, `audit.ts`, `storage.ts` | integration + curl | TESTED |
+| 25 | Per-guest throttling (guest cookie) + trusted client IP (`TRUST_PROXY_HOPS`); localized upload limits | Audit | FIX-07, FIX-08, FIX-10 | `client-identity.ts`, `proxy.ts`, `rate-limit.ts`, `upload-messages.ts`, `action-form.tsx` | client-identity.test.ts, rate-limits.test.ts, restaurant-wifi.spec.ts, uploads.spec.ts, audit/phaseG-proxy-sim.mjs | TESTED locally; production proxy verification BLOCKED (no hosting) |
+| 8 | Concurrent ordering (pool), one open session per table, duplicate-safe retries with clear recovery | Audit | FIX-01, FIX-03, FIX-14 | `services/orders.ts`, `promotions.ts`, `modules.ts`, `bills.ts`, `menu-app.tsx` | concurrency.test.ts, checkout-recovery.spec.ts, audit probes (100 simultaneous orders) | TESTED |
+| 13 | Discounts re-evaluated after item changes; promotion times in the restaurant time zone | Audit | FIX-09, FIX-11 | `services/promotions.ts`, `bills.ts`, `promotions/page.tsx` | discount-recalculation.test.ts, promotion-timezones.test.ts | TESTED |
+| — | Email delivery (invitations, resets, alerts) | — | EXT-04 | none — links are shown on screen | — | NOT IMPLEMENTED (needs a provider) |
 | 25 | GDPR export/deletion, retention | M13 | M13-02 | `services/privacy.ts`, `settings/privacy`, `api/dashboard/[org]/privacy/export`, `scripts/retention.ts` | privacy.test.ts | TESTED |
 | 25 | Authorization on every page, route and action | M13 | M13-01 | `tenant.ts`, `route-tenant.ts`, `action.ts`, admin guards on every admin page | route-audit.test.ts (static), route-audit.spec.ts (runtime), login.test.ts | TESTED |
 | 26 | PT/ES country config, IVA classes, address formats | M3/M4 | M3-03, M4-14 | postal formats, time zones, restaurant-approved IVA classes | unit + menu-advanced.test.ts | TESTED |
@@ -86,4 +91,4 @@ Status values (never a generic "Complete"):
 | 16 | Loyalty birthdays this month (consent only) | Audit | AUD-07 | `loyaltyMembers(…, birthdayMonth)`, loyalty page | spec-gaps.test.ts | TESTED |
 | 13 | Promotions for identified customers only | — | AUD-09 | — | — | FUTURE INTEGRATION (needs verified customer identity) |
 
-_Last updated: 2026-10-30 (session 6, spec audit). Casa de Marrocos tenant: created via `scripts/bootstrap-casa-de-marrocos.ts` — WORKING (verified in DB)._
+_Last updated: 2026-10-30 (session 8, audit follow-up; open items in docs/OPEN_BUGS.md). Casa de Marrocos tenant: created via `scripts/bootstrap-casa-de-marrocos.ts` — WORKING (verified in DB)._

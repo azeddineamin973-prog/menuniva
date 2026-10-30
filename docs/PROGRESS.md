@@ -1,5 +1,23 @@
 # MenuNiva — Progress Log
 
+## Current status (session 8 — 2026-10-30) — independent audit follow-up
+
+The independent audit (audit/AUDIT_REPORT.md) found 12 bugs and 5 gaps. **All 12 bugs and the 3 local
+gaps are fixed, each with a permanent regression test** (TODO.md FIX-01…FIX-18). Remaining items need
+hardware, a provider, hosting or an owner decision and are tracked in docs/OPEN_BUGS.md (EXT-01…12,
+GAP-02/03, AUD-09). Nothing external is marked complete.
+
+Tests (fresh run, retries disabled): 284 unit/integration (111 unit, 173 integration), 49 browser E2E,
+1 Casa de Marrocos demo, 31 audit acceptance tests on the demo DB (2 failed on the first run because
+the tests did not yet choose Kitchen/Café stations — the new GAP-01 safeguard — and passed after the
+test update), load probe up to 100 simultaneous orders (all stored), 6 tables × 9 simultaneous first
+orders (one bill each), proxy simulation (spoofing blocked behind an appending proxy).
+
+Readiness: internal pilot on a local/staging machine — possible after the Casa de Marrocos checklist
+(docs/CASA_PILOT_CHECKLIST.md). Real customers / selling the SaaS — **not yet** (no hosting, no
+backups schedule, no email, no certified invoicing; see docs/OPEN_BUGS.md).
+
+
 ## Current status (session 5 — 2026-10-30) — release 1.0.0-rc.1
 
 **Task completion (from TODO.md):** 169 of 169 tasks verified (100 %). Items that depend on outside companies are marked NEEDS CONFIGURATION / BLOCKED BY EXTERNAL APPROVAL in docs/FEATURE_MATRIX.md.

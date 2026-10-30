@@ -296,3 +296,40 @@ Still needed before real guests:
 4. Hosting, domain, TLS, managed EU PostgreSQL with point-in-time recovery, scheduled encrypted off-site backups, SMTP, and a verified error-monitoring endpoint.
 5. External services that do not exist yet: online payments, certified invoicing (AT / Verifactu), Glovo/Uber partner APIs, OCR, machine translation, thermal printers. All are correctly labelled as not connected in the app.
 6. Free disk space on the development Mac (1.2–2.6 GB free during the audit).
+
+---
+
+## Session 8 — remaining issues fixed (2026-10-30)
+
+Commits on top of `e90ef6f`: `9cbfde4` (first five fixes + regression tests + this report),
+`b781442` GAP-01, `97a7adb` BUG-05, `cc43ab8` BUG-11, `c605aba` BUG-06, `cc08e0f` BUG-07,
+`c9e7bd6` BUG-08/09/10, `6680ec6` GAP-04/GAP-05/demo flag/launcher, `126f9d9` email honesty, then the
+documentation commit. Verification: QA_REPORT.md Run 12.
+
+| ID | Fix | Proof |
+|---|---|---|
+| GAP-01 | Station choice per category in import review (refused without it), publish confirmation for unrouted dishes, menu warning with one-click category station, live-board flag | `import-stations.test.ts`, `import-routing.spec.ts`; audit import flows: all 8 imported dishes routed |
+| BUG-05 | Guest cookie buckets (`src/proxy.ts`), `TRUST_PROXY_HOPS` (rightmost-hop parsing, required in production), per-IP/table/phone/location ceilings, abuse log | `client-identity.test.ts`, `rate-limits.test.ts` (40 guests on one Wi-Fi), `restaurant-wifi.spec.ts` (12 phones, same model), `audit/phaseG-proxy-sim.mjs` |
+| BUG-11 | Applied promotions re-evaluated on item change; never increase | `discount-recalculation.test.ts` (percentage, 2×1, minimum, fixed, combinable, deleted promotion, audit) |
+| BUG-06 | Browser size check, body-limit errors caught, localized messages | `uploads.spec.ts` (7 MB, bypassed client, 5.5 MB server, HTML-as-PNG, valid) |
+| BUG-07 | Restaurant IANA time zone for promotion windows | `promotion-timezones.test.ts` (process in Asia/Tokyo; Lisbon, Madrid, both DST changes, midnight, expired) |
+| BUG-08/09/10 | Coupon state tied to its quote; draft kept per tab; unknown-outcome message + safe retry + auto-check online | `checkout-recovery.spec.ts` |
+| GAP-04 | Hours required to enable/publish takeaway or delivery; warning for older data | `gaps.test.ts` |
+| GAP-05 | Table limit under a per-restaurant lock | `gaps.test.ts` |
+| Other | Demo tenants always `isDemo`; Playwright secrets moved to `scripts/test-server.mjs`; email no longer implied when `SMTP_URL` is set | `gaps.test.ts`; JSON report scan; code review |
+
+Still open: GAP-02 (thermal printing — hardware), GAP-03 (email/SMS — provider), and all external
+blockers in `docs/OPEN_BUGS.md`. Status changes in the 31-area table:
+
+| # | Feature | Now |
+|---|---|---|
+| 6 | Menu import | VERIFIED_WORKING (GAP-01 fixed; Excel-produced XLSX still untested) |
+| 11 | Direct ordering | VERIFIED_WORKING (100 simultaneous orders; per-guest limits) |
+| 13 | Kitchen & Café routing | VERIFIED_WORKING, including imported dishes |
+| 14 | Table sessions & bills | VERIFIED_WORKING (BUG-03, BUG-11 fixed) |
+| 16 | Ticket printing | Browser/PDF VERIFIED_WORKING · direct thermal NOT_IMPLEMENTED / BLOCKED (hardware) |
+| 17 | Takeaway | VERIFIED_WORKING (hours now required) |
+| 20 | Promotions | VERIFIED_WORKING (BUG-07/08/11 fixed) · AUD-09 NOT_IMPLEMENTED |
+| 22 | Smart Reviews | VERIFIED_WORKING; alerts in-app only (EXT-04) |
+| 28 | GDPR & security | VERIFIED_WORKING locally · production proxy verification BLOCKED (EXT-01) |
+| 30 | Production readiness | NOT READY (EXT-01…EXT-12) |
