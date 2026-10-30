@@ -6,7 +6,8 @@ import { hashToken } from '../crypto';
 import { db, type Tx } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic } from '../rate-limit';
 import type { TenantContext } from '../tenant';
 
 /**
@@ -100,11 +101,11 @@ export async function loyaltyForOrder(token: string, lang: LanguageCode) {
   };
 }
 
-export async function enrolFromOrder(input: unknown, clientKey: string) {
+export async function enrolFromOrder(input: unknown, client: string | ClientIdentity) {
   const d = enrolSchema.parse(input);
   const phone = normalizePhone(d.phone);
   if (!phone) throw new UserFacingError('invalid_phone', 422);
-  await rateLimit(`loyalty-enrol:${clientKey}`, 5, 3600);
+  await limitPublic('loyalty-enrol', asIdentity(client), { guest: [5, 3600], ip: [50, 3600] });
   const order = await orderByToken(d.orderToken);
   if (!order || order.status === 'CANCELLED') throw new UserFacingError('not_found', 404);
   const program = await db.loyaltyProgram.findUnique({ where: { organizationId: order.organizationId } });

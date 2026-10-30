@@ -23,6 +23,11 @@ const schema = z.object({
   UBER_EATS_CLIENT_SECRET: z.string().optional(),
   BILLING_PROVIDER: z.enum(['manual', 'stripe']).default('manual'),
   ERROR_MONITORING_DSN: z.string().optional(),
+  /**
+   * Number of reverse proxies in front of the app that append the client address to
+   * X-Forwarded-For (0 = none: the header is ignored). See docs/DEPLOYMENT.md → Reverse proxy.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -32,7 +37,7 @@ export type Env = z.infer<typeof schema>;
  * production/staging never point at a dev/test/demo database, demo only at a *demo* database,
  * and public environments must use https and a real secret.
  */
-export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'>): string[] {
+export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'> & Partial<Pick<Env, 'TRUST_PROXY_HOPS'>>): string[] {
   const problems: string[] = [];
   let dbName = '';
   try {
@@ -47,6 +52,9 @@ export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'D
   if ((e.APP_ENV === 'production' || e.APP_ENV === 'staging') && /(^|_)(dev|test|demo)($|_)/.test(dbName)) problems.push(`DATABASE_URL: ${e.APP_ENV} must not use the "${dbName}" database`);
   if (e.APP_ENV === 'production' && /(^|_)staging($|_)/.test(dbName)) problems.push('DATABASE_URL: production must not use the staging database');
   if (e.APP_ENV === 'demo' && dbName && !dbName.includes('demo')) problems.push('DATABASE_URL: the demo environment must use a separate database whose name contains "demo"');
+  // Public deployments must state how many proxies sit in front of the app; otherwise client IPs
+  // are either spoofable (trusting X-Forwarded-For blindly) or unknown without anyone noticing.
+  if ((e.APP_ENV === 'production' || e.APP_ENV === 'staging') && e.TRUST_PROXY_HOPS === undefined) problems.push('TRUST_PROXY_HOPS: set the number of reverse proxies in front of the app (see docs/DEPLOYMENT.md → Reverse proxy)');
   if (e.APP_ENV !== 'test' && dbName.includes('test')) problems.push('DATABASE_URL: the test database is wiped by automated tests; use it only with APP_ENV=test');
   return problems;
 }

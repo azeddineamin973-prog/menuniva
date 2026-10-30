@@ -7,7 +7,8 @@ import { hashToken } from '../crypto';
 import { db } from '../db';
 import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 
 /**
@@ -56,14 +57,14 @@ export const feedbackSchema = z
   })
   .refine((d) => !d.wantsFollowUp || !!d.contactInfo, { path: ['contactInfo'], message: 'required' });
 
-export async function submitFeedback(input: unknown, clientKey: string) {
+export async function submitFeedback(input: unknown, client: string | ClientIdentity) {
   const d = feedbackSchema.parse(input);
   const target = await feedbackLocation(d.orgSlug, d.locationSlug, d.orderToken);
   if (!target) throw new UserFacingError('not_found', 404);
   const { org, location, order } = target;
   if (org.settings && !org.settings.feedbackEnabled) throw new UserFacingError('feedback_disabled', 422);
   await assertModule(org.id, 'feedback');
-  await rateLimit(`feedback:${location.id}:${clientKey}`, 5, 3600);
+  await limitPublic(`feedback:${location.id}`, asIdentity(client), { guest: [5, 3600], ip: [60, 3600], scope: { key: 'location', limit: [300, 3600] } });
   if (order && (await db.customerFeedback.findFirst({ where: { orderId: order.id } }))) throw new UserFacingError('already_submitted', 409);
   const settings = await db.reviewSettings.findUnique({ where: { locationId: location.id } });
   const fb = await db.customerFeedback.create({

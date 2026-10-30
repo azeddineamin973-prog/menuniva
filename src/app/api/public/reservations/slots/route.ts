@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 import { clientKeyFromRequest } from '@/server/client-key';
 import { db } from '@/server/db';
 import { handleRouteError } from '@/server/http';
-import { rateLimit } from '@/server/rate-limit';
+import { limitPublic } from '@/server/rate-limit';
 import { availability } from '@/server/services/reservations';
 
 // Public: available reservation times for a date and party size (no personal data).
 export async function GET(req: Request) {
   try {
-    await rateLimit(`res-slots:${clientKeyFromRequest(req)}`, 120, 600);
+    await limitPublic('res-slots', clientKeyFromRequest(req), { guest: [120, 600], ip: [3000, 600] });
     const u = new URL(req.url).searchParams;
     const org = await db.restaurantOrganization.findUnique({ where: { slug: u.get('org') ?? '' } });
     if (!org || org.status === 'SUSPENDED' || org.status === 'ARCHIVED') return NextResponse.json({ error: 'not_found' }, { status: 404 });

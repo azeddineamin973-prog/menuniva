@@ -25,7 +25,9 @@ export async function signupAction(_prev: ActionResult, form: FormData): Promise
   const parsed = signupSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: 'validation', fieldErrors: zodFieldErrors(parsed.error.issues) };
   try {
-    await rateLimit(`signup:${await clientIp()}`, 10, 3600);
+    const ip = await clientIp();
+    // Per trusted IP; without a known IP (no proxy configured) a platform-wide ceiling applies.
+    await (ip ? rateLimit(`signup:${ip}`, 10, 3600, true) : rateLimit('signup:unknown-ip', 100, 3600, true));
   } catch (e) {
     if (e instanceof RateLimitError) return { ok: false, error: 'too_many_attempts' };
     throw e;

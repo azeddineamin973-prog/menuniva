@@ -11,7 +11,26 @@ export class RateLimitError extends Error {
  * Fixed-window rate limiter stored in PostgreSQL, so it works across several app
  * instances without Redis. One atomic upsert per call.
  */
-export async function rateLimit(key: string, limit: number, windowSeconds: number): Promise<void> {
+export type Limit = [limit: number, windowSeconds: number];
+
+/**
+ * Public-endpoint throttling (audit BUG-05). Every guest gets its own bucket (guest cookie), so
+ * guests sharing one Wi-Fi and phone model are not blocked by each other. Shared buckets — the
+ * trusted client IP (when the proxy setup makes it known) and the whole scope (table / location) —
+ * only cap abuse and have much higher limits. The first time a shared bucket overflows in a
+ * window an "abuse" entry is written for the Super Admin (System errors), without raw IPs.
+ */
+export async function limitPublic(
+  prefix: string,
+  identity: { guest: string; ip: string | null },
+  limits: { guest: Limit; ip?: Limit; scope?: { key: string; limit: Limit } },
+) {
+  await rateLimit(`${prefix}:g:${identity.guest}`, ...limits.guest);
+  if (identity.ip && limits.ip) await rateLimit(`${prefix}:ip:${identity.ip}`, ...limits.ip, true);
+  if (limits.scope) await rateLimit(`${prefix}:all:${limits.scope.key}`, ...limits.scope.limit, true);
+}
+
+export async function rateLimit(key: string, limit: number, windowSeconds: number, reportAbuse = false): Promise<void> {
   const now = Date.now();
   const windowStart = new Date(Math.floor(now / (windowSeconds * 1000)) * windowSeconds * 1000);
   const rows = await db.$queryRaw<{ count: number }[]>`
@@ -24,6 +43,10 @@ export async function rateLimit(key: string, limit: number, windowSeconds: numbe
     RETURNING "count"`;
   const count = rows[0]?.count ?? 1;
   if (count > limit) {
+    if (reportAbuse && count === limit + 1) {
+      const { logError } = await import('./audit');
+      await logError('abuse', new Error(`Rate limit exceeded: ${key.split(':').slice(0, 3).join(':')}`), { key, limit, windowSeconds });
+    }
     const retry = Math.ceil((windowStart.getTime() + windowSeconds * 1000 - now) / 1000);
     throw new RateLimitError(Math.max(retry, 1));
   }

@@ -5,7 +5,7 @@ import { LANGUAGES } from '@/i18n/config';
 import { clientKeyFromRequest } from '@/server/client-key';
 import { db } from '@/server/db';
 import { assertSameOrigin, handleRouteError } from '@/server/http';
-import { rateLimit } from '@/server/rate-limit';
+import { limitPublic } from '@/server/rate-limit';
 import { resolveTableToken } from '@/server/services/orders';
 import { cartSchema, quoteCart } from '@/server/services/pricing';
 import { computeDiscounts } from '@/server/services/promotions';
@@ -24,7 +24,7 @@ const schema = z.object({
 export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
-    await rateLimit(`quote:${clientKeyFromRequest(req)}`, 120, 600);
+    await limitPublic('quote', clientKeyFromRequest(req), { guest: [120, 600], ip: [3000, 600] });
     const d = schema.parse(await req.json().catch(() => null));
     let locationId: string | null = null;
     if (d.channel === 'TABLE') {

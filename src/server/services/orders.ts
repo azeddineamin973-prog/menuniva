@@ -11,7 +11,8 @@ import { db, type Tx } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic, rateLimit } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { cartSchema, quoteCart, type QuoteIssue } from './pricing';
 import { orderingState } from './public-menu';
@@ -64,9 +65,13 @@ export async function resolveTableToken(token: string) {
  * - prices/availability recomputed server-side inside the transaction,
  * - idempotent per (location, idempotencyKey): retries return the original order,
  * - order + items + status event are written in one transaction before success is reported,
- * - throttled per device/IP and per table.
+ * - throttled per guest (cookie), per trusted client IP, per table and per location — see
+ *   `limitPublic`; guests sharing a Wi-Fi are never limited as one client (audit BUG-05).
  */
-export async function submitTableOrder(input: unknown, clientKey: string): Promise<SubmittedOrder> {
+export const TABLE_ORDER_LIMITS = { guest: [10, 600], ip: [150, 600], table: [40, 3600], location: [400, 600] } as const;
+
+export async function submitTableOrder(input: unknown, client: string | ClientIdentity): Promise<SubmittedOrder> {
+  const who = asIdentity(client);
   const data = submitTableOrderSchema.parse(input);
   const table = await resolveTableToken(data.qrToken);
   if (!table) throw new OrderRejectedError('qr_invalid');
@@ -79,14 +84,16 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
   const existing = await db.order.findUnique({ where: { locationId_idempotencyKey: { locationId: location.id, idempotencyKey: data.idempotencyKey } } });
   if (existing) return { orderNumber: existing.number, trackingToken, status: existing.status, duplicate: true };
 
-  await rateLimit(`order:client:${location.id}:${clientKey}`, 8, 600);
-  await rateLimit(`order:table:${table.id}`, 30, 3600);
+  const L = TABLE_ORDER_LIMITS;
+  await limitPublic(`order:${location.id}`, who, { guest: [...L.guest], ip: [...L.ip], scope: { key: 'location', limit: [...L.location] } });
+  await rateLimit(`order:table:${table.id}`, ...L.table, true);
 
   // Optional table code (M8-12): staff open the table and tell guests a 4-digit code.
   if (location.tableCodeRequired) {
     const open = await db.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
     if (!open?.verificationCode) throw new OrderRejectedError('table_not_open');
-    await rateLimit(`order:tablecode:${table.id}:${clientKey}`, 6, 600);
+    await rateLimit(`order:tablecode:${table.id}:${who.guest}`, 6, 600);
+    if (who.ip) await rateLimit(`order:tablecode:${table.id}:${who.ip}`, 30, 600, true);
     if (!data.tableCode || !safeEqual(data.tableCode, open.verificationCode)) throw new OrderRejectedError('table_code_invalid');
   }
 

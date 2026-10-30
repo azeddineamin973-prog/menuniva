@@ -5,7 +5,8 @@ import { audit } from '../audit';
 import { db } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic } from '../rate-limit';
 import type { TenantContext } from '../tenant';
 
 /** Upsell rules (M11-09/10): "when the cart has X (or something from category C), suggest Y". */
@@ -83,9 +84,9 @@ export async function upsellRulesFor(organizationId: string): Promise<UpsellRule
 const eventSchema = z.object({ ruleId: z.string().min(1).max(40), type: z.enum(['SHOWN', 'ACCEPTED']) });
 
 /** Public: records that a suggestion was shown or accepted. Anonymous; no personal data. */
-export async function recordUpsellEvent(input: unknown, clientKey: string) {
+export async function recordUpsellEvent(input: unknown, client: string | ClientIdentity) {
   const d = eventSchema.parse(input);
-  await rateLimit(`upsell:${clientKey}`, 120, 3600);
+  await limitPublic('upsell', asIdentity(client), { guest: [120, 3600], ip: [3000, 3600] });
   const rule = await db.upsellRule.findFirst({ where: { id: d.ruleId, isActive: true } });
   if (!rule) throw new UserFacingError('not_found', 404);
   await db.upsellEvent.create({ data: { organizationId: rule.organizationId, ruleId: rule.id, eventType: d.type } });

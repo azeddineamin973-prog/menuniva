@@ -1,6 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
-import type { CountryCode, LanguageCode, OrderChannel } from '@/generated/prisma/enums';
+import type { CountryCode, LanguageCode, OrderChannel, OrderStatus } from '@/generated/prisma/enums';
 import { Prisma } from '@/generated/prisma/client';
 import { LANGUAGES } from '@/i18n/config';
 import { openingHoursSchema, rangesFor, type OpeningHours } from '@/lib/opening-hours';
@@ -11,7 +11,8 @@ import { audit } from '../audit';
 import { db } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic, rateLimit } from '../rate-limit';
 import { syncLoyaltyForOrder } from './loyalty';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { createOrderRecord, OrderRejectedError, trackingTokenFor } from './orders';
@@ -141,7 +142,28 @@ function channelAvailable(pl: PublicLocation, channel: Exclude<OrderChannel, 'TA
   return null;
 }
 
-export async function submitPickupOrder(input: unknown, clientKey: string, now = new Date()) {
+/** Two identical submissions raced: the unique (locationId, idempotencyKey) index wins; return that order. */
+async function idempotentSubmit<T extends { duplicate: boolean }>(locationId: string, idempotencyKey: string, trackingToken: string, run: () => Promise<T>): Promise<T | { orderNumber: number; trackingToken: string; status: OrderStatus; duplicate: true }> {
+  try {
+    return await run();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      const again = await db.order.findUnique({ where: { locationId_idempotencyKey: { locationId, idempotencyKey } } });
+      if (again) return { orderNumber: again.number, trackingToken, status: again.status, duplicate: true };
+    }
+    throw e;
+  }
+}
+
+/** Takeaway/delivery throttling: per guest, per trusted IP, per phone number and per location (audit BUG-05). */
+export const REMOTE_ORDER_LIMITS = { guest: [10, 600], ip: [60, 600], phone: [8, 3600], location: [400, 600] } as const;
+async function limitRemoteOrder(locationId: string, who: ClientIdentity, phone: string) {
+  const L = REMOTE_ORDER_LIMITS;
+  await limitPublic(`order:${locationId}`, who, { guest: [...L.guest], ip: [...L.ip], scope: { key: 'location', limit: [...L.location] } });
+  await rateLimit(`order:phone:${locationId}:${phone.replace(/\D/g, '')}`, ...L.phone, true);
+}
+
+export async function submitPickupOrder(input: unknown, client: string | ClientIdentity, now = new Date()) {
   const d = submitPickupSchema.parse(input);
   const pl = await publicLocation(d.orgSlug, d.locationSlug);
   if (!pl) throw new OrderRejectedError('not_found');
@@ -154,8 +176,8 @@ export async function submitPickupOrder(input: unknown, clientKey: string, now =
   if (existing) return { orderNumber: existing.number, trackingToken, status: existing.status, duplicate: true };
   const pickupAt = resolvePickup(d.pickup, pickupOptions(location, location.takeawaySettings, now), now);
   if (!pickupAt) throw new OrderRejectedError('pickup_unavailable');
-  await rateLimit(`order:client:${location.id}:${clientKey}`, 8, 600);
-  return db.$transaction(async (tx) => {
+  await limitRemoteOrder(location.id, asIdentity(client), d.phone);
+  return idempotentSubmit(location.id, d.idempotencyKey, trackingToken, () => db.$transaction(async (tx) => {
     const quote = await quoteCart({ locationId: location.id, channel: 'TAKEAWAY', lang: d.language, items: d.items, now }, tx);
     if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
     const min = location.takeawaySettings?.minOrderCents ?? 0;
@@ -182,7 +204,7 @@ export async function submitPickupOrder(input: unknown, clientKey: string, now =
     await tx.order.update({ where: { id: order.id }, data: { paymentMethodIntent: 'PAY_AT_COUNTER' } });
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'NEW_ORDER', title: `New takeaway order #${order.number} — ${d.customerName}`, entityId: order.id } });
     return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false };
-  });
+  }));
 }
 
 // =============================================================== M9-04/05 delivery settings & zones
@@ -333,7 +355,7 @@ export const submitDeliverySchema = z.object({
 });
 
 /** Restaurant delivery order. Coverage, fee and totals are computed on the server only. */
-export async function submitDeliveryOrder(input: unknown, clientKey: string, now = new Date()) {
+export async function submitDeliveryOrder(input: unknown, client: string | ClientIdentity, now = new Date()) {
   const d = submitDeliverySchema.parse(input);
   const pl = await publicLocation(d.orgSlug, d.locationSlug);
   if (!pl) throw new OrderRejectedError('not_found');
@@ -350,8 +372,8 @@ export async function submitDeliveryOrder(input: unknown, clientKey: string, now
   const { valid, zone } = findZone(location.country, location.deliveryZones, d.postalCode);
   if (!valid) throw new OrderRejectedError('invalid_postal_code');
   if (!zone) throw new OrderRejectedError('outside_delivery_zone');
-  await rateLimit(`order:client:${location.id}:${clientKey}`, 8, 600);
-  return db.$transaction(async (tx) => {
+  await limitRemoteOrder(location.id, asIdentity(client), d.phone);
+  return idempotentSubmit(location.id, d.idempotencyKey, trackingToken, () => db.$transaction(async (tx) => {
     const active = await tx.order.count({ where: { locationId: location.id, channel: 'DELIVERY', status: { in: ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'] } } });
     if (active >= (settings?.maxActiveOrders ?? 10)) throw new OrderRejectedError('delivery_busy');
     const quote = await quoteCart({ locationId: location.id, channel: 'DELIVERY', lang: d.language, items: d.items, now }, tx);
@@ -385,7 +407,7 @@ export async function submitDeliveryOrder(input: unknown, clientKey: string, now
     });
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'NEW_ORDER', title: `New delivery order #${order.number} — ${zone.name}`, entityId: order.id } });
     return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false, deliveryFeeCents: fee };
-  });
+  }));
 }
 
 // =============================================================== M9-07/08 drivers

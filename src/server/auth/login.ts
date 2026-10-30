@@ -10,15 +10,17 @@ import { burnPasswordCheck, verifyPassword } from './password';
  */
 export const LOGIN_LIMITS = { perIp: 30, perEmail: 8, windowSeconds: 900 };
 
-export async function attemptLogin(email: string, password: string, ip: string): Promise<{ ok: true; userId: string } | { ok: false; error: 'invalid_credentials' | 'too_many_attempts' }> {
+export async function attemptLogin(email: string, password: string, ip: string | null): Promise<{ ok: true; userId: string } | { ok: false; error: 'invalid_credentials' | 'too_many_attempts' }> {
   const { perIp, perEmail, windowSeconds } = LOGIN_LIMITS;
-  if ((await isRateLimited(`login:ip:${ip}`, perIp, windowSeconds)) || (await isRateLimited(`login:email:${email}`, perEmail, windowSeconds))) {
+  if ((ip && (await isRateLimited(`login:ip:${ip}`, perIp, windowSeconds))) || (await isRateLimited(`login:email:${email}`, perEmail, windowSeconds))) {
     return { ok: false, error: 'too_many_attempts' };
   }
   const user = await db.user.findUnique({ where: { email } });
   const valid = user ? await verifyPassword(user.passwordHash, password) : (await burnPasswordCheck(password), false);
   if (user && valid && !user.disabledAt) return { ok: true, userId: user.id };
-  for (const [key, limit] of [[`login:ip:${ip}`, perIp], [`login:email:${email}`, perEmail]] as const) {
+  // Without a trusted client IP only the per-email limit applies (a shared 'unknown' bucket would let
+  // anyone lock everybody out).
+  for (const [key, limit] of [...(ip ? [[`login:ip:${ip}`, perIp] as const] : []), [`login:email:${email}`, perEmail] as const]) {
     await rateLimit(key, limit, windowSeconds).catch((e) => {
       if (!(e instanceof RateLimitError)) throw e;
     });

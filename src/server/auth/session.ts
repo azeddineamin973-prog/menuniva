@@ -4,15 +4,15 @@ import { cache } from 'react';
 import { db } from '../db';
 import { hashToken, newSecretToken } from '../crypto';
 import { secureCookies } from '../env';
+import { trustedClientIp } from '../client-identity';
 
 export const SESSION_COOKIE = 'mn_session';
 const SESSION_DAYS = 30;
 const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
 
-export async function clientIp(): Promise<string> {
-  const h = await headers();
-  // Behind a trusted reverse proxy configure it to set x-forwarded-for; first hop is the client.
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip') || 'local';
+/** Client IP as far as the deployment's trusted proxies vouch for it (TRUST_PROXY_HOPS), else null. */
+export async function clientIp(): Promise<string | null> {
+  return trustedClientIp(await headers());
 }
 
 /** Creates a DB session and sets the httpOnly cookie. Call only from server actions / route handlers. */

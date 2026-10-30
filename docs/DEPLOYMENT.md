@@ -32,16 +32,61 @@ Session cookies are `Secure` whenever `APP_BASE_URL` is https.
 | `DATABASE_URL` | managed PostgreSQL ≥ 16, TLS (`?sslmode=require`), dedicated user |
 | `APP_SECRET` | 32+ random bytes: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Changing it invalidates order-tracking links. |
 | `UPLOAD_DIR` | persistent disk path for logos/photos (back it up too) |
+| `TRUST_PROXY_HOPS` | **required** in production/staging: number of reverse proxies in front of the app that append the client address to `X-Forwarded-For` (usually `1`). See §2.1 |
 | Optional | `SMTP_URL`, `EMAIL_FROM`, `TRANSLATION_PROVIDER` + key, `ERROR_MONITORING_DSN`, `BACKUP_DIR`, `BACKUP_KEEP` |
 
 ## 2. Hosting requirements
 - Node.js ≥ 20.9 (Next 16 requirement; developed and tested on Node 24) on a Linux server/VM or container; one or more app instances
-  behind an https reverse proxy (Caddy, nginx, a platform load balancer). The proxy must pass `X-Forwarded-For`
-  and `Host`; rate limits use the client IP.
+  behind an https reverse proxy (Caddy, nginx, a platform load balancer) — see §2.1 for the exact proxy rules.
 - Managed PostgreSQL in an EU region (guest personal data; GDPR), automated daily backups + point-in-time recovery.
 - Persistent storage for `UPLOAD_DIR` (or a single instance with a mounted volume). Several instances need a shared volume.
 - Live updates use polling (no WebSockets), so any standard proxy works.
 - Rate limits are stored in PostgreSQL, so several instances share them.
+
+### 2.1 Reverse proxy and client IP (`TRUST_PROXY_HOPS`) — required
+
+MenuNiva never trusts `X-Forwarded-For` blindly (audit BUG-05). It uses the entry that
+`TRUST_PROXY_HOPS` positions from the **right** of the header, i.e. the address written by your own
+closest proxy. Everything a client writes further left is ignored.
+
+| Setup | `TRUST_PROXY_HOPS` |
+|---|---|
+| One reverse proxy (nginx, Caddy, Traefik, a single cloud load balancer) | `1` |
+| CDN in front of a load balancer, both appending | `2` |
+| App reachable directly, no proxy (not recommended) | `0` — client IPs are unknown; only per-guest, per-table, per-location and per-email limits apply |
+
+Required proxy behaviour:
+1. The proxy **appends** the real client address (never replaces it with a client-supplied value):
+   - nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and `proxy_set_header Host $host;`
+   - Caddy (`reverse_proxy`): appends by default; keep the default `Host` handling.
+   - Cloud load balancers: use the platform's documented "append client IP to X-Forwarded-For" mode.
+2. The Node.js port is **not reachable from the internet** — only the proxy may connect to it (firewall,
+   private network or `127.0.0.1` bind). If clients can reach the app directly, they can fake the header
+   (shown in `audit/phaseG-proxy-sim.mjs`: through an appending proxy a client rotating cookies and fake
+   headers is stopped at the per-IP limit; directly to the app port it is not).
+3. Pass `Host` unchanged (the CSRF origin check compares `Origin` with `Host`/`X-Forwarded-Host`).
+
+Verification after the hosting is chosen (currently **BLOCKED — no hosting selected**): from two
+different networks, open `/t/<qr>` and place an order; then check that `Session.ip` of a staff login shows
+the real public address and that sending `X-Forwarded-For: 1.2.3.4` from a client does not change it.
+
+Guest throttling does not depend on IPs alone: each guest browser gets a random, httpOnly
+`mn_guest` cookie (set when a menu page opens) and its own order bucket. Guests on one restaurant
+Wi-Fi with the same phone model therefore do not block each other. The cookie can be deleted, so
+per-IP (when known), per-table, per-phone and per-location ceilings still apply; overflows of these
+shared limits are recorded in Super Admin → System errors (source `abuse`).
+
+| Limit (per location) | Guest | Trusted IP | Other |
+|---|---|---|---|
+| Table orders | 10 / 10 min | 150 / 10 min | 40 / hour per table, 400 / 10 min per location |
+| Takeaway / delivery orders | 10 / 10 min | 60 / 10 min | 8 / hour per phone number, 400 / 10 min per location |
+| Waiter / bill requests | 6 / 10 min | 60 / 10 min | 30 / 10 min per table |
+| Feedback | 5 / hour | 60 / hour | 300 / hour per location |
+| Reservations | 5 / hour | 30 / hour | 200 / hour per location |
+| Login failures | — | 30 / 15 min (only with a known IP) | 8 / 15 min per email |
+| Sign-ups | — | 10 / hour | 100 / hour platform-wide when the IP is unknown |
+
+Retries with the same order idempotency key never count against these limits.
 
 ## 3. First deployment
 ```bash

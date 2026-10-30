@@ -12,7 +12,8 @@ import { db, type Tx } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 
 /** Reservations that occupy capacity / tables. */
@@ -134,7 +135,7 @@ export class ReservationRejectedError extends UserFacingError {
  * A guest REQUESTS a reservation; the restaurant confirms it. Availability is re-checked
  * inside a transaction holding a per-location lock, so two guests cannot take the last seats.
  */
-export async function requestReservation(input: unknown, clientKey: string, now = new Date()) {
+export async function requestReservation(input: unknown, client: string | ClientIdentity, now = new Date()) {
   const d = reservationRequestSchema.parse(input);
   const org = await db.restaurantOrganization.findUnique({ where: { slug: d.orgSlug } });
   if (!org || org.status === 'SUSPENDED' || org.status === 'ARCHIVED') throw new ReservationRejectedError('not_found');
@@ -144,7 +145,7 @@ export async function requestReservation(input: unknown, clientKey: string, now 
   const token = reservationTokenFor(location.id, d.idempotencyKey);
   const existing = await db.reservation.findUnique({ where: { locationId_idempotencyKey: { locationId: location.id, idempotencyKey: d.idempotencyKey } } });
   if (existing) return { token, status: existing.status, duplicate: true };
-  await rateLimit(`reservation:${location.id}:${clientKey}`, 5, 3600);
+  await limitPublic(`reservation:${location.id}`, asIdentity(client), { guest: [5, 3600], ip: [30, 3600], scope: { key: 'location', limit: [200, 3600] } });
   const s = location.reservationSettings ?? DEFAULTS;
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'res:' + location.id}))`;

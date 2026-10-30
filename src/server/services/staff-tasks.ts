@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { audit } from '../audit';
 import { db } from '../db';
 import { UserFacingError } from '../errors';
-import { rateLimit } from '../rate-limit';
+import { asIdentity, type ClientIdentity } from '../client-identity';
+import { limitPublic } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { resolveTableToken } from './orders';
 
@@ -14,11 +15,11 @@ export const tableRequestSchema = z.object({ qrToken: z.string().min(10).max(64)
  * Duplicate open requests of the same type for a table are merged (not repeated).
  * This does not create an invoice.
  */
-export async function createTableRequest(input: unknown, clientKey: string) {
+export async function createTableRequest(input: unknown, client: string | ClientIdentity) {
   const d = tableRequestSchema.parse(input);
   const table = await resolveTableToken(d.qrToken);
   if (!table || !table.location.isPublished) throw new UserFacingError('qr_invalid', 404);
-  await rateLimit(`table-request:${table.id}:${clientKey}`, 6, 600);
+  await limitPublic(`table-request:${table.id}`, asIdentity(client), { guest: [6, 600], ip: [60, 600], scope: { key: 'table', limit: [30, 600] } });
   const existing = await db.staffTask.findFirst({ where: { tableId: table.id, type: d.type, status: { in: ['OPEN', 'ACKNOWLEDGED'] } } });
   if (existing) return { taskId: existing.id, duplicate: true };
   const session = await db.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
