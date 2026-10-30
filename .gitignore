@@ -39,3 +39,5 @@ coverage/
 /audit/backups/
 /audit/logs/
 /audit/artifacts/
+# database CA certificates (downloaded, environment-specific)
+/certs/
