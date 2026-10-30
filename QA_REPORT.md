@@ -131,3 +131,20 @@ Defect fixed: after an error the Import Studio kept the previous file when the s
 | `tests/e2e/bills.spec.ts` | Browser: ticket PDF + print page, merged bill 19,50 €, owner reduces an item with reason → 13,00 €, split payment by item (cash) and by amount (card) → 0,00 €, only paid item marked paid, receipt says “NÃO É FATURA / NOT AN INVOICE”, close blocked while preparing, close completes orders, audit entries; table code flow with waiter opening the table |
 
 Still manual: printing on a real thermal printer (ESC/POS network sending is not enabled or hardware-tested).
+
+## Run 5 — 2026-10-30 (session 3): M9 Takeaway, delivery, drivers & WhatsApp
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Migration | `20261030061701_delivery_payment_intent` (dev + test) | ✅ applied |
+| Unit + integration | `npm test` | ✅ 15 files, **150 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **21 tests passed** |
+
+| File | Covers |
+|---|---|
+| `tests/integration/fulfilment.test.ts` (13) | Pickup slots after lead time inside pickup/opening hours in Europe/Lisbon (winter and summer time), no fake slots after closing; min order and pause enforced; **TEST 8** takeaway → READY → COMPLETED with real customer status; invalid phone and dishes without a takeaway price refused; PT/ES zone pattern validation; **TEST 9** fee from zone, free above threshold, totals computed server-side, address stored normalised; **TEST 10** outside zone and invalid postal code refused, nothing created; zone minimum, unavailable payment option, active-order limit, pause, delivery hours; driver workflow (only assigned driver, only READY→OUT_FOR_DELIVERY→DELIVERED, cash collected → PAID, timestamps); cancellation reason; tenant isolation |
+| `tests/e2e/takeaway-delivery.spec.ts` (4) | Owner saves takeaway settings; guest orders pickup from the storefront (takeaway price, dish without takeaway price hidden), staff see name/phone, guest sees “Pronto para levantamento”; owner adds zone (invalid code refused), guest outside zone gets refusal + “choose pickup”, valid code shows fee 2,00 € and total 9,00 € from the server; owner assigns driver, driver (mobile) goes out and delivers with cash → PAID, driver blocked from management; WhatsApp: prefilled wa.me message with items and total, no MenuNiva order created, clear “only sent when you press send”; Glovo/Uber/Instagram links |
+
+Defects fixed: WhatsApp message could be built before the server total loaded (now uses the cart estimate as fallback); driver dropdown offered roles that cannot open the driver screen (now delivery staff only).
+Not provided by design: GPS/live location tracking, automatic Glovo/Uber courier dispatch, distance-based fees.

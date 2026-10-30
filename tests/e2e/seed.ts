@@ -12,15 +12,17 @@ async function main() {
   const password = 'e2e-password-123';
   const passwordHash = await hashPassword(password);
   const mk = (role: string) => db.user.create({ data: { name: `E2E ${role}`, email: `${prefix}.${role}@test.menuniva.local`, passwordHash } });
-  const [owner, cook, waiter] = await Promise.all([mk('owner'), mk('cook'), mk('waiter')]);
+  const [owner, cook, waiter, driver] = await Promise.all([mk('owner'), mk('cook'), mk('waiter'), mk('driver')]);
   const { org, location } = await createRestaurant({ name: `E2E Seed ${prefix}`, country: 'PT' }, { ownerUserId: owner.id, actorUserId: owner.id });
   await db.restaurantMembership.createMany({
     data: [
       { userId: cook.id, organizationId: org.id, role: 'KITCHEN_STAFF' },
       { userId: waiter.id, organizationId: org.id, role: 'WAITER' },
+      { userId: driver.id, organizationId: org.id, role: 'DELIVERY_STAFF' },
     ],
   });
   await db.user.updateMany({ where: { id: { in: [owner.id, cook.id, waiter.id] } }, data: { preferredLanguage: 'en' } });
+  await db.user.update({ where: { id: driver.id }, data: { preferredLanguage: 'en' } });
   const menu = await db.menu.findFirstOrThrow({ where: { organizationId: org.id } });
   const kitchen = await db.kitchenStation.create({ data: { organizationId: org.id, locationId: location.id, name: 'Seed Kitchen', type: 'KITCHEN' } });
   const cat = await db.menuCategory.create({ data: { organizationId: org.id, menuId: menu.id, defaultStationId: kitchen.id, translations: { create: { language: 'pt', name: 'Seed pratos', status: 'SOURCE' } } } });
@@ -50,7 +52,7 @@ async function main() {
       categoryId: cat.id,
       status: 'ACTIVE',
       translations: { create: [{ language: 'pt', name: 'Seed harira', status: 'SOURCE' }] },
-      prices: { create: [{ channel: 'DINE_IN', amountCents: 650 }] },
+      prices: { create: [{ channel: 'DINE_IN', amountCents: 650 }, { channel: 'TAKEAWAY', amountCents: 600 }, { channel: 'DELIVERY', amountCents: 700 }] },
     },
   });
   const table = await db.restaurantTable.create({ data: { organizationId: org.id, locationId: location.id, label: '07', qrTokens: { create: { token: `seed${prefix}`.padEnd(22, 'x').slice(0, 22) } } }, include: { qrTokens: true } });
@@ -60,7 +62,7 @@ async function main() {
   });
   await db.restaurantOrganization.update({ where: { id: org.id }, data: { status: 'ACTIVE' } });
   console.log(
-    JSON.stringify({ orgSlug: org.slug, orgId: org.id, locationId: location.id, dishId: dish.id, plainDishId: plain.id, password, owner: owner.email, cook: cook.email, waiter: waiter.email, qrToken: table.qrTokens[0].token }),
+    JSON.stringify({ orgSlug: org.slug, orgId: org.id, locationId: location.id, dishId: dish.id, plainDishId: plain.id, password, owner: owner.email, cook: cook.email, waiter: waiter.email, driver: driver.email, qrToken: table.qrTokens[0].token }),
   );
 }
 

@@ -151,18 +151,18 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M9 — Takeaway, Delivery Zones, Staff Delivery & WhatsApp
 
-- [ ] **M9-01** Takeaway settings (pickup hours, lead time, min order, pause) — P0
-- [ ] **M9-02** Pickup slot generation in location time zone — P0
-- [ ] **M9-03** Takeaway checkout (name, phone, slot) — P0
-- [ ] **M9-04** Delivery settings + named zones with postal-code patterns and fees — P0
-- [ ] **M9-05** PT/ES postal code validation and matching — P0
-- [ ] **M9-06** Delivery checkout: coverage check, fee, min order, free threshold, offer takeaway if outside — P0
-- [ ] **M9-07** Delivery workflow (accept, prepare, ready, assign driver, out for delivery, delivered, cancel w/ reason) — P0
-- [ ] **M9-08** Driver/staff mobile view — P1
-- [ ] **M9-09** WhatsApp prefilled order message (opened after user action; never claims sent) — P1
-- [ ] **M9-10** External links on storefront (Glovo, Uber Eats, website, Instagram, Facebook, TikTok) — P1
-- [ ] **M9-11** Cash on delivery option — P1
-- [ ] **M9-12** Tests: TEST 8, 9, 10 + milestone gate — P0
+- [x] **M9-01** Takeaway settings (pickup hours, lead time, min order, pause) — P0
+- [x] **M9-02** Pickup slot generation in location time zone — P0
+- [x] **M9-03** Takeaway checkout (name, phone, slot) — P0
+- [x] **M9-04** Delivery settings + named zones with postal-code patterns and fees — P0
+- [x] **M9-05** PT/ES postal code validation and matching — P0
+- [x] **M9-06** Delivery checkout: coverage check, fee, min order, free threshold, offer takeaway if outside — P0
+- [x] **M9-07** Delivery workflow (accept, prepare, ready, assign driver, out for delivery, delivered, cancel w/ reason) — P0
+- [x] **M9-08** Driver/staff mobile view — P1
+- [x] **M9-09** WhatsApp prefilled order message (opened after user action; never claims sent) — P1
+- [x] **M9-10** External links on storefront (Glovo, Uber Eats, website, Instagram, Facebook, TikTok) — P1
+- [x] **M9-11** Cash on delivery option — P1
+- [x] **M9-12** Tests: TEST 8, 9, 10 + milestone gate — P0
 
 ## M10 — Promotions, Coupons & Reservations
 

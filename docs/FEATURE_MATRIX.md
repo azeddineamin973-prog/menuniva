@@ -51,9 +51,9 @@ Status values (never a generic "Complete"):
 | Add-1 | Session merge, item modify/cancel w/ audit, transfer, split bills, partial payments | M8 | M8-01..08, M8-12 | `services/bills.ts`, `dashboard/[org]/bills/*` | bills.test.ts, bills.spec.ts | TESTED |
 | Add-2 | Kitchen/café ticket printing (PDF/print first) | M8 | M8-10 | `server/printing`, `services/tickets.ts`, `kitchen/tickets/*/print`, ticket PDF route | bills.test.ts, bills.spec.ts | TESTED |
 | Add-2 | Direct thermal printer integration | M8 | M8-11 | ESC/POS formatter in `server/printing` (sending not enabled) | unit (bytes) | NEEDS CONFIGURATION (hardware untested) |
-| 10 | Takeaway (pickup hours, lead time, min, pause) | M9 | M9-01..03 | — | TEST 8 | NOT STARTED |
-| 11 | Delivery zones (PT/ES postal codes), fees, workflow, driver view | M9 | M9-04..08, M9-11 | — | TEST 9, 10 | NOT STARTED |
-| 12 | WhatsApp prefilled ordering + external links | M9 | M9-09, M9-10 | storefront links + plain WhatsApp link (prefill pending) | — | IN PROGRESS |
+| 10 | Takeaway (pickup hours, lead time, min, pause) | M9 | M9-01..03 | `services/fulfilment.ts`, `r/[org]/order/[mode]`, `dashboard/[org]/takeaway` | TEST 8 (integration + E2E) | TESTED |
+| 11 | Delivery zones (PT/ES postal codes), fees, workflow, driver view | M9 | M9-04..08, M9-11 | `services/fulfilment.ts`, `dashboard/[org]/delivery`, `dashboard/[org]/driver` | TEST 9, 10 (integration + E2E) | TESTED (no GPS, no courier dispatch — by design) |
+| 12 | WhatsApp prefilled ordering + external links | M9 | M9-09, M9-10 | `buildWhatsAppText` in `menu-app.tsx`, storefront links | takeaway-delivery.spec.ts | TESTED |
 | 13 | Promotions & coupons (server-side) | M10 | M10-01..04 | — | TEST 11 | NOT STARTED |
 | 14 | Reservations with double-booking prevention | M10 | M10-05..09 | — | TEST 12 | NOT STARTED |
 | 15 | Smart Reviews, no gating, equal Google link | M11 | M11-01..05 | — | TEST 13, 14 | NOT STARTED |

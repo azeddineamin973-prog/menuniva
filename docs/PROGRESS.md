@@ -2,7 +2,7 @@
 
 ## Current status (session 3 — 2026-10-30)
 
-**Task completion (from TODO.md):** 114 of 169 tasks verified (67.5 %) · 0 in progress · 55 not started.
+**Task completion (from TODO.md):** 126 of 169 tasks verified (74.6 %) · 0 in progress · 43 not started.
 
 | Milestone | Verified | Not started | Total | Gate |
 |---|---|---|---|---|
@@ -14,15 +14,16 @@
 | M6 QR, tables, customer menu, cart | 13 | 0 | 13 | ✅ closed |
 | M7 Ordering, live dashboard, KDS | 13 | 0 | 13 | ✅ closed |
 | M8 Sessions, bills, waiter requests, printing | 13 | 0 | 13 | ✅ closed (thermal printer hardware untested) |
-| M9 Takeaway, delivery, WhatsApp | 0 | 12 | 12 | next |
-| M10 Promotions, reservations | 0 | 10 | 10 | |
+| M9 Takeaway, delivery, WhatsApp | 12 | 0 | 12 | ✅ closed |
+| M10 Promotions, reservations | 0 | 10 | 10 | next |
 | M11 Reviews, loyalty, upsell | 0 | 11 | 11 | |
 | M12 Analytics, subscriptions, admin | 0 | 10 | 10 | |
 | M13 Security, backups, deployment | 1 | 12 | 13 | |
 
-Tests: 137 unit/integration + 17 browser E2E passing (QA_REPORT.md, Run 4).
+Tests: 150 unit/integration + 21 browser E2E passing (QA_REPORT.md, Run 5).
 
 ## Completed in session 3
+- M9: takeaway settings and pickup slots (location time zone), takeaway checkout, PT/ES postal-code delivery zones with fees/minimum/free threshold, delivery checkout with server-side coverage and totals, delivery hours/pause/active-order limit, cash or card on delivery, driver assignment and mobile driver view (cash collection recorded), WhatsApp prefilled orders (not stored), storefront ordering links.
 - M8: table sessions (open/close/transfer), merged bills, item reduce/void with audit, split payments by item or amount with row locks, payment voiding, internal receipt (not an invoice), kitchen/café ticket print page + PDF + ESC/POS formatter, optional 4-digit table code, payment and certified-invoicing provider interfaces (not connected).
 
 ## Completed in session 2
@@ -51,5 +52,5 @@ Tests: 137 unit/integration + 17 browser E2E passing (QA_REPORT.md, Run 4).
 3. Real business data still to be entered by the restaurant: postal code, opening hours, dishes, prices, allergens, tables, Google review link.
 
 ## Next tasks (in order)
-1. M9: takeaway settings → pickup slots → takeaway checkout → delivery zones → delivery checkout → driver view → WhatsApp (TEST 8, 9, 10).
-2. M10 M11, M12, M13.
+1. M10: promotion engine → coupons → promotions UI → savings display → reservations (TEST 11, 12).
+2. M11 M11, M12, M13.

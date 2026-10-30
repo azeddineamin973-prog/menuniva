@@ -25,7 +25,11 @@ export function trackingTokenFor(locationId: string, idempotencyKey: string): st
 }
 
 export class OrderRejectedError extends UserFacingError {
-  constructor(code: string, public issues: QuoteIssue[] = []) {
+  constructor(
+    code: string,
+    public issues: QuoteIssue[] = [],
+    public extra: Record<string, unknown> = {},
+  ) {
     super(code, 422, issues);
   }
 }
@@ -243,6 +247,8 @@ export async function changeOrderStatus(ctx: TenantContext, input: unknown) {
       await tx.kitchenTicket.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED' } });
       await tx.orderItem.updateMany({ where: { orderId: order.id, voidedAt: null }, data: { prepStatus: 'CANCELLED' } });
     }
+    if (d.to === 'OUT_FOR_DELIVERY') await tx.deliveryOrderDetails.updateMany({ where: { orderId: order.id }, data: { outForDeliveryAt: now } });
+    if (d.to === 'DELIVERED') await tx.deliveryOrderDetails.updateMany({ where: { orderId: order.id }, data: { deliveredAt: now } });
     if (d.to === 'COMPLETED' || d.to === 'DELIVERED') {
       await tx.orderItem.updateMany({ where: { orderId: order.id, prepStatus: 'READY' }, data: { prepStatus: 'SERVED' } });
     }

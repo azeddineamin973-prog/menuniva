@@ -7,7 +7,7 @@ import { expect, type Page } from '@playwright/test';
 loadEnv();
 const TEST_DB = process.env.TEST_DATABASE_URL ?? '';
 
-export type Seed = { orgSlug: string; orgId: string; locationId: string; dishId: string; plainDishId: string; password: string; owner: string; cook: string; waiter: string; qrToken: string };
+export type Seed = { orgSlug: string; orgId: string; locationId: string; dishId: string; plainDishId: string; password: string; owner: string; cook: string; waiter: string; driver: string; qrToken: string };
 
 /** Creates a fictitious restaurant in the TEST database via the real services. */
 export function seed(prefix: string): Seed {

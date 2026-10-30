@@ -25,6 +25,25 @@ export type CartLine = {
 type Msg = Pick<Messages, 'customer' | 'common' | 'allergens' | 'validation'>;
 type QuoteIssue = { index: number; code: string; name?: string; group?: string };
 
+/** Channel-specific checkout data computed on the server (slots, payment options, WhatsApp). */
+export type CheckoutConfig = {
+  country: 'PT' | 'ES';
+  pickup?: { asapAllowed: boolean; asapMinutes: number; slots: { value: string; label: string }[]; minOrderCents: number };
+  delivery?: { cash: boolean; card: boolean; pickupHref?: string };
+  whatsapp?: { number: string; restaurant: string; only?: boolean };
+};
+type DeliveryQuote = { valid: boolean; covered: boolean; zoneName?: string; feeCents: number; minOrderCents: number; freeFromCents: number | null; subtotalCents: number; totalCents: number; meetsMinimum: boolean; estimatedMinutes: number };
+
+/** Prefilled WhatsApp text. Opening WhatsApp does NOT send anything; the guest presses send. */
+export function buildWhatsAppText(m: Msg, restaurant: string, lines: CartLine[], total: string, opts: { name?: string; address?: string; pickup: boolean }) {
+  const c = m.customer;
+  const out = [fmt(c.waIntro, { restaurant }), ...lines.map((l) => `• ${l.quantity} × ${l.name}${l.detail ? ` (${l.detail})` : ''}${l.notes ? ` — ${l.notes}` : ''}`), ''];
+  out.push(opts.pickup ? c.waPickup : fmt(c.waDelivery, { address: opts.address ?? '' }));
+  if (opts.name) out.push(fmt(c.waName, { name: opts.name }));
+  out.push(fmt(c.waTotal, { total }));
+  return out.join('\n');
+}
+
 function uid() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 }
@@ -59,6 +78,7 @@ export function MenuApp({
   tableLabel,
   upsell,
   tableCodeRequired = false,
+  checkout,
 }: {
   channel: OrderChannel;
   scope: { qrToken?: string; orgSlug: string; locationSlug: string; locationId: string };
@@ -73,6 +93,7 @@ export function MenuApp({
   tableLabel?: string;
   upsell?: React.ReactNode;
   tableCodeRequired?: boolean;
+  checkout?: CheckoutConfig;
 }) {
   const router = useRouter();
   const c = m.customer;
@@ -194,6 +215,7 @@ export function MenuApp({
           pricesIncludeVat={pricesIncludeVat}
           upsell={upsell}
           tableCodeRequired={tableCodeRequired}
+          checkout={checkout}
           onClose={() => setCartOpen(false)}
           onSubmitted={(token) => {
             setLines([]);
@@ -372,6 +394,7 @@ function CartSheet({
   pricesIncludeVat,
   upsell,
   tableCodeRequired,
+  checkout,
   onClose,
   onSubmitted,
 }: {
@@ -387,6 +410,7 @@ function CartSheet({
   pricesIncludeVat: boolean;
   upsell?: React.ReactNode;
   tableCodeRequired?: boolean;
+  checkout?: CheckoutConfig;
   onClose: () => void;
   onSubmitted: (trackingToken: string) => void;
 }) {
@@ -394,6 +418,12 @@ function CartSheet({
   const [quote, setQuote] = useState<{ subtotalCents: number; issues: QuoteIssue[] } | null>(null);
   const [notes, setNotes] = useState('');
   const [tableCode, setTableCode] = useState('');
+  const [contact, setContact] = useState({ name: '', phone: '', address: '', postalCode: '', city: '', deliveryNotes: '' });
+  const [pickup, setPickup] = useState(() => (checkout?.pickup?.asapAllowed ? 'asap' : checkout?.pickup?.slots[0]?.value ?? ''));
+  const [payMethod, setPayMethod] = useState<'CASH_ON_DELIVERY' | 'CARD_TERMINAL'>(checkout?.delivery?.cash === false ? 'CARD_TERMINAL' : 'CASH_ON_DELIVERY');
+  const [dq, setDq] = useState<DeliveryQuote | null>(null);
+  const field = (k: keyof typeof contact) => ({ value: contact[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setContact({ ...contact, [k]: e.target.value }) });
+  const inputCls = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-sm';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idemKey] = useState(() => {
@@ -423,16 +453,45 @@ function CartSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(items), channel, lang]);
 
+  useEffect(() => {
+    if (channel !== 'DELIVERY' || contact.postalCode.replace(/\D/g, '').length < 5 || lines.length === 0) return setDq(null);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetch('/api/public/delivery/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, postalCode: contact.postalCode, language: lang, items }),
+        signal: ctrl.signal,
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((q) => q && setDq(q))
+        .catch(() => {});
+    }, 350);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact.postalCode, JSON.stringify(items), channel]);
+
   const issueText = (i: QuoteIssue) => (i.code === 'selection_rules' && i.group ? fmt(m.validation.chooseOption, { group: i.group }) : fmt(c.itemNoLongerAvailable, { name: i.name ?? lines[i.index]?.name ?? '' }));
 
   const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const body = JSON.stringify({ qrToken: scope.qrToken, idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined, tableCode: tableCode.trim() || undefined });
+    const common = { idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined };
+    const body = JSON.stringify(
+      channel === 'TABLE'
+        ? { ...common, qrToken: scope.qrToken, tableCode: tableCode.trim() || undefined }
+        : channel === 'TAKEAWAY'
+          ? { ...common, orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, pickup, customerName: contact.name, phone: contact.phone }
+          : { ...common, orgSlug: scope.orgSlug, locationSlug: scope.locationSlug, customerName: contact.name, phone: contact.phone, address: contact.address, postalCode: contact.postalCode, city: contact.city, deliveryNotes: contact.deliveryNotes || undefined, paymentMethod: payMethod },
+    );
+    const endpoint = channel === 'TABLE' ? '/api/public/orders/table' : channel === 'TAKEAWAY' ? '/api/public/orders/pickup' : '/api/public/orders/delivery';
     // Retries reuse the same idempotency key, so a flaky connection can never create two orders.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await fetch(channel === 'TABLE' ? '/api/public/orders/table' : '/api/public/orders/pickup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.trackingToken) {
           sessionStorage.removeItem(`mn_idem:${scope.qrToken ?? scope.locationSlug}`);
@@ -446,6 +505,12 @@ function CartSheet({
         else if (data.error === 'qr_invalid') setError(c.qrInvalid);
         else if (data.error === 'table_code_invalid') setError(c.tableCodeInvalid);
         else if (data.error === 'table_not_open') setError(c.tableNotOpen);
+        else if (data.error === 'below_minimum') setError(fmt(c.minimumOrder, { amount: money(data.minOrderCents ?? 0) }));
+        else if (data.error === 'pickup_unavailable') setError(c.pickupUnavailable);
+        else if (data.error === 'outside_delivery_zone') setError(c.outsideDeliveryZone);
+        else if (data.error === 'invalid_postal_code') setError(checkout?.country === 'ES' ? m.validation.invalidPostalCodeES : m.validation.invalidPostalCodePT);
+        else if (data.error === 'delivery_busy') setError(c.deliveryBusy);
+        else if (data.error === 'validation_failed') setError(m.validation.required);
         else if (res.status >= 500) {
           await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
           continue;
@@ -506,26 +571,101 @@ function CartSheet({
                 <span className="mt-1 block text-xs opacity-70">{c.tableCodeHint}</span>
               </label>
             )}
+            {channel !== 'TABLE' && (
+              <fieldset className="space-y-2 rounded-2xl bg-white/60 p-3" data-testid="checkout-fields">
+                <legend className="px-1 text-sm font-medium">{channel === 'TAKEAWAY' ? c.checkoutPickup : c.checkoutDelivery}</legend>
+                <input {...field('name')} placeholder={channel === 'DELIVERY' ? c.recipientName : c.yourName} aria-label={channel === 'DELIVERY' ? c.recipientName : c.yourName} autoComplete="name" className={inputCls} required maxLength={80} />
+                <input {...field('phone')} placeholder={c.phone} aria-label={c.phone} type="tel" autoComplete="tel" className={inputCls} required maxLength={20} />
+                {channel === 'TAKEAWAY' && checkout?.pickup && (
+                  <label className="block text-sm">
+                    <span className="mb-1 block">{c.pickupTime}</span>
+                    {!checkout.pickup.asapAllowed && checkout.pickup.slots.length === 0 ? (
+                      <span className="block rounded-xl bg-amber-50 p-2 text-amber-900">{c.noPickupSlots}</span>
+                    ) : (
+                      <select value={pickup} onChange={(e) => setPickup(e.target.value)} className={inputCls} data-testid="pickup-select">
+                        {checkout.pickup.asapAllowed && <option value="asap">{c.asap} (~{checkout.pickup.asapMinutes} min)</option>}
+                        {checkout.pickup.slots.map((sl) => <option key={sl.value} value={sl.value}>{sl.label}</option>)}
+                      </select>
+                    )}
+                  </label>
+                )}
+                {channel === 'DELIVERY' && (
+                  <>
+                    <input {...field('address')} placeholder={c.address} aria-label={c.address} autoComplete="street-address" className={inputCls} required maxLength={200} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input {...field('postalCode')} placeholder={checkout?.country === 'ES' ? '00000' : '0000-000'} aria-label={c.postalCode} autoComplete="postal-code" inputMode="numeric" className={inputCls} maxLength={10} data-testid="postal-input" />
+                      <input {...field('city')} placeholder={c.city} aria-label={c.city} autoComplete="address-level2" className={inputCls} maxLength={80} />
+                    </div>
+                    <textarea {...field('deliveryNotes')} placeholder={c.deliveryNotes} aria-label={c.deliveryNotes} className="min-h-[50px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-sm" maxLength={300} />
+                    {dq && !dq.valid && <p className="text-sm text-red-700" role="alert">{checkout?.country === 'ES' ? m.validation.invalidPostalCodeES : m.validation.invalidPostalCodePT}</p>}
+                    {dq && dq.valid && !dq.covered && (
+                      <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900" role="alert" data-testid="outside-zone">
+                        {c.outsideDeliveryZone}
+                        {checkout?.delivery?.pickupHref && <a href={checkout.delivery.pickupHref} className="mt-1 block font-medium underline">{c.choosePickupInstead}</a>}
+                      </div>
+                    )}
+                    {dq?.covered && (
+                      <p className="text-xs opacity-70" data-testid="delivery-zone">
+                        {dq.zoneName} · {fmt(c.estimatedTime, { minutes: dq.estimatedMinutes })}
+                        {dq.freeFromCents !== null && ` · ${fmt(c.freeDeliveryFrom, { amount: money(dq.freeFromCents) })}`}
+                        {!dq.meetsMinimum && <span className="block font-medium text-red-700">{fmt(c.minimumOrder, { amount: money(dq.minOrderCents) })}</span>}
+                      </p>
+                    )}
+                    <fieldset className="text-sm">
+                      <legend className="mb-1">{c.paymentMethod}</legend>
+                      {checkout?.delivery?.cash && <label className="flex items-center gap-2"><input type="radio" checked={payMethod === 'CASH_ON_DELIVERY'} onChange={() => setPayMethod('CASH_ON_DELIVERY')} />{c.cashOnDelivery}</label>}
+                      {checkout?.delivery?.card && <label className="flex items-center gap-2"><input type="radio" checked={payMethod === 'CARD_TERMINAL'} onChange={() => setPayMethod('CARD_TERMINAL')} />{c.cardOnDelivery}</label>}
+                    </fieldset>
+                  </>
+                )}
+              </fieldset>
+            )}
             <div className="rounded-2xl border border-sf-accent/40 bg-white/60 p-3 text-sm">
               <p className="font-medium">{c.allergyNoticeTitle}</p>
               <p className="opacity-80">{allergyNotice}</p>
             </div>
             <div className="space-y-1 rounded-2xl bg-white/80 p-4">
               <div className="flex justify-between text-sm"><span>{c.subtotal}</span><span className="tabular-nums">{quote ? money(quote.subtotalCents) : '…'}</span></div>
-              <div className="flex justify-between text-lg font-semibold"><span>{c.total}</span><span className="tabular-nums" data-testid="cart-total">{quote ? money(quote.subtotalCents) : '…'}</span></div>
+              {channel === 'DELIVERY' && (
+                <div className="flex justify-between text-sm"><span>{c.deliveryFee}</span><span className="tabular-nums" data-testid="delivery-fee">{dq?.covered ? (dq.feeCents === 0 ? c.deliveryFee0 : money(dq.feeCents)) : '—'}</span></div>
+              )}
+              <div className="flex justify-between text-lg font-semibold"><span>{c.total}</span><span className="tabular-nums" data-testid="cart-total">{channel === 'DELIVERY' && dq?.covered ? money(dq.totalCents) : quote ? money(quote.subtotalCents) : '…'}</span></div>
               {pricesIncludeVat && <p className="text-xs opacity-60">{c.pricesIncludeVat}</p>}
-              <p className="text-xs opacity-60">{c.paymentNote} {channel === 'TABLE' ? c.payToWaiter : c.payAtCounter}.</p>
+              <p className="text-xs opacity-60">{channel === 'DELIVERY' ? `${c.paymentNote}` : `${c.paymentNote} ${channel === 'TABLE' ? c.payToWaiter : c.payAtCounter}.`}</p>
             </div>
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
-            <button
-              type="button"
-              disabled={!canOrder || submitting || !quote || quote.issues.length > 0}
-              onClick={submit}
-              className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-medium text-white disabled:opacity-50"
-              data-testid="submit-order"
-            >
-              {submitting ? c.submitting : c.submitOrder}
-            </button>
+            {!checkout?.whatsapp?.only && (
+              <button
+                type="button"
+                disabled={
+                  !canOrder ||
+                  submitting ||
+                  !quote ||
+                  quote.issues.length > 0 ||
+                  (channel === 'DELIVERY' && (!dq?.covered || !dq.meetsMinimum)) ||
+                  (channel === 'TAKEAWAY' && !pickup)
+                }
+                onClick={submit}
+                className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-medium text-white disabled:opacity-50"
+                data-testid="submit-order"
+              >
+                {submitting ? c.submitting : c.submitOrder}
+              </button>
+            )}
+            {checkout?.whatsapp && (
+              <div className="space-y-1">
+                <a
+                  href={`https://wa.me/${checkout.whatsapp.number}?text=${encodeURIComponent(buildWhatsAppText(m, checkout.whatsapp.restaurant, lines, money(quote ? quote.subtotalCents : lines.reduce((n, l) => n + l.unitCents * l.quantity, 0)), { name: contact.name, pickup: channel !== 'DELIVERY', address: contact.address }))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-12 w-full items-center justify-center rounded-2xl bg-[#1f7a4c] font-medium text-white"
+                  data-testid="whatsapp-send"
+                >
+                  {c.sendViaWhatsApp}
+                </a>
+                <p className="text-xs opacity-70">{c.whatsappOpenNote} {c.waPricesNote}</p>
+              </div>
+            )}
           </>
         )}
       </div>

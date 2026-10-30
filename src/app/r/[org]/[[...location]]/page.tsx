@@ -13,7 +13,7 @@ import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storef
 
 export const dynamic = 'force-dynamic';
 
-const CHANNELS_AVAILABLE = { takeaway: false, delivery: false, reservations: false };
+const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: false };
 
 type Params = { org: string; location?: string[] };
 
@@ -59,6 +59,7 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   const menu = await getPublicMenu(location.id, lang, 'TABLE');
   const review = await db.reviewSettings.findUnique({ where: { locationId: location.id } });
   const base = `/r/${org.slug}${org.locations.length > 1 ? `/${location.slug}` : ''}`;
+  const lq = org.locations.length > 1 ? `?l=${location.slug}` : '';
   const wa = location.whatsappOrderingEnabled && location.whatsappNumber ? location.whatsappNumber.replace(/[^\d]/g, '') : null;
 
   const jsonLd = {
@@ -75,11 +76,11 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   };
 
   const actions: { label: string; href: string; external?: boolean; primary?: boolean }[] = [];
-  // Takeaway (M9), delivery (M9) and reservations (M10) links appear once those modules ship.
-  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled) actions.push({ label: m.customer.pickup, href: `${base}/pickup`, primary: true });
-  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled) actions.push({ label: m.customer.restaurantDelivery, href: `${base}/delivery`, primary: true });
+  // Reservations (M10) link appears once that module ships.
+  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, primary: true });
+  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, primary: true });
   if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled) actions.push({ label: m.customer.reserveTable, href: `${base}/reserve` });
-  if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `https://wa.me/${wa}`, external: true });
+  if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}` });
   if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, external: true });
   if (location.uberEatsUrl) actions.push({ label: m.customer.orderOnUberEats, href: location.uberEatsUrl, external: true });
 

@@ -1037,6 +1037,7 @@ model Order {
   deliveryFeeCents Int           @default(0)
   totalCents       Int
   paidCents        Int           @default(0)
+  paymentMethodIntent PaymentMethod? // how the guest said they will pay (informational)
   currency         String        @default("EUR")
   idempotencyKey   String
   trackingTokenHash String       @unique
@@ -1228,6 +1229,7 @@ model DeliverySettings {
   maxActiveOrders      Int     @default(10)
   deliveryHours        Json?
   cashOnDeliveryEnabled Boolean @default(true)
+  cardOnDeliveryEnabled Boolean @default(false) // driver carries the restaurant's card terminal
   paused               Boolean @default(false)
 
   location             RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)

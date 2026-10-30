@@ -216,6 +216,8 @@ function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck }: { 
           </li>
         ))}
       </ul>
+      {o.channel === 'TAKEAWAY' && o.pickupAt && <p className="mt-2 text-xs font-medium">{f(t.pickupAt, { time: new Date(o.pickupAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })} · {o.customerPhone}</p>}
+      {o.delivery && <p className="mt-2 text-xs">{t.deliverTo}: {o.delivery.addressLine}, {o.delivery.postalCode} {o.delivery.city} · {o.delivery.phone}</p>}
       {o.customerNotes && <p className="mt-2 rounded-lg bg-warning/10 px-2 py-1 text-xs text-warning">{t.note}: {o.customerNotes}</p>}
       {o.tickets.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
