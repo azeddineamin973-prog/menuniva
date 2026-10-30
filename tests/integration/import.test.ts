@@ -6,6 +6,12 @@ import { resetDatabase } from '../support/db';
 import { createOrderingFixture } from '../support/fixtures';
 import { buildXlsx } from '../support/xlsx';
 
+/** Sends every category that still needs a station to the test kitchen (as an owner would in review). */
+async function toKitchen(f: Awaited<ReturnType<typeof createOrderingFixture>>, jobId: string) {
+  const p = await getImportPreview(f.ctx, jobId);
+  return Object.fromEntries(p.stationTargets.map((t) => [t.label, f.kitchen.id]));
+}
+
 const CSV = 'Categoria;Nome;Descrição;Preço\nEntradas de teste;Harira de teste;Sopa;6,50\nPratos de teste;Tajine de teste;Com ameixas;16,90\nPratos de teste;Cuscuz de teste;;sem preço\n';
 
 describe('M5 Import Studio', () => {
@@ -25,7 +31,10 @@ describe('M5 Import Studio', () => {
     expect(p.summary.after.newCategories).toEqual(['Entradas de teste', 'Pratos de teste']);
 
     await expect(publishImport(f.ctx, job.id, { confirm: false })).rejects.toThrow();
-    const res = await publishImport(f.ctx, job.id, { confirm: true, makeVisible: true });
+    // GAP-01: categories without a station need an explicit choice before publishing
+    expect(p.stationTargets).toEqual([{ label: 'Entradas de teste', isNew: true }, { label: 'Pratos de teste', isNew: true }]);
+    await expect(publishImport(f.ctx, job.id, { confirm: true, makeVisible: true })).rejects.toThrow(/Choose a preparation station .*Entradas de teste, Pratos de teste/);
+    const res = await publishImport(f.ctx, job.id, { confirm: true, makeVisible: true, stations: await toKitchen(f, job.id) });
     expect(res).toMatchObject({ created: 3, visible: 2, drafts: 1 }); // the dish without price stays a draft
 
     const menu = await getPublicMenu(f.location.id, 'pt', 'TABLE');
@@ -75,7 +84,7 @@ describe('M5 Import Studio', () => {
     // Owner chooses the Uber Eats version as canonical
     const uber = p.products.find((x) => x.source.type === 'UBER_EATS')!;
     await chooseCanonical(f.ctx, job.id, group.id, uber.id);
-    const res = await publishImport(f.ctx, job.id, { confirm: true, makeVisible: true });
+    const res = await publishImport(f.ctx, job.id, { confirm: true, makeVisible: true, stations: await toKitchen(f, job.id) });
     expect(res).toMatchObject({ created: 2, visible: 0, linkedPrices: 1 }); // platform prices never become in-house prices
 
     const tajine = await db.menuProduct.findFirstOrThrow({ where: { organizationId: f.org.id, translations: { some: { name: 'Tajine de frango' } } }, include: { prices: true, externalPrices: true } });
@@ -93,7 +102,7 @@ describe('M5 Import Studio', () => {
     expect(match.decision?.decision).toBe('SKIP');
     expect(match.decision?.targetProductId).toBe(f.dish.id);
     await setImportDecision(f.ctx, job.id, { importedProductId: match.id, decision: 'MERGE_INTO_EXISTING', targetProductId: f.dish.id });
-    await publishImport(f.ctx, job.id, { confirm: true });
+    await publishImport(f.ctx, job.id, { confirm: true, stations: await toKitchen(f, job.id) });
     const dish = await db.menuProduct.findUniqueOrThrow({ where: { id: f.dish.id }, include: { prices: true, translations: true, externalPrices: true } });
     expect(dish.prices.find((x) => x.channel === 'DINE_IN')?.amountCents).toBe(1690);
     expect(dish.translations.find((t) => t.language === 'pt')?.name).toBe('Test dish');
@@ -109,7 +118,7 @@ describe('M5 Import Studio', () => {
     await expect(publishImport(f.ctx, job.id, { confirm: true })).rejects.toThrow();
     const job2 = await createImportJob(f.ctx);
     await addImportSource(f.ctx, job2.id, { type: 'TEXT', text: 'PRATOS\nTajine de teste 16,90 €' });
-    await publishImport(f.ctx, job2.id, { confirm: true });
+    await publishImport(f.ctx, job2.id, { confirm: true, stations: await toKitchen(f, job2.id) });
     await expect(cancelImport(f.ctx, job2.id)).rejects.toThrow(/Only unpublished/);
   });
 

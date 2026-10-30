@@ -40,6 +40,10 @@ test('TEST 2 (browser): CSV upload → review → publish → guest menu; TEST 1
   await expect(page.getByTestId('before-after')).toContainText('Translation required');
 
   const publish = page.getByTestId('publish-import-form');
+  await publish.getByLabel('I reviewed the items above.').check();
+  await publish.getByRole('button', { name: /Publish 1 new dishes/ }).click();
+  await expect(publish.getByRole('alert')).toContainText('Choose a preparation station'); // GAP-01: no silent "no station"
+  await publish.getByLabel('Station for Entradas importadas').selectOption({ label: 'Seed Kitchen' });
   await publish.getByLabel('Make dishes visible to guests now').check();
   await publish.getByLabel('I reviewed the items above.').check();
   await publish.getByRole('button', { name: /Publish 1 new dishes/ }).click();

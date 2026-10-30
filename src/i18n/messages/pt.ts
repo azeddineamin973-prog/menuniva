@@ -324,6 +324,7 @@ const pt: Messages = {
     cancelPrompt: "Motivo do cancelamento (visível para o cliente):",
     cancelled: "Cancelado: {reason}",
     waitingStations: "À espera dos postos de cozinha",
+    noStation: 'Sem posto de preparação — não aparece em nenhum ecrã de cozinha',
     conflict: "Este pedido já foi atualizado noutro dispositivo. O quadro foi atualizado.",
     updateFailed: "Não foi possível atualizar. Verifique a ligação e tente novamente.",
     waiterCalled: "Chamaram o empregado",

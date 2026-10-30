@@ -10,7 +10,7 @@ export async function markPreviewedAction(_p: ActionResult, form: FormData) {
 }
 
 export async function publishAction(_p: ActionResult, form: FormData) {
-  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => publishLocation(ctx, String(form.get('locationId')), form.get('confirm') === 'on'), { revalidate: '/dashboard/[org]' });
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => publishLocation(ctx, String(form.get('locationId')), form.get('confirm') === 'on', form.get('confirmUnrouted') === 'on'), { revalidate: '/dashboard/[org]' });
 }
 
 export async function unpublishAction(_p: ActionResult, form: FormData) {

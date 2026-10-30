@@ -100,6 +100,15 @@ async function writeCategoryTranslations(tx: Tx, categoryId: string, translation
   }
 }
 
+/** Sets (or clears) the preparation station used by every dish of a category without its own station. */
+export async function setCategoryStation(ctx: TenantContext, categoryId: string, stationId: string | null) {
+  const category = await db.menuCategory.findFirst({ where: { id: categoryId, organizationId: ctx.org.id } });
+  if (!category) throw new UserFacingError('Category not found.', 404);
+  const station = await assertStation(ctx, stationId);
+  await db.menuCategory.update({ where: { id: category.id }, data: { defaultStationId: station } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.category_station_set', entityType: 'MenuCategory', entityId: category.id, metadata: { stationId: station } });
+}
+
 export async function reorderCategories(ctx: TenantContext, orderedIds: string[]) {
   const owned = await db.menuCategory.findMany({ where: { organizationId: ctx.org.id, id: { in: orderedIds } }, select: { id: true } });
   if (owned.length !== orderedIds.length) throw new UserFacingError('Invalid category list.');

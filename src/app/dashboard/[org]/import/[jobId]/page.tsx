@@ -27,7 +27,7 @@ export default async function ImportJobPage({ params }: { params: Promise<{ org:
     if (e instanceof UserFacingError) notFound();
     throw e;
   }
-  const { job, sources, products, mappings, summary, existingProducts } = data;
+  const { job, sources, products, mappings, summary, existingProducts, stations, stationTargets } = data;
   const base = `/dashboard/${ctx.org.slug}`;
   const open = job.status === 'DRAFT' || job.status === 'NEEDS_REVIEW';
   const money = (c: number | null) => (c === null ? '—' : formatCents(c));
@@ -55,6 +55,9 @@ export default async function ImportJobPage({ params }: { params: Promise<{ org:
               <span data-testid="publish-summary">
                 {(job.summary as { created: number; visible: number; drafts: number; linkedPrices: number }).created} dishes created ({(job.summary as { visible: number }).visible} visible, {(job.summary as { drafts: number }).drafts} drafts to finish). {(job.summary as { linkedPrices: number }).linkedPrices} platform prices linked.{' '}
               </span>
+            )}
+            {!!(job.summary as { withoutStation?: number } | null)?.withoutStation && (
+              <span className="block text-warning" data-testid="publish-unrouted">⚠ {(job.summary as { withoutStation: number }).withoutStation} dishes have no preparation station and will not appear on any kitchen screen.</span>
             )}
             <Link href={`${base}/menu`} className="underline">Open the menu</Link> to add prices, translations and verified allergens.
           </Alert>
@@ -220,6 +223,23 @@ export default async function ImportJobPage({ params }: { params: Promise<{ org:
                 <ActionForm action={publishImportAction} submitLabel={`Publish ${summary.toCreate} new dishes`} testId="publish-import-form">
                   <input type="hidden" name="org" value={ctx.org.slug} />
                   <input type="hidden" name="jobId" value={job.id} />
+                  {stationTargets.length > 0 && (
+                    <fieldset className="space-y-2" data-testid="import-stations">
+                      <legend className="text-sm font-medium">Preparation station</legend>
+                      <p className="text-xs text-muted">Where are these dishes prepared? Orders are sent to that Kitchen or Café screen. Dishes without a station appear on no kitchen screen.</p>
+                      {stations.length === 0 && <Alert tone="warning">No kitchen stations exist yet. Create them in Kitchen Stations first, or the imported dishes will not reach any kitchen screen.</Alert>}
+                      {stationTargets.map((t) => (
+                        <label key={t.label} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <span>{t.label}{t.isNew ? <span className="text-xs text-muted"> (new category)</span> : null}</span>
+                          <Select name={`station:${t.label}`} defaultValue="" className="h-8 w-48 text-xs" aria-label={`Station for ${t.label}`} data-testid="import-station-select">
+                            <option value="">Choose…</option>
+                            {stations.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                            <option value="NO_STATION">No station (no kitchen ticket)</option>
+                          </Select>
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
                   <Checkbox name="makeVisible" label="Make dishes visible to guests now" description="Only dishes with a price from your own file. Platform-only prices and dishes without price stay as drafts." />
                   {summary.images > 0 && <Checkbox name="imageRights" label="I have the right to publish the imported photos" description="Photos are copied to MenuNiva only with this confirmation." />}
                   <Checkbox name="confirm" label="I reviewed the items above." />

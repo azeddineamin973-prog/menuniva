@@ -213,6 +213,7 @@ function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck, onPr
             {i.variantNameSnapshot && <span className="text-muted"> · {i.variantNameSnapshot}</span>}
             {i.modifiers.length > 0 && <span className="block ps-5 text-xs text-muted">{i.modifiers.map((x) => `${x.quantity > 1 ? `${x.quantity}× ` : ''}${x.nameSnapshot}`).join(', ')}</span>}
             {i.notes && <span className="block ps-5 text-xs font-medium text-warning">“{i.notes}”</span>}
+            {!i.stationId && <span className="block ps-5 text-xs text-warning" data-testid="item-no-station">⚠ {t.noStation}</span>}
           </li>
         ))}
       </ul>

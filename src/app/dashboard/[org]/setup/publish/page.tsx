@@ -10,7 +10,7 @@ export default async function PublishPage({ params }: { params: Promise<{ org: s
   const ctx = await requireTenantPage(org, 'settings.manage');
   const loc = await currentLocation(ctx);
   if (!loc) return <Alert tone="warning">No location.</Alert>;
-  const { location, blockers, warnings } = await publishChecks(ctx, loc.id);
+  const { location, blockers, warnings, unrouted, stations } = await publishChecks(ctx, loc.id);
   return (
     <>
       <PageHeader title="Publish" description="Publishing makes your menu public and turns on the ordering channels you enabled." />
@@ -37,6 +37,9 @@ export default async function PublishPage({ params }: { params: Promise<{ org: s
               <input type="hidden" name="org" value={ctx.org.slug} />
               <input type="hidden" name="locationId" value={location.id} />
               <Checkbox name="confirm" label="I reviewed the dishes, prices and translations. Allergen information shown to guests has been verified by the restaurant." />
+              {stations > 0 && unrouted.length > 0 && (
+                <Checkbox name="confirmUnrouted" label={`The ${unrouted.length} dishes without a kitchen station need no preparation (they will not appear on any kitchen screen).`} />
+              )}
             </ActionForm>
           )}
         </CardBody>

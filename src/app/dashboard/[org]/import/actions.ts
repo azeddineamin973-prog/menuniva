@@ -60,7 +60,13 @@ export async function publishImportAction(_p: ActionResult, form: FormData) {
   return runTenantAction(
     form.get('org'),
     'import.manage',
-    (ctx) => publishImport(ctx, String(form.get('jobId')), { confirm: form.get('confirm') === 'on' ? true : undefined, makeVisible: form.get('makeVisible') === 'on', imageRights: form.get('imageRights') === 'on' }),
+    (ctx) =>
+      publishImport(ctx, String(form.get('jobId')), {
+        confirm: form.get('confirm') === 'on' ? true : undefined,
+        makeVisible: form.get('makeVisible') === 'on',
+        imageRights: form.get('imageRights') === 'on',
+        stations: Object.fromEntries([...form.entries()].filter(([k, v]) => k.startsWith('station:') && typeof v === 'string' && v).map(([k, v]) => [k.slice('station:'.length), String(v)])),
+      }),
     R,
   );
 }

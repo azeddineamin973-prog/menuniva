@@ -324,6 +324,7 @@ const ar: Messages = {
     cancelPrompt: "سبب الإلغاء (يظهر للعميل):",
     cancelled: "ملغى: {reason}",
     waitingStations: "بانتظار محطات المطبخ",
+    noStation: 'بدون محطة تحضير — لا يظهر على أي شاشة مطبخ',
     conflict: "تم تحديث هذا الطلب على جهاز آخر. تم تحديث اللوحة.",
     updateFailed: "تعذّر التحديث. تحقق من الاتصال وحاول مجددًا.",
     waiterCalled: "تم استدعاء النادل",

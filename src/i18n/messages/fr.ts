@@ -323,6 +323,7 @@ const fr: Messages = {
     cancelPrompt: "Motif d’annulation (visible par le client) :",
     cancelled: "Annulée : {reason}",
     waitingStations: "En attente des postes de cuisine",
+    noStation: 'Aucun poste de préparation — n’apparaît sur aucun écran cuisine',
     conflict: "Cette commande a déjà été mise à jour sur un autre appareil. Le tableau a été actualisé.",
     updateFailed: "Mise à jour impossible. Vérifiez la connexion et réessayez.",
     waiterCalled: "Serveur appelé",

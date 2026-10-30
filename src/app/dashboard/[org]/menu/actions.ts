@@ -14,6 +14,7 @@ import {
   saveProduct,
   saveProductOptions,
   setProductPrice,
+  setCategoryStation,
   setProductStatus,
   setSoldOut,
 } from '@/server/services/menu';
@@ -47,6 +48,9 @@ export async function quickAddCategoryAction(_p: ActionResult, form: FormData) {
   );
 }
 
+export async function setCategoryStationAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'menu.edit', (ctx) => setCategoryStation(ctx, String(form.get('categoryId')), (form.get('stationId') as string) || null), REVALIDATE);
+}
 export async function moveCategoryAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'menu.edit', (ctx) => moveCategory(ctx, String(form.get('id')), form.get('dir') === 'up' ? 'up' : 'down'), REVALIDATE);
 }

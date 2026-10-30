@@ -5,8 +5,9 @@ import { Alert, Badge, ButtonLink, Card, EmptyState, Field, Input, PageHeader, S
 import { LANGUAGE_NATIVE_NAME, LANGUAGE_TAG } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
 import { getMenuAdmin, pickName } from '@/server/services/menu';
+import { unroutedDishes } from '@/server/services/publish';
 import { requireTenantPage } from '@/server/tenant';
-import { moveCategoryAction, moveProductAction, quickAddCategoryAction, toggleSoldOutAction, deleteCategoryAction } from './actions';
+import { moveCategoryAction, moveProductAction, quickAddCategoryAction, setCategoryStationAction, toggleSoldOutAction, deleteCategoryAction } from './actions';
 
 export default async function MenuPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
@@ -17,6 +18,9 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
   const langs = [o.sourceLanguage, o.defaultLanguage, ...o.enabledLanguages];
   const tag = LANGUAGE_TAG[o.sourceLanguage];
   const productCount = categories.reduce((n, c) => n + c.products.length, 0);
+  // Visible dishes that reach no Kitchen/Café screen (e.g. imported into a category without a station).
+  const unrouted = stations.length > 0 ? await unroutedDishes(ctx.org.id) : [];
+  const unroutedByCategory = categories.filter((c) => unrouted.some((u) => u.categoryId === c.id));
 
   return (
     <>
@@ -37,6 +41,31 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
         <div className="mb-4">
           <Alert tone="warning" title="No kitchen stations yet">
             Create stations (for example Kitchen and Café) so each dish is sent to the right screen. <Link className="underline" href={`${base}/stations`}>Create stations</Link>
+          </Alert>
+        </div>
+      )}
+
+      {unrouted.length > 0 && (
+        <div className="mb-4" data-testid="unrouted-warning">
+          <Alert tone="warning" title={`${unrouted.length} visible dishes are not sent to any kitchen screen`}>
+            <p>{unrouted.slice(0, 8).map((u) => u.name).join(', ')}{unrouted.length > 8 ? '…' : ''}. Orders for them create no Kitchen/Café ticket.</p>
+            {canEdit && (
+              <ul className="mt-2 space-y-2">
+                {unroutedByCategory.map((c) => (
+                  <li key={c.id}>
+                    <ActionForm action={setCategoryStationAction} submitLabel="Set station" submitVariant="secondary" successText="Saved" className="flex flex-wrap items-center gap-2 space-y-0">
+                      <input type="hidden" name="org" value={ctx.org.slug} />
+                      <input type="hidden" name="categoryId" value={c.id} />
+                      <span className="text-sm font-medium">{pickName(c.translations, langs) ?? 'Untitled category'}</span>
+                      <Select name="stationId" defaultValue="" className="h-8 w-44 text-xs" aria-label={`Station for ${pickName(c.translations, langs) ?? 'category'}`} required>
+                        <option value="" disabled>Choose a station…</option>
+                        {stations.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                      </Select>
+                    </ActionForm>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Alert>
         </div>
       )}

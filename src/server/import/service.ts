@@ -186,7 +186,7 @@ export async function getImportPreview(ctx: TenantContext, jobId: string) {
     db.importMapping.findMany({ where: { jobId } }),
     db.importReviewDecision.findMany({ where: { jobId } }),
     db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true } }),
-    db.categoryTranslation.findMany({ where: { category: { organizationId: ctx.org.id }, language: job.sourceLanguage }, select: { name: true } }),
+    db.categoryTranslation.findMany({ where: { category: { organizationId: ctx.org.id }, language: job.sourceLanguage }, select: { name: true, category: { select: { id: true, defaultStationId: true } } } }),
     db.menuProduct.findMany({ where: { organizationId: ctx.org.id, status: { not: 'ARCHIVED' } }, select: { id: true, translations: { where: { language: job.sourceLanguage }, select: { name: true } } } }),
   ]);
   const dec = new Map(decisions.map((d) => [d.importedProductId, d]));
@@ -195,8 +195,12 @@ export async function getImportPreview(ctx: TenantContext, jobId: string) {
   const importedCats = [...new Set(products.map((p) => p.categoryName).filter((c): c is string => !!c))];
   const newCats = [...new Set(toCreate.map((p) => p.categoryName ?? 'Imported'))].filter((c) => !existingCats.has(normalizeName(c)));
   const otherLanguages = org.enabledLanguages.filter((l) => l !== job.sourceLanguage);
+  const stations = await activeStations(ctx);
   return {
     job,
+    stations,
+    /** Categories that will receive new dishes but have no preparation station yet (new or existing). */
+    stationTargets: stationTargets(toCreate, existingCategories),
     sources,
     products: products.map((p) => ({ ...p, decision: dec.get(p.id) ?? null })),
     mappings,
@@ -222,7 +226,29 @@ export async function getImportPreview(ctx: TenantContext, jobId: string) {
   };
 }
 
-export const publishSchema = z.object({ confirm: z.literal(true), makeVisible: z.boolean().default(false), imageRights: z.boolean().default(false) });
+export const publishSchema = z.object({
+  confirm: z.literal(true),
+  makeVisible: z.boolean().default(false),
+  imageRights: z.boolean().default(false),
+  /** Preparation station per category name: a station id, or NO_STATION (served without a kitchen ticket). */
+  stations: z.record(z.string().max(200), z.string().max(40)).default({}),
+});
+export const NO_STATION = 'NO_STATION';
+
+async function activeStations(ctx: TenantContext, tx: Tx | typeof db = db) {
+  return tx.kitchenStation.findMany({ where: { organizationId: ctx.org.id, isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { id: true, name: true, type: true } });
+}
+
+type CatRow = { name: string; category: { id: string; defaultStationId: string | null } };
+/** Category labels (as they will appear on the menu) that get new dishes and have no station. */
+function stationTargets(toCreate: { categoryName: string | null }[], existing: CatRow[]) {
+  const byName = new Map(existing.map((c) => [normalizeName(c.name), c]));
+  const labels = [...new Set(toCreate.map((p) => p.categoryName?.trim() || 'Imported'))];
+  return labels
+    .map((label) => ({ label, existing: byName.get(normalizeName(label)) ?? null }))
+    .filter((t) => !t.existing?.category.defaultStationId)
+    .map((t) => ({ label: t.label, isNew: !t.existing }));
+}
 
 /**
  * Publishes reviewed decisions in ONE transaction. Rules:
@@ -237,6 +263,20 @@ export async function publishImport(ctx: TenantContext, jobId: string, input: un
   const opts = publishSchema.parse(input);
   const job = await ownedJob(ctx, jobId);
   if (job.status !== 'NEEDS_REVIEW') throw new UserFacingError('This import cannot be published (it is not waiting for review).');
+  // Imported dishes must not silently miss the Kitchen/Café displays (audit GAP-01): every category
+  // without a station needs an explicit choice — a station, or "no preparation station".
+  const preview = await getImportPreview(ctx, jobId);
+  const stationIds = new Set(preview.stations.map((st) => st.id));
+  const stationFor = new Map<string, string | null>();
+  const missing: string[] = [];
+  for (const t of preview.stationTargets) {
+    const choice = opts.stations[t.label];
+    if (choice === NO_STATION) stationFor.set(normalizeName(t.label), null);
+    else if (choice && stationIds.has(choice)) stationFor.set(normalizeName(t.label), choice);
+    else if (choice) throw new UserFacingError('Choose a valid preparation station.');
+    else if (preview.stations.length > 0) missing.push(t.label);
+  }
+  if (missing.length) throw new UserFacingError(`Choose a preparation station (Kitchen, Café…) for: ${missing.join(', ')}.`);
   const images: { productId: string; url: string }[] = [];
   const result = await db.$transaction(
     async (tx) => {
@@ -252,12 +292,18 @@ export async function publishImport(ctx: TenantContext, jobId: string, input: un
       const menu = (await tx.menu.findFirst({ where: { organizationId: ctx.org.id, isActive: true }, orderBy: { createdAt: 'asc' } })) ?? (await tx.menu.create({ data: { organizationId: ctx.org.id, name: 'Menu' } }));
       const cats = await tx.menuCategory.findMany({ where: { organizationId: ctx.org.id }, include: { translations: { where: { language: lang } } } });
       const catByName = new Map(cats.filter((c) => c.translations[0]).map((c) => [normalizeName(c.translations[0].name), c.id]));
+      // Existing categories without a station get the station chosen in review.
+      for (const c of cats) {
+        const key = c.translations[0] ? normalizeName(c.translations[0].name) : null;
+        const chosen = key ? stationFor.get(key) : undefined;
+        if (chosen && !c.defaultStationId) await tx.menuCategory.update({ where: { id: c.id }, data: { defaultStationId: chosen } });
+      }
       let catOrder = cats.reduce((m, c) => Math.max(m, c.sortOrder), 0);
       const categoryFor = async (name: string | null) => {
         const label = name?.trim() || 'Imported';
         const key = normalizeName(label);
         if (catByName.has(key)) return catByName.get(key)!;
-        const c = await tx.menuCategory.create({ data: { organizationId: ctx.org.id, menuId: menu.id, sortOrder: ++catOrder, translations: { create: { language: lang, name: label, status: 'SOURCE' } } } });
+        const c = await tx.menuCategory.create({ data: { organizationId: ctx.org.id, menuId: menu.id, sortOrder: ++catOrder, defaultStationId: stationFor.get(key) ?? null, translations: { create: { language: lang, name: label, status: 'SOURCE' } } } });
         catByName.set(key, c.id);
         return c.id;
       };
@@ -309,7 +355,8 @@ export async function publishImport(ctx: TenantContext, jobId: string, input: un
           linkedPrices++;
         }
       }
-      const summary = { created: created.length, visible, drafts: created.length - visible, linkedPrices, skipped: products.length - creates.length - merges.length, imagesRequested: images.length };
+      const unrouted = await tx.menuProduct.count({ where: { id: { in: created }, stationId: null, category: { defaultStationId: null } } });
+      const summary = { created: created.length, visible, drafts: created.length - visible, linkedPrices, skipped: products.length - creates.length - merges.length, imagesRequested: images.length, withoutStation: unrouted };
       await tx.importJob.update({ where: { id: job.id }, data: { createdProductIds: created, summary } });
       await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'import.published', entityType: 'ImportJob', entityId: job.id, metadata: summary }, tx);
       return summary;

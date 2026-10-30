@@ -323,6 +323,7 @@ const en = {
     cancelPrompt: "Reason for cancelling (shown to the guest):",
     cancelled: "Cancelled: {reason}",
     waitingStations: "Waiting for kitchen stations",
+    noStation: 'No preparation station — not shown on any kitchen screen',
     conflict: "This order was already updated on another device. The board has been refreshed.",
     updateFailed: "Could not update. Check the connection and try again.",
     waiterCalled: "Waiter called",
