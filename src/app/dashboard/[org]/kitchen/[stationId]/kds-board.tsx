@@ -123,6 +123,7 @@ export function KdsBoard({ org, stationId, canUpdate, t }: { org: string; statio
                         {tk.status === 'PENDING' && <Button size="lg" className="flex-1" disabled={busy === tk.id} onClick={() => move(tk, 'PREPARING')} data-testid="kds-start">{t.kdsStart}</Button>}
                         {tk.status !== 'READY' && <Button size="lg" variant={tk.status === 'PENDING' ? 'secondary' : 'primary'} className="flex-1" disabled={busy === tk.id} onClick={() => move(tk, 'READY')} data-testid="kds-ready">{t.kdsReadyBtn}</Button>}
                         {tk.status === 'READY' && <Button size="lg" variant="secondary" className="flex-1" disabled={busy === tk.id} onClick={() => move(tk, 'PREPARING')}>{t.kdsUndo}</Button>}
+                        <a href={`/api/dashboard/${org}/kds/tickets/${tk.id}/pdf`} target="_blank" rel="noreferrer" className="inline-flex h-12 items-center rounded-xl border border-white/20 px-3 text-sm" data-testid="kds-print" aria-label="Print ticket">🖨</a>
                       </div>
                     )}
                   </article>

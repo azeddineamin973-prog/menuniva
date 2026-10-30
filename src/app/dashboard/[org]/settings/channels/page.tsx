@@ -33,6 +33,7 @@ export default async function ChannelsPage({ params }: { params: Promise<{ org: 
               <Checkbox name="tableOrderingEnabled" label="Order at table (QR codes)" description="Guests order from their table. Staff accept each order." defaultChecked={location.tableOrderingEnabled} />
               <Checkbox name="takeawayEnabled" label="Takeaway / pickup" description="Not yet available to guests — arrives with the Takeaway module (milestone M9)." defaultChecked={location.takeawayEnabled} />
               <Checkbox name="deliveryEnabled" label="Restaurant delivery" description="Not yet available to guests — arrives with the Delivery module (milestone M9)." defaultChecked={location.deliveryEnabled} />
+              <Checkbox name="tableCodeRequired" label="Require a table code" description="Staff open each table and tell guests a 4-digit code. Reduces orders from copied QR codes." defaultChecked={location.tableCodeRequired} />
               <Checkbox name="reservationsEnabled" label="Reservation requests" description="Not yet available to guests — arrives with the Reservations module (milestone M10)." defaultChecked={location.reservationsEnabled} />
               <Checkbox name="whatsappOrderingEnabled" label="WhatsApp order button" description="Opens WhatsApp with a prepared message. These orders are not stored in MenuNiva." defaultChecked={location.whatsappOrderingEnabled} />
               <div className="rounded-xl border border-warning/30 bg-warning/5 p-3">

@@ -6,6 +6,7 @@ import { listTablesForLocation } from '@/server/services/tables';
 import { requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
 import { createTablesAction, rotateQrAction, saveAreaAction } from './actions';
+import { openTableAction } from '../bills/actions';
 
 export default async function TablesPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
@@ -94,7 +95,15 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">Table {t.label} {!t.isActive && <Badge tone="danger">inactive</Badge>}</p>
                     <p className="text-xs text-muted">{t.area?.name ?? 'No area'}{t.seats ? ` · ${t.seats} seats` : ''}</p>
-                    {t.sessions[0] && <Badge tone="lime">Occupied (open session)</Badge>}
+                    {t.sessions[0] ? (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone="lime">Occupied</Badge>
+                        {t.sessions[0].verificationCode && <Badge tone="dark" data-testid="table-code">Code {t.sessions[0].verificationCode}</Badge>}
+                        {ctx.can('payments.record') && <a href={`${base}/bills/${t.sessions[0].id}`} className="text-xs font-medium underline" data-testid="bill-link">Bill</a>}
+                      </span>
+                    ) : (
+                      location.tableCodeRequired && ctx.can('tasks.manage') && <InlineAction action={openTableAction} fields={{ org: ctx.org.slug, tableId: t.id }} label="Open table" variant="primary" testId="open-table" />
+                    )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {token && (
                         <>

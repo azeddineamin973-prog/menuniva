@@ -50,6 +50,10 @@ const ar: Messages = {
     linkInvalid: 'هذا الرابط غير صالح أو منتهي الصلاحية.',
   },
   customer: {
+    tableCode: "رمز الطاولة",
+    tableCodeHint: "اطلب من فريقنا رمز الطاولة المكوّن من 4 أرقام.",
+    tableCodeInvalid: "رمز الطاولة غير صحيح.",
+    tableNotOpen: "هذه الطاولة غير مفتوحة بعد. يُرجى سؤال فريقنا.",
     menu: 'القائمة',
     table: 'طاولة {label}',
     orderAtTable: 'الطلب من الطاولة',
@@ -220,6 +224,7 @@ const ar: Messages = {
     chooseOption: 'يُرجى الاختيار في «{group}».',
   },
   staff: {
+    openBill: "الحساب",
     groupOperate: "التشغيل",
     groupMenu: "القائمة",
     groupGrow: "النمو",
@@ -274,6 +279,7 @@ const ar: Messages = {
     noStations: "لا توجد محطات مطبخ بعد. يجب على المدير إنشاؤها.",
   },
   nav: {
+    bills: "الحسابات والمدفوعات",
     overview: 'نظرة عامة',
     liveOrders: 'الطلبات المباشرة',
     tables: 'الطاولات ورموز QR',

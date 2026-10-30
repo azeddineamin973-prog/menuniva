@@ -49,6 +49,10 @@ const fr: Messages = {
     linkInvalid: 'Ce lien est invalide ou a expiré.',
   },
   customer: {
+    tableCode: "Code de table",
+    tableCodeHint: "Demandez à notre équipe le code de table à 4 chiffres.",
+    tableCodeInvalid: "Le code de table est incorrect.",
+    tableNotOpen: "Cette table n’est pas encore ouverte. Demandez à notre équipe.",
     menu: 'Menu',
     table: 'Table {label}',
     orderAtTable: 'Commander à table',
@@ -219,6 +223,7 @@ const fr: Messages = {
     chooseOption: 'Veuillez faire un choix pour « {group} ».',
   },
   staff: {
+    openBill: "Addition",
     groupOperate: "Opérations",
     groupMenu: "Menu",
     groupGrow: "Croissance",
@@ -273,6 +278,7 @@ const fr: Messages = {
     noStations: "Aucun poste de cuisine. Un responsable doit les créer.",
   },
   nav: {
+    bills: "Additions et paiements",
     overview: "Vue d'ensemble",
     liveOrders: 'Commandes en direct',
     tables: 'Tables et QR codes',

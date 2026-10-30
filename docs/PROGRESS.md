@@ -1,8 +1,8 @@
 # MenuNiva — Progress Log
 
-## Current status (end of session 2 — 2026-10-30)
+## Current status (session 3 — 2026-10-30)
 
-**Task completion (from TODO.md):** 103 of 169 tasks verified (60.9 %) · 0 in progress · 66 not started.
+**Task completion (from TODO.md):** 114 of 169 tasks verified (67.5 %) · 0 in progress · 55 not started.
 
 | Milestone | Verified | Not started | Total | Gate |
 |---|---|---|---|---|
@@ -13,14 +13,17 @@
 | M5 Import Studio | 16 | 0 | 16 | ✅ closed (OCR needs configuration; Glovo/Uber APIs need provider approval) |
 | M6 QR, tables, customer menu, cart | 13 | 0 | 13 | ✅ closed |
 | M7 Ordering, live dashboard, KDS | 13 | 0 | 13 | ✅ closed |
-| M8 Sessions, bills, waiter requests, printing | 2 | 11 | 13 | next |
-| M9 Takeaway, delivery, WhatsApp | 0 | 12 | 12 | |
+| M8 Sessions, bills, waiter requests, printing | 13 | 0 | 13 | ✅ closed (thermal printer hardware untested) |
+| M9 Takeaway, delivery, WhatsApp | 0 | 12 | 12 | next |
 | M10 Promotions, reservations | 0 | 10 | 10 | |
 | M11 Reviews, loyalty, upsell | 0 | 11 | 11 | |
 | M12 Analytics, subscriptions, admin | 0 | 10 | 10 | |
 | M13 Security, backups, deployment | 1 | 12 | 13 | |
 
-Tests: 128 unit/integration + 15 browser E2E passing (QA_REPORT.md, Run 3).
+Tests: 137 unit/integration + 17 browser E2E passing (QA_REPORT.md, Run 4).
+
+## Completed in session 3
+- M8: table sessions (open/close/transfer), merged bills, item reduce/void with audit, split payments by item or amount with row locks, payment voiding, internal receipt (not an invoice), kitchen/café ticket print page + PDF + ESC/POS formatter, optional 4-digit table code, payment and certified-invoicing provider interfaces (not connected).
 
 ## Completed in session 2
 - Closed all partially verified tasks of M1–M4, M6, M7 with new integration and browser tests.
@@ -48,5 +51,5 @@ Tests: 128 unit/integration + 15 browser E2E passing (QA_REPORT.md, Run 3).
 3. Real business data still to be entered by the restaurant: postal code, opening hours, dishes, prices, allergens, tables, Google review link.
 
 ## Next tasks (in order)
-1. M8: M8-01 table session lifecycle → M8-02 bill view → M8-05..M8-10 (TEST 18 payments part).
-2. M9 takeaway & delivery, M10, M11, M12, M13.
+1. M9: takeaway settings → pickup slots → takeaway checkout → delivery zones → delivery checkout → driver view → WhatsApp (TEST 8, 9, 10).
+2. M10 M11, M12, M13.

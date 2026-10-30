@@ -50,6 +50,10 @@ const pt: Messages = {
     linkInvalid: 'Esta ligação é inválida ou expirou.',
   },
   customer: {
+    tableCode: "Código da mesa",
+    tableCodeHint: "Peça à nossa equipa o código de 4 dígitos da mesa.",
+    tableCodeInvalid: "O código da mesa não está correto.",
+    tableNotOpen: "Esta mesa ainda não está aberta. Fale com a nossa equipa.",
     menu: 'Menu',
     table: 'Mesa {label}',
     orderAtTable: 'Pedir na mesa',
@@ -220,6 +224,7 @@ const pt: Messages = {
     chooseOption: 'Faça uma escolha em "{group}".',
   },
   staff: {
+    openBill: "Conta",
     groupOperate: "Operação",
     groupMenu: "Menu",
     groupGrow: "Crescimento",
@@ -274,6 +279,7 @@ const pt: Messages = {
     noStations: "Ainda não há postos de cozinha. Um gestor tem de os criar.",
   },
   nav: {
+    bills: "Contas e pagamentos",
     overview: 'Visão geral',
     liveOrders: 'Pedidos em direto',
     tables: 'Mesas e códigos QR',

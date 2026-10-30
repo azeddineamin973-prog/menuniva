@@ -43,14 +43,14 @@ Status values (never a generic "Complete"):
 | 6 | Quick mobile price/availability editing | M4 | M4-09 | `menu/quick/page.tsx` | — | TESTED |
 | 7 | Tables, areas, QR tokens, PNG/SVG/PDF | M6 | M6-01..04 | `services/tables.ts`, `dashboard/[org]/tables/*`, `api/dashboard/[org]/qr/*` | E2E | TESTED |
 | 7 | Table ordering flow (scan → order → track) | M6/M7 | M6-06..11, M7-01, M7-03 | `t/[token]`, `menu-app.tsx`, `services/orders.ts`, `o/[token]` | TEST 4, 6 (E2E) | TESTED |
-| 7, 8 | Call waiter / request bill | M8 | M8-03, M8-04 | `services/staff-tasks.ts`, live board | integration | TESTED |
+| 7, 8 | Call waiter / request bill | M8 | M8-03, M8-04 | `services/staff-tasks.ts`, live board | integration + E2E | TESTED |
 | 8 | Order state machine, Kanban, alerts | M7 | M7-02, M7-04, M7-05 | `lib/order-state.ts`, `orders/live-board.tsx` | TEST 6 + E2E | TESTED |
 | 8 | Idempotency, transactions, snapshots, availability check | M7 | M7-01 | `services/orders.ts` | TEST 7, 17 | TESTED |
 | 8, 27 | Labelled polling, connection health, reconnection | M7 | M7-10 | `use-polling.tsx` | — | TESTED |
 | 9 | KDS stations, routing, readiness aggregation | M7 | M7-06..09 | `stations/page.tsx`, `kitchen/*`, `services/orders.ts` | TEST 5 (E2E) | TESTED |
-| Add-1 | Session merge, item modify/cancel w/ audit, transfer, split bills, partial payments | M8 | M8-01..08 | — | — | NOT STARTED |
-| Add-2 | Kitchen/café ticket printing (PDF/print first) | M8 | M8-10 | — | — | NOT STARTED |
-| Add-2 | Direct thermal printer integration | M8 | M8-11 | — | — | FUTURE INTEGRATION |
+| Add-1 | Session merge, item modify/cancel w/ audit, transfer, split bills, partial payments | M8 | M8-01..08, M8-12 | `services/bills.ts`, `dashboard/[org]/bills/*` | bills.test.ts, bills.spec.ts | TESTED |
+| Add-2 | Kitchen/café ticket printing (PDF/print first) | M8 | M8-10 | `server/printing`, `services/tickets.ts`, `kitchen/tickets/*/print`, ticket PDF route | bills.test.ts, bills.spec.ts | TESTED |
+| Add-2 | Direct thermal printer integration | M8 | M8-11 | ESC/POS formatter in `server/printing` (sending not enabled) | unit (bytes) | NEEDS CONFIGURATION (hardware untested) |
 | 10 | Takeaway (pickup hours, lead time, min, pause) | M9 | M9-01..03 | — | TEST 8 | NOT STARTED |
 | 11 | Delivery zones (PT/ES postal codes), fees, workflow, driver view | M9 | M9-04..08, M9-11 | — | TEST 9, 10 | NOT STARTED |
 | 12 | WhatsApp prefilled ordering + external links | M9 | M9-09, M9-10 | storefront links + plain WhatsApp link (prefill pending) | — | IN PROGRESS |
@@ -60,9 +60,9 @@ Status values (never a generic "Complete"):
 | 16 | Loyalty (voluntary, consent, separate marketing opt-in) | M11 | M11-06..08 | — | — | NOT STARTED |
 | 17 | Smart Upsell (deterministic, never auto-add) | M11 | M11-09, M11-10 | — | — | NOT STARTED |
 | 18 | Analytics (paid vs unpaid), CSV export | M12 | M12-01..04 | — | TEST 18 | NOT STARTED |
-| 19 | Pay at counter / waiter / cash on delivery, manual payment records | M8/M9 | M8-08, M9-11 | — | TEST 18 | NOT STARTED |
-| 19 | Online payments (MB WAY, Multibanco, cards, Bizum) | — | — | payment adapter interface (planned) | — | BLOCKED BY EXTERNAL APPROVAL |
-| 19 | Certified invoicing (PT AT / ES Verifactu) | — | — | invoicing adapter interface (planned) | — | BLOCKED BY EXTERNAL APPROVAL |
+| 19 | Pay at counter / waiter / cash on delivery, manual payment records | M8/M9 | M8-08, M9-11 | `services/bills.ts` (recordPayment, voidPayment) | bills.test.ts, bills.spec.ts | TESTED (cash on delivery checkout pending M9) |
+| 19 | Online payments (MB WAY, Multibanco, cards, Bizum) | — | — | `server/payments/providers.ts` (interface, not connected) | — | BLOCKED BY EXTERNAL APPROVAL |
+| 19 | Certified invoicing (PT AT / ES Verifactu) | — | — | `server/payments/providers.ts` (interface); receipt labelled not an invoice | bills.spec.ts | BLOCKED BY EXTERNAL APPROVAL |
 | 19 | SaaS plans, trials, manual subscriptions | M12 | M2-13, M12-05..06 | `services/plans.ts`, `admin/plans`, `admin/tenants/[id]` | integration (trial) | WORKING |
 | 19 | Automated SaaS billing + webhooks | M12 | M12-07 | — | — | FUTURE INTEGRATION |
 | 20 | Restaurant dashboard sections + role navigation | M3–M12 | M3-10 | `dashboard/[org]/layout.tsx` (sections without pages show 404 until built) | — | IN PROGRESS |

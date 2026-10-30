@@ -135,19 +135,19 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 ## M8 — Table Sessions, Bills, Waiter Requests & Kitchen Printing
 
-- [ ] **M8-01** Table session lifecycle (open on first scan/order, staff close) — P0
-- [ ] **M8-02** Merge all orders in an active session into one bill view — P0
+- [x] **M8-01** Table session lifecycle (open on first scan/order, staff close) — P0
+- [x] **M8-02** Merge all orders in an active session into one bill view — P0
 - [x] **M8-03** Customer "Call waiter" / "Request bill" → StaffTask (throttled) — P0
 - [x] **M8-04** Waiter tasks panel (acknowledge, done) — P0
-- [ ] **M8-05** Modify/cancel order items with audit trail — P1
-- [ ] **M8-06** Transfer open session to another table (audited) — P1
-- [ ] **M8-07** Split bill by items or by amount; partial payments — P1
-- [ ] **M8-08** Manual payment recording; payment status separate from order status — P0
-- [ ] **M8-09** Internal receipt labelled "Not an invoice" — P1
-- [ ] **M8-10** Printable kitchen & café tickets (HTML print + PDF) — P1
-- [ ] **M8-11** Printer integration interface (thermal) — P2 · **NEEDS CONFIGURATION** (hardware testing)
-- [ ] **M8-12** Optional table-session verification code — P2
-- [ ] **M8-13** Tests + milestone gate — P0
+- [x] **M8-05** Modify/cancel order items with audit trail — P1
+- [x] **M8-06** Transfer open session to another table (audited) — P1
+- [x] **M8-07** Split bill by items or by amount; partial payments — P1
+- [x] **M8-08** Manual payment recording; payment status separate from order status — P0
+- [x] **M8-09** Internal receipt labelled "Not an invoice" — P1
+- [x] **M8-10** Printable kitchen & café tickets (HTML print + PDF) — P1
+- [x] **M8-11** Printer integration interface (thermal) — P2 · interface + ESC/POS formatter unit-tested; direct printing **NEEDS CONFIGURATION** (untested with real hardware)
+- [x] **M8-12** Optional table-session verification code — P2
+- [x] **M8-13** Tests + milestone gate — P0
 
 ## M9 — Takeaway, Delivery Zones, Staff Delivery & WhatsApp
 

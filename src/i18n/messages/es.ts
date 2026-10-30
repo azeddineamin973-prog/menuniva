@@ -49,6 +49,10 @@ const es: Messages = {
     linkInvalid: 'Este enlace no es válido o ha caducado.',
   },
   customer: {
+    tableCode: "Código de mesa",
+    tableCodeHint: "Pide a nuestro equipo el código de mesa de 4 cifras.",
+    tableCodeInvalid: "El código de mesa no es correcto.",
+    tableNotOpen: "Esta mesa aún no está abierta. Pregunta a nuestro equipo.",
     menu: 'Carta',
     table: 'Mesa {label}',
     orderAtTable: 'Pedir en la mesa',
@@ -219,6 +223,7 @@ const es: Messages = {
     chooseOption: 'Elige una opción en «{group}».',
   },
   staff: {
+    openBill: "Cuenta",
     groupOperate: "Operación",
     groupMenu: "Carta",
     groupGrow: "Crecimiento",
@@ -273,6 +278,7 @@ const es: Messages = {
     noStations: "Aún no hay estaciones de cocina. Un responsable debe crearlas.",
   },
   nav: {
+    bills: "Cuentas y pagos",
     overview: 'Resumen',
     liveOrders: 'Pedidos en directo',
     tables: 'Mesas y códigos QR',

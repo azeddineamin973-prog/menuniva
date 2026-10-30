@@ -49,6 +49,10 @@ const en = {
     linkInvalid: 'This link is invalid or has expired.',
   },
   customer: {
+    tableCode: "Table code",
+    tableCodeHint: "Ask our staff for the 4-digit table code.",
+    tableCodeInvalid: "The table code is not correct.",
+    tableNotOpen: "This table is not open yet. Please ask our staff.",
     menu: 'Menu',
     table: 'Table {label}',
     orderAtTable: 'Order at table',
@@ -219,6 +223,7 @@ const en = {
     chooseOption: 'Please make a selection for "{group}".',
   },
   staff: {
+    openBill: "Bill",
     groupOperate: "Operate",
     groupMenu: "Menu",
     groupGrow: "Grow",
@@ -273,6 +278,7 @@ const en = {
     noStations: "No kitchen stations yet. A manager needs to create them.",
   },
   nav: {
+    bills: "Bills & payments",
     overview: 'Overview',
     liveOrders: 'Live Orders',
     tables: 'Tables & QR Codes',

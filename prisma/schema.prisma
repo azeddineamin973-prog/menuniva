@@ -462,6 +462,7 @@ model RestaurantLocation {
   reservationsEnabled Boolean @default(false)
   whatsappOrderingEnabled Boolean @default(false)
   orderingPaused  Boolean     @default(false)
+  tableCodeRequired Boolean   @default(false) // guests must enter a code given by staff before ordering
   isPublished     Boolean     @default(false)
   publishedAt     DateTime?
   orderSequence   Int         @default(0) // atomic counter for human-friendly order numbers
@@ -981,6 +982,8 @@ model TableSession {
   openedAt       DateTime           @default(now())
   closedAt       DateTime?
   closedById     String?
+  closeNote      String?
+  openedById     String?
 
   location       RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
   table          RestaurantTable    @relation(fields: [tableId], references: [id], onDelete: Cascade)
@@ -1179,6 +1182,7 @@ model PaymentRecord {
   recordedById   String?
   voidedById     String?
   voidedAt       DateTime?
+  voidReason     String?
   createdAt      DateTime            @default(now())
 
   order          Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)

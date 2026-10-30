@@ -115,3 +115,19 @@ TEST 1, 3, 4, 5, 6, 7, 16, 17 ✅ · TEST 15 orders ✅ (feedback/customers pend
 | `tests/e2e/import-studio.spec.ts` | Browser: adapter statuses, broken CSV error, Glovo link refusal, CSV upload, duplicate-of-existing skipped, translation-required notice, publish visible, guest sees new dish and the original dish keeps its price |
 
 Defect fixed: after an error the Import Studio kept the previous file when the source type changed — the file field now resets per source type.
+
+## Run 4 — 2026-10-30 (session 3): M8 Table sessions, bills, payments & printing
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Migration | `20261030015227_table_sessions_payments` (dev + test) | ✅ applied |
+| Unit + integration | `npm test` | ✅ 14 files, **137 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **17 tests passed** |
+
+| File | Covers |
+|---|---|
+| `tests/integration/bills.test.ts` | M8-01/02 several orders → one session bill; M8-07/08 + TEST 18 (payments): item payment marks only that item paid, amount payment stays unallocated, overpayment refused, PAID/PARTIALLY_PAID derived from records, void re-opens balance; **3 concurrent payments → only one accepted** (row locks); M8-05 reduce/void with reason, totals recalculated, café ticket cancelled when its only item is removed, paid amounts cannot be removed, audit before/after; M8-06 transfer to free table, busy table refused, audited; closing blocked by active orders and by unexplained unpaid balance, served orders completed, next guests get a new session; M8-12 table code (not open → refused, wrong code → refused, right code → order); tenant isolation; M8-10/11 kitchen and café tickets contain only their own items, PDF valid, ESC/POS bytes (init, items, note, cut) |
+| `tests/e2e/bills.spec.ts` | Browser: ticket PDF + print page, merged bill 19,50 €, owner reduces an item with reason → 13,00 €, split payment by item (cash) and by amount (card) → 0,00 €, only paid item marked paid, receipt says “NÃO É FATURA / NOT AN INVOICE”, close blocked while preparing, close completes orders, audit entries; table code flow with waiter opening the table |
+
+Still manual: printing on a real thermal printer (ESC/POS network sending is not enabled or hardware-tested).

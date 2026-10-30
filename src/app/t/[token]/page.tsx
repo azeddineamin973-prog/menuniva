@@ -51,6 +51,7 @@ export default async function TablePage({ params, searchParams }: { params: Prom
         allergyNotice={allergyNoticeFor(settings, lang, m.customer.allergyNoticeDefault)}
         pricesIncludeVat={settings?.pricesIncludeTax ?? true}
         tableLabel={table.label}
+        tableCodeRequired={location.tableCodeRequired}
       />
     </StorefrontShell>
   );

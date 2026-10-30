@@ -58,6 +58,7 @@ export function MenuApp({
   pricesIncludeVat,
   tableLabel,
   upsell,
+  tableCodeRequired = false,
 }: {
   channel: OrderChannel;
   scope: { qrToken?: string; orgSlug: string; locationSlug: string; locationId: string };
@@ -71,6 +72,7 @@ export function MenuApp({
   pricesIncludeVat: boolean;
   tableLabel?: string;
   upsell?: React.ReactNode;
+  tableCodeRequired?: boolean;
 }) {
   const router = useRouter();
   const c = m.customer;
@@ -191,6 +193,7 @@ export function MenuApp({
           allergyNotice={allergyNotice}
           pricesIncludeVat={pricesIncludeVat}
           upsell={upsell}
+          tableCodeRequired={tableCodeRequired}
           onClose={() => setCartOpen(false)}
           onSubmitted={(token) => {
             setLines([]);
@@ -368,6 +371,7 @@ function CartSheet({
   allergyNotice,
   pricesIncludeVat,
   upsell,
+  tableCodeRequired,
   onClose,
   onSubmitted,
 }: {
@@ -382,12 +386,14 @@ function CartSheet({
   allergyNotice: string;
   pricesIncludeVat: boolean;
   upsell?: React.ReactNode;
+  tableCodeRequired?: boolean;
   onClose: () => void;
   onSubmitted: (trackingToken: string) => void;
 }) {
   const c = m.customer;
   const [quote, setQuote] = useState<{ subtotalCents: number; issues: QuoteIssue[] } | null>(null);
   const [notes, setNotes] = useState('');
+  const [tableCode, setTableCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idemKey] = useState(() => {
@@ -422,7 +428,7 @@ function CartSheet({
   const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const body = JSON.stringify({ qrToken: scope.qrToken, idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined });
+    const body = JSON.stringify({ qrToken: scope.qrToken, idempotencyKey: idemKey, language: lang, items, notes: notes.trim() || undefined, tableCode: tableCode.trim() || undefined });
     // Retries reuse the same idempotency key, so a flaky connection can never create two orders.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -438,6 +444,8 @@ function CartSheet({
         } else if (res.status === 429) setError(c.tooManyOrders);
         else if (typeof data.error === 'string' && data.error.startsWith('ordering_')) setError(c.orderingPaused);
         else if (data.error === 'qr_invalid') setError(c.qrInvalid);
+        else if (data.error === 'table_code_invalid') setError(c.tableCodeInvalid);
+        else if (data.error === 'table_not_open') setError(c.tableNotOpen);
         else if (res.status >= 500) {
           await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
           continue;
@@ -491,6 +499,13 @@ function CartSheet({
               <span className="mb-1 block text-sm font-medium">{c.notesForKitchen} <span className="text-xs opacity-60">({m.common.optional})</span></span>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 300))} className="min-h-[60px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-sm" placeholder={c.notesPlaceholder} />
             </label>
+            {tableCodeRequired && (
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium">{c.tableCode}</span>
+                <input value={tableCode} onChange={(e) => setTableCode(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" autoComplete="off" className="h-12 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-center text-xl tracking-[0.5em]" data-testid="table-code-input" />
+                <span className="mt-1 block text-xs opacity-70">{c.tableCodeHint}</span>
+              </label>
+            )}
             <div className="rounded-2xl border border-sf-accent/40 bg-white/60 p-3 text-sm">
               <p className="font-medium">{c.allergyNoticeTitle}</p>
               <p className="opacity-80">{allergyNotice}</p>

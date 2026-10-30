@@ -110,6 +110,7 @@ export const channelSettingsSchema = z.object({
   reservationsEnabled: bool,
   whatsappOrderingEnabled: bool,
   orderingPaused: bool,
+  tableCodeRequired: bool,
   glovoUrl: httpsUrl(/(^|\.)glovoapp\.com$/),
   uberEatsUrl: httpsUrl(/(^|\.)ubereats\.com$/),
   websiteUrl: httpsUrl(),

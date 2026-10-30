@@ -6,7 +6,7 @@ import { Prisma } from '@/generated/prisma/client';
 import { LANGUAGES } from '@/i18n/config';
 import { canTransition, ACTIVE_STATUSES } from '@/lib/order-state';
 import { audit } from '../audit';
-import { hashToken } from '../crypto';
+import { hashToken, safeEqual } from '../crypto';
 import { db, type Tx } from '../db';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
@@ -36,6 +36,7 @@ export const submitTableOrderSchema = z.object({
   language: z.enum(LANGUAGES as [LanguageCode, ...LanguageCode[]]),
   items: cartSchema,
   notes: z.string().trim().max(300).optional(),
+  tableCode: z.string().trim().max(8).optional(),
 });
 
 export type SubmittedOrder = { orderNumber: number; trackingToken: string; status: OrderStatus; duplicate: boolean };
@@ -72,12 +73,21 @@ export async function submitTableOrder(input: unknown, clientKey: string): Promi
   await rateLimit(`order:client:${location.id}:${clientKey}`, 8, 600);
   await rateLimit(`order:table:${table.id}`, 30, 3600);
 
+  // Optional table code (M8-12): staff open the table and tell guests a 4-digit code.
+  if (location.tableCodeRequired) {
+    const open = await db.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
+    if (!open?.verificationCode) throw new OrderRejectedError('table_not_open');
+    await rateLimit(`order:tablecode:${table.id}:${clientKey}`, 6, 600);
+    if (!data.tableCode || !safeEqual(data.tableCode, open.verificationCode)) throw new OrderRejectedError('table_code_invalid');
+  }
+
   try {
     return await db.$transaction(async (tx) => {
       const quote = await quoteCart({ locationId: location.id, channel: 'TABLE', lang: data.language, items: data.items }, tx);
       if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
 
       let session = await tx.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
+      if (!session && location.tableCodeRequired) throw new OrderRejectedError('table_not_open');
       session ??= await tx.tableSession.create({ data: { organizationId: location.organizationId, locationId: location.id, tableId: table.id } });
 
       const { orderSequence } = await tx.restaurantLocation.update({ where: { id: location.id }, data: { orderSequence: { increment: 1 } }, select: { orderSequence: true } });

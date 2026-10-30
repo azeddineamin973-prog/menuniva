@@ -13,6 +13,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'kitchen', path: '/kitchen', permission: 'kds.view', group: 'operate' },
   { key: 'myDeliveries', path: '/driver', permission: 'delivery.driver', group: 'operate' },
   { key: 'tables', path: '/tables', permission: 'tables.view', group: 'operate' },
+  { key: 'bills', path: '/bills', permission: 'payments.record', group: 'operate' },
   { key: 'reservations', path: '/reservations', permission: 'reservations.manage', group: 'operate' },
   { key: 'menu', path: '/menu', permission: 'menu.view', group: 'menu' },
   { key: 'importStudio', path: '/import', permission: 'import.manage', group: 'menu' },

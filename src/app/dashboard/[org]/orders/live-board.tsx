@@ -177,7 +177,7 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag, t }: { or
                 <div className="space-y-2">
                   {list.length === 0 && <p className="px-2 py-4 text-center text-xs text-muted">—</p>}
                   {list.map((o) => (
-                    <OrderCard key={o.id} o={o} now={now} tag={tag} t={t} canManage={canManage} busy={busy === o.id} onStatus={(to) => changeStatus(o, to)} onAck={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'acknowledge' }, o.id)} />
+                    <OrderCard key={o.id} o={o} org={org} now={now} tag={tag} t={t} canManage={canManage} busy={busy === o.id} onStatus={(to) => changeStatus(o, to)} onAck={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'acknowledge' }, o.id)} />
                   ))}
                 </div>
               </section>
@@ -189,7 +189,7 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag, t }: { or
   );
 }
 
-function OrderCard({ o, now, tag, t, canManage, busy, onStatus, onAck }: { o: Order; now: number; tag: string; t: S; canManage: boolean; busy: boolean; onStatus: (to: OrderStatus) => void; onAck: () => void }) {
+function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck }: { o: Order; org: string; now: number; tag: string; t: S; canManage: boolean; busy: boolean; onStatus: (to: OrderStatus) => void; onAck: () => void }) {
   const unack = o.status === 'NEW' && !o.acknowledgedAt;
   const ticketsPending = o.tickets.some((t) => t.status !== 'READY' && t.status !== 'CANCELLED');
   const where = o.channel === 'TABLE' ? f(t.table, { label: o.table?.label ?? '?' }) : o.channel === 'TAKEAWAY' ? `${t.takeaway}${o.customerName ? ` · ${o.customerName}` : ''}` : `${t.delivery}${o.delivery ? ` · ${o.delivery.postalCode}` : ''}`;
@@ -228,7 +228,10 @@ function OrderCard({ o, now, tag, t, canManage, busy, onStatus, onAck }: { o: Or
       )}
       {o.status === 'CANCELLED' && o.cancelReason && <p className="mt-2 text-xs text-danger">{f(t.cancelled, { reason: o.cancelReason })}</p>}
       <div className="mt-2 flex items-center justify-between text-sm">
-        <span className="font-semibold tabular-nums">{formatCents(o.totalCents, tag)}</span>
+        <span className="flex items-center gap-2">
+          <span className="font-semibold tabular-nums">{formatCents(o.totalCents, tag)}</span>
+          {o.tableSessionId && <a href={`/dashboard/${org}/bills/${o.tableSessionId}`} className="text-xs underline" data-testid="order-bill-link">{t.openBill}</a>}
+        </span>
         <Badge tone={o.paymentStatus === 'PAID' ? 'success' : o.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'neutral'}>{o.paymentStatus === 'UNPAID' ? t.notPaid : o.paymentStatus === 'PAID' ? t.paid : o.paymentStatus === 'PARTIALLY_PAID' ? t.partiallyPaid : o.paymentStatus}</Badge>
       </div>
       {canManage && (
