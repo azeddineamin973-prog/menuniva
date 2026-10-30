@@ -8,6 +8,7 @@ import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { syncLoyaltyForOrder } from './loyalty';
 import { lockTable } from './orders';
+import { recomputeOrderDiscounts } from './promotions';
 
 const ACTIVE: OrderStatus[] = ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
@@ -144,7 +145,9 @@ export async function changeOrderItem(ctx: TenantContext, input: unknown) {
     });
     const lines = await tx.orderItem.findMany({ where: { orderId: order.id, voidedAt: null } });
     const subtotal = lines.reduce((s, l) => s + l.lineTotalCents, 0);
-    const discount = Math.min(order.discountCents, subtotal);
+    // Re-evaluate the applied promotions on the remaining items; a discount never stays larger
+    // than the new items justify (audit BUG-11: a 10 % discount kept its old amount).
+    const discount = order.discountCents > 0 ? Math.min(order.discountCents, await recomputeOrderDiscounts(tx, order.id, order.subtotalCents, lines)) : 0;
     const total = subtotal - discount + order.deliveryFeeCents;
     if (order.paidCents > total) throw new UserFacingError('The new total would be lower than what was already paid. Void a payment first.');
     await tx.order.update({ where: { id: order.id }, data: { subtotalCents: subtotal, discountCents: discount, totalCents: total, paymentStatus: paymentStatusFor(order.paidCents, total) } });
@@ -164,7 +167,7 @@ export async function changeOrderItem(ctx: TenantContext, input: unknown) {
         action: d.quantity === 0 ? 'order.item_voided' : 'order.item_quantity_reduced',
         entityType: 'OrderItem',
         entityId: item.id,
-        metadata: { orderNumber: order.number, item: item.nameSnapshot, from: item.quantity, to: d.quantity, reason: d.reason, totalBefore: order.totalCents, totalAfter: total },
+        metadata: { orderNumber: order.number, item: item.nameSnapshot, from: item.quantity, to: d.quantity, reason: d.reason, totalBefore: order.totalCents, totalAfter: total, discountBefore: order.discountCents, discountAfter: discount },
       },
       tx,
     );

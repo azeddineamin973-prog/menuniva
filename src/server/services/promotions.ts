@@ -42,6 +42,36 @@ export async function loadRules(tx: Tx | typeof db, p: { organizationId: string;
   return { rules, couponStatus };
 }
 
+/**
+ * Recomputes an order's discounts after staff reduce or remove items (audit BUG-11). Only the
+ * promotions that were actually applied to this order are re-evaluated (with their rules — e.g. a
+ * percentage of the new subtotal, a 2×1 that no longer has a pair, a minimum that is no longer
+ * reached), and a discount can only go down, never up. A discount whose promotion was deleted
+ * shrinks in proportion to the subtotal. Updates the OrderDiscount rows; returns the new total.
+ */
+export async function recomputeOrderDiscounts(tx: Tx, orderId: string, oldSubtotalCents: number, lines: { id: string; productId: string | null; unitPriceCents: number; modifiersUnitCents: number; quantity: number }[]) {
+  const rows = await tx.orderDiscount.findMany({ where: { orderId }, include: { promotion: true } });
+  if (rows.length === 0) return 0;
+  const subtotal = lines.reduce((s, l) => s + (l.unitPriceCents + l.modifiersUnitCents) * l.quantity, 0);
+  const products = await tx.menuProduct.findMany({ where: { id: { in: [...new Set(lines.map((l) => l.productId).filter((x): x is string => !!x))] } }, select: { id: true, categoryId: true } });
+  const cat = new Map(products.map((p) => [p.id, p.categoryId]));
+  const rules: PromoRule[] = rows.filter((r) => r.promotion).map((r) => ({ ...r.promotion!, couponCode: r.couponCode }));
+  const res = applyPromotions(
+    lines.map((l) => ({ key: l.id, productId: l.productId ?? '', categoryId: (l.productId && cat.get(l.productId)) || '', unitCents: l.unitPriceCents + l.modifiersUnitCents, quantity: l.quantity })),
+    rules,
+    subtotal,
+  );
+  const now = new Map(res.discounts.map((d) => [d.promotionId, d.amountCents]));
+  let total = 0;
+  for (const r of rows) {
+    const recomputed = r.promotion ? (now.get(r.promotionId!) ?? 0) : oldSubtotalCents > 0 ? Math.floor((r.amountCents * subtotal) / oldSubtotalCents) : 0;
+    const amount = Math.max(0, Math.min(r.amountCents, recomputed));
+    if (amount !== r.amountCents) await tx.orderDiscount.update({ where: { id: r.id }, data: { amountCents: amount } });
+    total += amount;
+  }
+  return Math.min(total, subtotal);
+}
+
 export async function computeDiscounts(
   tx: Tx | typeof db,
   p: { organizationId: string; locationId: string; channel: OrderChannel; couponCode?: string | null; lines: QuotedLine[]; subtotalCents: number; now?: Date },
