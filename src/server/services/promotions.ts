@@ -1,7 +1,8 @@
 import 'server-only';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 import type { OrderChannel } from '@/generated/prisma/enums';
 import { parseMoneyToCents } from '@/lib/money';
+import { zonedTimeToUtc } from '@/lib/time';
 import { applyPromotions, type AppliedDiscount, type PromoRule } from '@/lib/promotions';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
@@ -119,7 +120,29 @@ const cents = (label: string) =>
     }
     return c;
   });
-const date = z.preprocess((v) => (v === '' || v == null ? null : new Date(String(v))), z.date().nullable());
+/**
+ * Promotion start/end as typed by the owner: a wall-clock time ("2026-10-15T10:00") that is
+ * interpreted in the restaurant location's IANA time zone — never the server's (audit BUG-07).
+ * Values with an explicit offset/Z (API callers) are taken as absolute instants.
+ */
+const LOCAL_DT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/;
+const date = z.preprocess(
+  (v) => (v === '' || v == null ? null : v instanceof Date ? v.toISOString() : String(v)),
+  z.string().max(40).refine((v) => LOCAL_DT.test(v) || !Number.isNaN(Date.parse(v)), 'invalid_date').nullable(),
+);
+export function promotionInstant(value: string | null, timeZone: string): Date | null {
+  if (!value) return null;
+  const m = LOCAL_DT.exec(value);
+  if (!m) return new Date(value);
+  const [, y, mo, d, h, mi] = m.map(Number);
+  return zonedTimeToUtc(y, mo, d, h, mi, timeZone);
+}
+/** The single time zone a promotion's dates are written in (all of the restaurant's locations). */
+async function promotionTimeZone(organizationId: string): Promise<string> {
+  const zones = await db.restaurantLocation.findMany({ where: { organizationId }, distinct: ['timeZone'], select: { timeZone: true } });
+  if (zones.length > 1) throw new UserFacingError(`Your locations use different time zones (${zones.map((z) => z.timeZone).join(', ')}). Promotion times cannot be the same local time everywhere; contact support to set them per location.`);
+  return zones[0]?.timeZone ?? 'Europe/Lisbon';
+}
 
 export const promotionSchema = z
   .object({
@@ -149,7 +172,6 @@ export const promotionSchema = z
     if (d.type === 'FIXED_AMOUNT' && !d.amount) ctx.addIssue({ code: 'custom', path: ['amount'], message: 'required' });
     if (d.type === 'BUY_X_GET_Y' && (!d.buyQuantity || !d.getQuantity)) ctx.addIssue({ code: 'custom', path: ['buyQuantity'], message: 'required' });
     if (d.type === 'COMBO' && (d.comboPrice === null || d.productIds.length < 2)) ctx.addIssue({ code: 'custom', path: ['productIds'], message: 'combo_needs_two_products_and_price' });
-    if (d.startsAt && d.endsAt && d.endsAt <= d.startsAt) ctx.addIssue({ code: 'custom', path: ['endsAt'], message: 'end_before_start' });
   });
 
 export async function savePromotion(ctx: TenantContext, input: unknown) {
@@ -160,6 +182,10 @@ export async function savePromotion(ctx: TenantContext, input: unknown) {
     db.menuCategory.count({ where: { id: { in: d.categoryIds }, organizationId: ctx.org.id } }),
   ]);
   if (products !== d.productIds.length || categories !== d.categoryIds.length) throw new UserFacingError('Invalid dish or category.');
+  const tz = d.startsAt || d.endsAt ? await promotionTimeZone(ctx.org.id) : 'Europe/Lisbon';
+  const startsAt = promotionInstant(d.startsAt, tz);
+  const endsAt = promotionInstant(d.endsAt, tz);
+  if (startsAt && endsAt && endsAt <= startsAt) throw new ZodError([{ code: 'custom', path: ['endsAt'], message: 'end_before_start', input: d.endsAt }]);
   const code = d.couponCode ? normalizeCode(d.couponCode) : '';
   if (code && !/^[A-Z0-9_-]{3,30}$/.test(code)) throw new UserFacingError('Codes use 3–30 letters, digits, - or _.');
   const data = {
@@ -178,8 +204,8 @@ export async function savePromotion(ctx: TenantContext, input: unknown) {
     priority: d.priority,
     combinable: d.combinable,
     requiresCode: !!code,
-    startsAt: d.startsAt,
-    endsAt: d.endsAt,
+    startsAt,
+    endsAt,
     isActive: d.isActive,
   };
   return db.$transaction(async (tx) => {

@@ -2,6 +2,7 @@ import { ActionForm, FieldError } from '@/components/forms/action-form';
 import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { centsToInputValue, formatCents } from '@/lib/money';
+import { zonedParts } from '@/lib/time';
 import { db } from '@/server/db';
 import { pickName } from '@/server/services/menu';
 import { listPromotions } from '@/server/services/promotions';
@@ -11,7 +12,13 @@ import { savePromotionAction } from './actions';
 
 const TYPE_LABEL = { PERCENTAGE: 'Percentage off', FIXED_AMOUNT: 'Fixed amount off', BUY_X_GET_Y: 'Buy X get Y free (e.g. 2×1)', COMBO: 'Combo price' } as const;
 const CH = { TABLE: 'Table', TAKEAWAY: 'Takeaway', DELIVERY: 'Delivery' } as const;
-const dt = (d: Date | null) => (d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
+/** datetime-local value of an instant, as wall-clock time in the restaurant's time zone (audit BUG-07). */
+const dtIn = (tz: string) => (d: Date | null) => {
+  if (!d) return '';
+  const p = zonedParts(d, tz);
+  const n = (x: number) => String(x).padStart(2, '0');
+  return `${p.year}-${n(p.month)}-${n(p.day)}T${n(p.hour)}:${n(p.minute)}`;
+};
 
 type Promo = Awaited<ReturnType<typeof listPromotions>>[number];
 
@@ -24,8 +31,10 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
     listPromotions(ctx),
     db.menuProduct.findMany({ where: { organizationId: ctx.org.id, status: { not: 'ARCHIVED' } }, include: { translations: true }, orderBy: { sortOrder: 'asc' } }),
     db.menuCategory.findMany({ where: { organizationId: ctx.org.id }, include: { translations: true }, orderBy: { sortOrder: 'asc' } }),
-    db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true } }),
+    db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true, locations: { select: { timeZone: true }, orderBy: { createdAt: 'asc' }, take: 1 } } }),
   ]);
+  const timeZone = o.locations[0]?.timeZone ?? 'Europe/Lisbon';
+  const dt = dtIn(timeZone);
   const langs = [o.sourceLanguage, ...o.enabledLanguages];
 
   const PromoFields = ({ p }: { p?: Promo }) => (
@@ -70,8 +79,8 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
       <div className="grid gap-3 sm:grid-cols-4">
         <Field label="Minimum order €" htmlFor={`mo-${p?.id ?? 'new'}`} optionalLabel="opt."><Input id={`mo-${p?.id ?? 'new'}`} name="minOrder" inputMode="decimal" defaultValue={p?.minOrderCents ? centsToInputValue(p.minOrderCents) : ''} /></Field>
         <Field label="Total uses" htmlFor={`ul-${p?.id ?? 'new'}`} optionalLabel="opt."><Input id={`ul-${p?.id ?? 'new'}`} name="usageLimit" type="number" min={1} defaultValue={p?.usageLimit ?? ''} /></Field>
-        <Field label="Starts" htmlFor={`sa-${p?.id ?? 'new'}`} optionalLabel="opt."><Input id={`sa-${p?.id ?? 'new'}`} name="startsAt" type="datetime-local" defaultValue={dt(p?.startsAt ?? null)} /></Field>
-        <Field label="Ends" htmlFor={`ea-${p?.id ?? 'new'}`} optionalLabel="opt."><Input id={`ea-${p?.id ?? 'new'}`} name="endsAt" type="datetime-local" defaultValue={dt(p?.endsAt ?? null)} /><FieldError name="endsAt" /></Field>
+        <Field label="Starts" htmlFor={`sa-${p?.id ?? 'new'}`} optionalLabel="opt." hint={`Restaurant time (${timeZone})`}><Input id={`sa-${p?.id ?? 'new'}`} name="startsAt" type="datetime-local" defaultValue={dt(p?.startsAt ?? null)} /></Field>
+        <Field label="Ends" htmlFor={`ea-${p?.id ?? 'new'}`} optionalLabel="opt." hint={`Restaurant time (${timeZone})`}><Input id={`ea-${p?.id ?? 'new'}`} name="endsAt" type="datetime-local" defaultValue={dt(p?.endsAt ?? null)} /><FieldError name="endsAt" /></Field>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Promo code" htmlFor={`cc-${p?.id ?? 'new'}`} optionalLabel="empty = automatic"><Input id={`cc-${p?.id ?? 'new'}`} name="couponCode" className="uppercase" defaultValue={p?.coupons[0]?.code ?? ''} /></Field>
