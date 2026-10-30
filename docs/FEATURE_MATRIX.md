@@ -74,8 +74,16 @@ Status values (never a generic "Complete"):
 | 25 | Authorization on every page, route and action | M13 | M13-01 | `tenant.ts`, `route-tenant.ts`, `action.ts`, admin guards on every admin page | route-audit.test.ts (static), route-audit.spec.ts (runtime), login.test.ts | TESTED |
 | 26 | PT/ES country config, IVA classes, address formats | M3/M4 | M3-03, M4-14 | postal formats, time zones, restaurant-approved IVA classes | unit + menu-advanced.test.ts | TESTED |
 | 27 | Persistent orders, acknowledgment, unread counters | M7 | M7-05 | `orders.ts`, `live-board.tsx`, sidebar badge | E2E | TESTED |
-| 28 | Separate demo environment (labelled fake data) | M13 | M13-10 | `scripts/seed-demo.ts`, `menuniva_demo`, DEMO banner (`APP_ENV=demo`), `playwright.demo.config.ts` | TEST 20 (demo-flow.spec.ts) | TESTED |
+| 28 | Separate demo environment (labelled fake data): generic demo + Casa de Marrocos layout with fictitious dishes | M13 | M13-10, AUD-08 | `scripts/seed-demo.ts`, `menuniva_demo`, DEMO banner (`APP_ENV=demo`), `playwright.demo.config.ts` | TEST 20 (demo-flow.spec.ts) | TESTED |
 | Add-3 | Backups, environments, monitoring, health checks, deploy checklist | M13 | M13-03..07, M13-11 | `scripts/backup.mjs`, `restore.mjs`, `lib/backup-core.mjs`, `env.ts` (environment rules), `monitoring.ts`, `instrumentation.ts`, `/api/health`, `docs/DEPLOYMENT.md` | backup-restore.test.ts, environments.test.ts, monitoring.test.ts | TESTED (no hosting deployed yet; external DSN unverified) |
 | Add-4 | Mobile usability (360 px) for guest and staff screens | M13 | M13-08 | responsive layouts; 24 px minimum tap targets on guest screens | mobile-pass.spec.ts | TESTED |
+| 22 | Opening hours on the storefront (localized, open now) | Audit | AUD-01 | `components/storefront/opening-hours.tsx` | spec-gaps.spec.ts | TESTED |
+| 9 | Order priority on live board and kitchen displays | Audit | AUD-02 | `setOrderPriority` in `orders.ts`, live board, KDS | spec-gaps.test.ts, spec-gaps.spec.ts | TESTED |
+| 10 | Takeaway pickup point (reception counter) | Audit | AUD-03 | `TakeawaySettings.pickupPoint`, checkout, order tracking | spec-gaps.test.ts, demo-flow.spec.ts | TESTED |
+| 21 | Restaurant support requests → Super Admin support | Audit | AUD-04 | `services/support.ts`, `dashboard/[org]/support`, `admin/support` | spec-gaps.test.ts, spec-gaps.spec.ts | TESTED |
+| 19 | Plan upgrade/downgrade requests (pending plan) | Audit | AUD-05 | `requestPlanChange` / `decidePlanChange`, subscription page, admin tenant page | spec-gaps.test.ts, spec-gaps.spec.ts | TESTED |
+| 25 | Staff account self-service (profile, password, export, deletion) | Audit | AUD-06 | `services/account.ts`, `/account`, `api/account/export` | spec-gaps.test.ts, spec-gaps.spec.ts, route-audit.test.ts | TESTED |
+| 16 | Loyalty birthdays this month (consent only) | Audit | AUD-07 | `loyaltyMembers(…, birthdayMonth)`, loyalty page | spec-gaps.test.ts | TESTED |
+| 13 | Promotions for identified customers only | — | AUD-09 | — | — | FUTURE INTEGRATION (needs verified customer identity) |
 
-_Last updated: 2026-10-30 (session 5). Casa de Marrocos tenant: created via `scripts/bootstrap-casa-de-marrocos.ts` — WORKING (verified in DB)._
+_Last updated: 2026-10-30 (session 6, spec audit). Casa de Marrocos tenant: created via `scripts/bootstrap-casa-de-marrocos.ts` — WORKING (verified in DB)._

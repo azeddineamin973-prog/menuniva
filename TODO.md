@@ -219,3 +219,15 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M13-11** README, deployment & launch guide, production checklist — P0
 - [x] **M13-12** Final QA_REPORT + feature status matrix — P0
 - [x] **M13-13** Release commit/tag — P0
+
+## Spec audit (session 6) — items found missing in the final review of the master specification
+- [x] **AUD-01** Storefront shows the restaurant's opening hours (guest language, open/closed now) — Part 22
+- [x] **AUD-02** Order priority set by staff; kitchen displays show priority orders first — Part 9
+- [x] **AUD-03** Takeaway pickup point (Casa de Marrocos: reception counter) on checkout and tracking — Parts 0, 10
+- [x] **AUD-04** Restaurants send support requests from the dashboard; Super Admin handles them — Part 21
+- [x] **AUD-05** Plan upgrade/downgrade preparation: owner requests, Super Admin applies or declines — Part 19
+- [x] **AUD-06** Staff account self-service: profile, password change, own-data export, account deletion — Part 25
+- [x] **AUD-07** Loyalty "birthdays this month" list (only with birthday consent) — Part 16
+- [x] **AUD-08** TEST 20 runs the Casa de Marrocos layout in the demo environment (fictitious dishes) — Part 28
+- [ ] **AUD-09** Promotions limited to identified customers — FUTURE INTEGRATION: needs verified customer identity (e.g. SMS/email verification); without it anyone could type someone else's phone — Part 13
+

@@ -168,7 +168,7 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag, t }: { or
       ) : (
         <div className="grid gap-4 overflow-x-auto pb-2 lg:grid-cols-5">
           {COLUMNS.map((col) => {
-            const list = orders.filter((o) => col.statuses.includes(o.status));
+            const list = orders.filter((o) => col.statuses.includes(o.status)).sort((a, b) => Number(b.isPriority) - Number(a.isPriority));
             return (
               <section key={col.key} className="min-w-[260px] rounded-[var(--radius-card)] bg-surface-2/70 p-2" data-testid={`column-${col.key}`}>
                 <h2 className="flex items-center justify-between px-2 py-1.5 text-sm font-semibold">
@@ -177,7 +177,7 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag, t }: { or
                 <div className="space-y-2">
                   {list.length === 0 && <p className="px-2 py-4 text-center text-xs text-muted">—</p>}
                   {list.map((o) => (
-                    <OrderCard key={o.id} o={o} org={org} now={now} tag={tag} t={t} canManage={canManage} busy={busy === o.id} onStatus={(to) => changeStatus(o, to)} onAck={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'acknowledge' }, o.id)} />
+                    <OrderCard key={o.id} o={o} org={org} now={now} tag={tag} t={t} canManage={canManage} busy={busy === o.id} onStatus={(to) => changeStatus(o, to)} onAck={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'acknowledge' }, o.id)} onPriority={() => post(`/api/dashboard/${org}/orders/${o.id}/status`, { action: 'priority', isPriority: !o.isPriority }, o.id)} />
                   ))}
                 </div>
               </section>
@@ -189,7 +189,7 @@ export function LiveBoard({ org, locationId, canManage, canTasks, tag, t }: { or
   );
 }
 
-function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck }: { o: Order; org: string; now: number; tag: string; t: S; canManage: boolean; busy: boolean; onStatus: (to: OrderStatus) => void; onAck: () => void }) {
+function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck, onPriority }: { o: Order; org: string; now: number; tag: string; t: S; canManage: boolean; busy: boolean; onStatus: (to: OrderStatus) => void; onAck: () => void; onPriority: () => void }) {
   const unack = o.status === 'NEW' && !o.acknowledgedAt;
   const ticketsPending = o.tickets.some((t) => t.status !== 'READY' && t.status !== 'CANCELLED');
   const where = o.channel === 'TABLE' ? f(t.table, { label: o.table?.label ?? '?' }) : o.channel === 'TAKEAWAY' ? `${t.takeaway}${o.customerName ? ` · ${o.customerName}` : ''}` : `${t.delivery}${o.delivery ? ` · ${o.delivery.postalCode}` : ''}`;
@@ -197,7 +197,7 @@ function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck }: { 
     <article className={cn('rounded-2xl border bg-surface p-3 shadow-sm', unack ? 'border-lime ring-2 ring-lime/60' : 'border-line', o.status === 'CANCELLED' && 'opacity-60')} data-testid="order-card" data-order-number={o.number} data-status={o.status}>
       <header className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-lg font-semibold tabular-nums">#{o.number}</p>
+          <p className="flex items-center gap-1.5 text-lg font-semibold tabular-nums">#{o.number}{o.isPriority && <Badge tone="danger" data-testid="priority-badge">{t.priority}</Badge>}</p>
           <p className="text-sm font-medium">{where}</p>
           {o.table?.area && <p className="text-xs text-muted">{o.table.area.name}</p>}
         </div>
@@ -239,6 +239,7 @@ function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck }: { 
       {canManage && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {unack && <Button size="sm" variant="secondary" disabled={busy} onClick={onAck}>{t.seen}</Button>}
+          {['NEW', 'ACCEPTED', 'PREPARING'].includes(o.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onPriority} data-testid="toggle-priority">{o.isPriority ? t.removePriority : t.markPriority}</Button>}
           {nextStatuses(o.channel, o.status).map((to) => (
             <Button
               key={to}

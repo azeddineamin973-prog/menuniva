@@ -29,7 +29,7 @@ type QuoteIssue = { index: number; code: string; name?: string; group?: string }
 /** Channel-specific checkout data computed on the server (slots, payment options, WhatsApp). */
 export type CheckoutConfig = {
   country: 'PT' | 'ES';
-  pickup?: { asapAllowed: boolean; asapMinutes: number; slots: { value: string; label: string }[]; minOrderCents: number };
+  pickup?: { asapAllowed: boolean; asapMinutes: number; slots: { value: string; label: string }[]; minOrderCents: number; pickupPoint?: string | null };
   delivery?: { cash: boolean; card: boolean; pickupHref?: string };
   whatsapp?: { number: string; restaurant: string; only?: boolean };
 };
@@ -635,6 +635,7 @@ function CartSheet({
                         {checkout.pickup.slots.map((sl) => <option key={sl.value} value={sl.value}>{sl.label}</option>)}
                       </select>
                     )}
+                    {checkout.pickup.pickupPoint && <span className="mt-1 block text-xs opacity-80" data-testid="checkout-pickup-point">{fmt(c.pickupPoint, { place: checkout.pickup.pickupPoint })}</span>}
                   </label>
                 )}
                 {channel === 'DELIVERY' && (

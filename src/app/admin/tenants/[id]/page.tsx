@@ -6,7 +6,7 @@ import { orgModules } from '@/server/modules';
 import { MODULE_LABELS, MODULES } from '@/lib/modules';
 import { InlineAction } from '@/components/forms/inline-action';
 import { formatCents } from '@/lib/money';
-import { recordBillingAction, setModulesAction, setTenantStatusAction, updateSubscriptionAction, voidBillingAction } from '../../actions';
+import { decidePlanChangeAction, recordBillingAction, setModulesAction, setTenantStatusAction, updateSubscriptionAction, voidBillingAction } from '../../actions';
 import { requirePlatformAdminPage } from '@/server/tenant';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,13 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   return (
     <>
       <PageHeader title={org.name} description={`/${org.slug} · ${org.country} · created ${d(org.createdAt)}`} actions={<Badge tone={org.status === 'ACTIVE' ? 'success' : org.status === 'SUSPENDED' ? 'danger' : 'info'}>{org.status}</Badge>} />
+      {sub?.pendingPlanId && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="admin-pending-plan">
+          <span>The owner requested a change to <strong>{plans.find((p) => p.id === sub.pendingPlanId)?.name ?? sub.pendingPlanId}</strong>. Agree the price with them first.</span>
+          <InlineAction action={decidePlanChangeAction} fields={{ organizationId: org.id, apply: 'true' }} label="Apply now" variant="primary" testId="apply-plan" />
+          <InlineAction action={decidePlanChangeAction} fields={{ organizationId: org.id, apply: 'false' }} label="Decline" variant="ghost" />
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Account status" description="Suspending blocks dashboard access and public ordering. Data is kept." />

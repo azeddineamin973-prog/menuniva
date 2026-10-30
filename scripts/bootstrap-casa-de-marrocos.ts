@@ -63,6 +63,9 @@ async function main() {
     await db.restaurantBranding.update({ where: { organizationId: orgId }, data: { themePreset: 'moroccan', primaryColor: '#1F5C4A', accentColor: '#B8975A', backgroundColor: '#FBF7EE', textColor: '#1E2420', headingFont: 'serif' } });
   }
 
+  // The reception counter is where takeaway guests collect orders (real detail given by the owner).
+  await db.takeawaySettings.upsert({ where: { locationId: location.id }, update: {}, create: { locationId: location.id, pickupPoint: 'Balcão de receção' } });
+  await db.takeawaySettings.updateMany({ where: { locationId: location.id, pickupPoint: null }, data: { pickupPoint: 'Balcão de receção' } });
   for (const [i, name] of AREAS.entries()) {
     const exists = await db.diningArea.findFirst({ where: { locationId: location.id, name } });
     if (!exists) await db.diningArea.create({ data: { organizationId: orgId, locationId: location.id, name, sortOrder: i + 1 } });

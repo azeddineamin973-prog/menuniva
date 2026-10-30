@@ -87,3 +87,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     sessionId: session.id,
   };
 });
+/** SHA-256 of the current browser's session token (to keep this device signed in). */
+export async function currentSessionTokenHash(): Promise<string | undefined> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? hashToken(token) : undefined;
+}

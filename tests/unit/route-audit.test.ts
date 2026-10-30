@@ -77,6 +77,8 @@ describe('M13-01 authorization audit (static)', () => {
         else if (m[1] && !perms.has(m[1])) problems.push(`${f}: unknown permission ${m[1]}`);
       } else if (f.startsWith('admin/')) {
         if (!src.includes('requirePlatformAdminPage()')) problems.push(`${f}: no requirePlatformAdminPage()`);
+      } else if (f.startsWith('account/')) {
+        if (!/getCurrentUser\(\)[\s\S]*redirect\('\/login/.test(src)) problems.push(`${f}: account page without a session check`);
       } else if (!PUBLIC_PAGES[f]) problems.push(`${f}: not classified (add a guard or list it as public with a reason)`);
     }
     expect(problems).toEqual([]);
@@ -93,6 +95,8 @@ describe('M13-01 authorization audit (static)', () => {
           if (!m) problems.push(`${f} ${fn.name}: no tenantRoute()/requireTenantAction() with a permission`);
           else if (!perms.has(m[1])) problems.push(`${f} ${fn.name}: unknown permission ${m[1]}`);
           if (fn.name !== 'GET' && fn.body.includes('requireTenantAction(') && !fn.body.includes('assertSameOrigin(')) problems.push(`${f} ${fn.name}: write without origin check`);
+        } else if (f.startsWith('api/account/')) {
+          if (!fn.body.includes('getCurrentUser()')) problems.push(`${f} ${fn.name}: no session check`);
         } else if (f.startsWith('api/public/')) {
           if (fn.name !== 'GET' && !fn.body.includes('assertSameOrigin(')) problems.push(`${f} ${fn.name}: public write without assertSameOrigin()`);
         } else if (!PUBLIC_ROUTES[f]) problems.push(`${f} ${fn.name}: not classified`);
@@ -117,6 +121,8 @@ describe('M13-01 authorization audit (static)', () => {
           if (direct && !perms.has(direct[1])) problems.push(`${f} ${fn.name}: unknown permission ${direct[1]}`);
         } else if (f.startsWith('admin/')) {
           if (!/adminRun\(|requirePlatformAdminAction\(/.test(b)) problems.push(`${f} ${fn.name}: no Super Admin check`);
+        } else if (f === 'account/actions.ts') {
+          if (!/withUser\(/.test(b)) problems.push(`${f} ${fn.name}: no session check (withUser)`);
         } else if (f === 'onboarding/new/actions.ts') {
           if (!b.includes('getCurrentUser(')) problems.push(`${f} ${fn.name}: no session check`);
         } else if (!PUBLIC_ACTIONS[fn.name]) problems.push(`${f} ${fn.name}: not classified`);
@@ -124,6 +130,7 @@ describe('M13-01 authorization audit (static)', () => {
     }
     // The admin wrapper itself must check the platform role.
     expect(read('admin/actions.ts')).toMatch(/async function adminRun[\s\S]*?requirePlatformAdminAction\(\)/);
+    expect(read('account/actions.ts')).toMatch(/async function withUser[\s\S]*?getCurrentUser\(\)[\s\S]*?redirect\('\/login/);
     expect(problems).toEqual([]);
   });
 });

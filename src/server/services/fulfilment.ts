@@ -63,13 +63,14 @@ export const takeawaySettingsSchema = z.object({
   minOrder: optCents('min_order'),
   paused: z.boolean(),
   pickupHours: z.preprocess((v) => (typeof v === 'string' && v ? JSON.parse(v) : null), openingHoursSchema.nullable()),
+  pickupPoint: z.preprocess((v) => (typeof v === 'string' ? v.trim() || null : null), z.string().max(120).nullable()),
 });
 
 export async function updateTakeawaySettings(ctx: TenantContext, input: unknown) {
   await assertModule(ctx.org.id, 'takeaway');
   const d = takeawaySettingsSchema.parse(input);
   await assertLocationAccess(ctx, d.locationId);
-  const data = { leadTimeMinutes: d.leadTimeMinutes, slotMinutes: d.slotMinutes, minOrderCents: d.minOrder ?? 0, paused: d.paused, pickupHours: d.pickupHours ?? Prisma.DbNull };
+  const data = { leadTimeMinutes: d.leadTimeMinutes, slotMinutes: d.slotMinutes, minOrderCents: d.minOrder ?? 0, paused: d.paused, pickupHours: d.pickupHours ?? Prisma.DbNull, pickupPoint: d.pickupPoint };
   await db.takeawaySettings.upsert({ where: { locationId: d.locationId }, update: data, create: { locationId: d.locationId, ...data } });
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'takeaway.settings_updated', entityType: 'RestaurantLocation', entityId: d.locationId, metadata: { ...data, pickupHours: d.pickupHours ? 'custom' : 'opening hours' } });
 }

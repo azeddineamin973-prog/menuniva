@@ -1043,6 +1043,7 @@ model Order {
   currency         String        @default("EUR")
   idempotencyKey   String
   trackingTokenHash String       @unique
+  isPriority       Boolean       @default(false) // set by staff; shown first on kitchen displays
   acknowledgedAt   DateTime?
   acceptedAt       DateTime?
   readyAt          DateTime?
@@ -1219,6 +1220,7 @@ model TakeawaySettings {
   slotMinutes     Int     @default(15)
   minOrderCents   Int     @default(0)
   pickupHours     Json?   // same format as openingHours; null = use opening hours
+  pickupPoint     String? // where guests collect orders, e.g. the reception counter (source language)
   paused          Boolean @default(false)
 
   location        RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)

@@ -201,7 +201,8 @@ async function ownedAccount(ctx: TenantContext, id: string) {
   return a;
 }
 
-export async function loyaltyMembers(ctx: TenantContext, search?: string) {
+/** Members, optionally only those (with birthday consent) whose birthday falls in `birthdayMonth` (1–12). */
+export async function loyaltyMembers(ctx: TenantContext, search?: string, birthdayMonth?: number) {
   await expireLoyalty(ctx.org.id);
   const q = search?.trim();
   const phone = q ? normalizePhone(q) : null;
@@ -210,6 +211,7 @@ export async function loyaltyMembers(ctx: TenantContext, search?: string) {
       organizationId: ctx.org.id,
       deletedAt: null,
       ...(q ? { OR: [{ phone: { contains: phone ?? q.replace(/\s/g, '') } }, { name: { contains: q, mode: 'insensitive' } }] } : {}),
+      ...(birthdayMonth ? { birthday: { startsWith: `${String(birthdayMonth).padStart(2, '0')}-` } } : {}),
     },
     include: { transactions: { orderBy: { createdAt: 'desc' }, take: 5 } },
     orderBy: { createdAt: 'desc' },

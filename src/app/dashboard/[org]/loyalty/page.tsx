@@ -8,7 +8,7 @@ import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { deleteMemberAction, redeemAction, saveLoyaltyProgramAction, withdrawMarketingAction } from './actions';
 
-export default async function LoyaltyPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ q?: string }> }) {
+export default async function LoyaltyPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ q?: string; birthdays?: string }> }) {
   const { org } = await params;
   const sp = await searchParams;
   const ctx = await requireTenantPage(org, 'loyalty.manage');
@@ -17,8 +17,9 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
   const [program, orgRow, members] = await Promise.all([
     db.loyaltyProgram.findUnique({ where: { organizationId: ctx.org.id } }),
     db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true } }),
-    loyaltyMembers(ctx, sp.q?.slice(0, 40)),
+    loyaltyMembers(ctx, sp.q?.slice(0, 40), sp.birthdays ? new Date().getMonth() + 1 : undefined),
   ]);
+  const birthdayCount = (await loyaltyMembers(ctx, undefined, new Date().getMonth() + 1)).length;
   const unit = program?.type === 'POINTS' ? 'points' : 'stamps';
   const target = program?.stampsForReward ?? 10;
   return (
@@ -35,6 +36,7 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
               <form className="flex items-center gap-2">
                 <Input name="q" defaultValue={sp.q ?? ''} placeholder="Phone or name" className="h-8 w-48" aria-label="Search members" data-testid="member-search" />
                 <button className="text-sm underline">Search</button>
+                <a href={sp.birthdays ? `/dashboard/${ctx.org.slug}/loyalty` : `/dashboard/${ctx.org.slug}/loyalty?birthdays=1`} className="text-sm underline" data-testid="birthdays-filter">{sp.birthdays ? 'All members' : `Birthdays this month (${birthdayCount})`}</a>
               </form>
             }
           />

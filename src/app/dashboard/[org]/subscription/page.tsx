@@ -1,4 +1,7 @@
-import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, PageHeader, Stat } from '@/components/ui';
+import { ActionForm } from '@/components/forms/action-form';
+import { InlineAction } from '@/components/forms/inline-action';
+import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Select, Stat } from '@/components/ui';
+import { cancelPlanChangeAction, planChangeAction } from '../support/actions';
 import { getMessages } from '@/i18n';
 import { MODULE_LABELS, MODULES } from '@/lib/modules';
 import { formatCents } from '@/lib/money';
@@ -15,12 +18,13 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'billing.view');
   const m = getMessages(ctx.user.preferredLanguage);
-  const [sub, limits, usage, modules, config] = await Promise.all([
+  const [sub, limits, usage, modules, config, plans] = await Promise.all([
     db.subscription.findUnique({ where: { organizationId: ctx.org.id }, include: { plan: true, billingRecords: { orderBy: { periodStart: 'desc' } } } }),
     planLimits(ctx.org.id),
     planUsage(ctx.org.id),
     orgModules(ctx.org.id),
     getPlatformConfig(),
+    db.subscriptionPlan.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
   ]);
   if (!sub) return <EmptyState title="No subscription yet" description="Contact MenuNiva support to set up your plan." />;
   const now = new Date();
@@ -70,6 +74,27 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
           </CardBody>
         </Card>
       </div>
+      <Card className="mt-6">
+        <CardHeader title="Change plan" description="Your request goes to MenuNiva. Nothing changes until it is confirmed; you are told the price before any change." />
+        <CardBody>
+          {sub.pendingPlanId ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm" data-testid="pending-plan">
+              <span>Requested: <strong>{plans.find((p) => p.id === sub.pendingPlanId)?.name ?? '—'}</strong> (waiting for MenuNiva)</span>
+              <InlineAction action={cancelPlanChangeAction} fields={{ org: ctx.org.slug }} label="Cancel request" variant="ghost" />
+            </div>
+          ) : (
+            <ActionForm action={planChangeAction} submitLabel="Request plan change" successText="Request sent" testId="plan-change-form" className="grid gap-3 space-y-0 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+              <input type="hidden" name="org" value={ctx.org.slug} />
+              <Field label="New plan" htmlFor="pc-plan">
+                <Select id="pc-plan" name="planId">
+                  {plans.filter((p) => p.id !== sub.planId).map((p) => <option key={p.id} value={p.id}>{p.name}{p.monthlyPriceCents !== null ? ` · ${formatCents(p.monthlyPriceCents)}/month` : ''}</option>)}
+                </Select>
+              </Field>
+              <Field label="Message" htmlFor="pc-note" optionalLabel="optional"><Input id="pc-note" name="note" maxLength={500} /></Field>
+            </ActionForm>
+          )}
+        </CardBody>
+      </Card>
       <Card className="mt-6">
         <CardHeader title="Billing history" description="Only payments MenuNiva actually recorded. These are not legal invoices." />
         {sub.billingRecords.length === 0 ? (

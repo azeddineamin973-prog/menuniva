@@ -19,6 +19,7 @@ type Initial = {
   deliveryFeeCents: number;
   cancelReason: string | null;
   tableLabel: string | null;
+  pickupPoint?: string | null;
   items: { name: string; variant: string | null; quantity: number; lineTotalCents: number; modifiers: string[] }[];
 };
 
@@ -65,6 +66,7 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
         <p className="text-sm opacity-70">{m.customer.orderSent}</p>
         <p className="mt-1 font-serif text-3xl">{fmt(m.customer.orderNumber, { number: initial.number })}</p>
         {initial.tableLabel && <p className="text-sm opacity-70">{fmt(m.customer.table, { label: initial.tableLabel })}</p>}
+        {initial.pickupPoint && <p className="text-sm opacity-80" data-testid="pickup-point">{fmt(m.customer.pickupPoint, { place: initial.pickupPoint })}</p>}
         <p className={cn('mt-4 inline-block rounded-full px-4 py-1.5 text-sm font-medium', status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-sf-primary text-white')} data-testid="order-status" data-status={status}>
           {label(status)}
         </p>

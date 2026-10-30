@@ -353,6 +353,14 @@ export async function liveOrders(ctx: TenantContext, locationId: string, since: 
   return [...active, ...closed];
 }
 
+/** Staff flag an order as priority (e.g. a guest in a hurry); kitchen displays show it first. */
+export async function setOrderPriority(ctx: TenantContext, orderId: string, isPriority: boolean) {
+  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.org.id } });
+  if (!order) throw new UserFacingError('Order not found.', 404);
+  await assertLocationAccess(ctx, order.locationId);
+  await db.order.update({ where: { id: order.id }, data: { isPriority } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'order.priority_changed', entityType: 'Order', entityId: order.id, metadata: { isPriority } });
+}
 /** Tickets for one station's display. */
 export async function stationTickets(ctx: TenantContext, stationId: string) {
   await assertModule(ctx.org.id, 'kds');
@@ -373,12 +381,15 @@ export async function stationTickets(ctx: TenantContext, stationId: string) {
           createdAt: true,
           acceptedAt: true,
           pickupAt: true,
+          isPriority: true,
           table: { select: { label: true } },
           items: { where: { stationId, voidedAt: null }, include: { modifiers: true }, orderBy: { createdAt: 'asc' } },
         },
       },
     },
   });
+  // Priority orders first, otherwise oldest first.
+  tickets.sort((a, b) => Number(b.order.isPriority) - Number(a.order.isPriority));
   return { station, tickets };
 }
 
@@ -401,7 +412,7 @@ export async function trackOrder(token: string) {
       pickupAt: true,
       cancelReason: true,
       table: { select: { label: true, qrTokens: { where: { isActive: true }, select: { token: true }, take: 1 } } },
-      location: { select: { name: true, slug: true, timeZone: true, organization: { select: { name: true, slug: true } } } },
+      location: { select: { name: true, slug: true, timeZone: true, takeawaySettings: { select: { pickupPoint: true } }, organization: { select: { name: true, slug: true } } } },
       items: { where: { voidedAt: null }, select: { customerNameSnapshot: true, nameSnapshot: true, variantNameSnapshot: true, quantity: true, lineTotalCents: true, modifiers: { select: { nameSnapshot: true, quantity: true } } } },
       events: { select: { toStatus: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
     },

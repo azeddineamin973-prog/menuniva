@@ -45,6 +45,7 @@ export default async function TakeawayPage({ params }: { params: Promise<{ org: 
                 </Field>
                 <Field label="Minimum order (€)" htmlFor="min" optionalLabel="optional"><Input id="min" name="minOrder" inputMode="decimal" defaultValue={settings?.minOrderCents ? centsToInputValue(settings.minOrderCents) : ''} /><FieldError name="minOrder" /></Field>
               </div>
+              <Field label="Pickup point shown to guests" htmlFor="pickup-point" optionalLabel="optional" hint="Where guests collect their order, e.g. the reception counter."><Input id="pickup-point" name="pickupPoint" maxLength={120} defaultValue={settings?.pickupPoint ?? ''} /></Field>
               <div className="rounded-xl border border-warning/30 bg-warning/5 p-3"><Checkbox name="paused" label="Pause takeaway now (busy period)" defaultChecked={settings?.paused ?? false} /></div>
               <div>
                 <Label>Pickup hours</Label>

@@ -45,7 +45,7 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   if (mode === 'pickup') {
     const opts = pickupOptions(location, location.takeawaySettings);
     const fmtTime = new Intl.DateTimeFormat(tag, { timeZone: location.timeZone, hour: '2-digit', minute: '2-digit' });
-    checkout.pickup = { asapAllowed: opts.asap.allowed, asapMinutes: opts.asap.minutes, slots: opts.slots.map((s) => ({ value: s.value, label: fmtTime.format(new Date(s.value)) })), minOrderCents: location.takeawaySettings?.minOrderCents ?? 0 };
+    checkout.pickup = { asapAllowed: opts.asap.allowed, asapMinutes: opts.asap.minutes, slots: opts.slots.map((s) => ({ value: s.value, label: fmtTime.format(new Date(s.value)) })), minOrderCents: location.takeawaySettings?.minOrderCents ?? 0, pickupPoint: location.takeawaySettings?.pickupPoint ?? null };
     if (!location.takeawayEnabled) notFound();
     if (location.takeawaySettings?.paused) canOrder = false;
     if (!opts.asap.allowed && opts.slots.length === 0) {

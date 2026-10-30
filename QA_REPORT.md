@@ -271,3 +271,24 @@ Defects found and fixed in this run:
 
 Not verified (needs real accounts or hardware): SMTP delivery, DeepL/LibreTranslate, OCR, thermal printers, online payments, certified invoicing, billing processor, Glovo/Uber partner APIs, a real error collector, a real hosting deployment.
 
+## Run 10 — 2026-10-30 (session 6): master-specification audit
+
+| Check | Command | Result |
+|---|---|---|
+| Type check | `npx tsc --noEmit` | ✅ 0 errors |
+| Unit + integration | `npm test` | ✅ 33 files, **246 tests passed** |
+| Browser E2E | `npm run test:e2e` | ✅ **37 tests passed** (see note) |
+| Demo environment E2E | `npm run test:demo` | ✅ **1 test passed** (TEST 20 on the Casa de Marrocos demo layout) |
+| Migration | `pickup_point_order_priority` | ✅ applied to dev and test (and demo via demo:seed) |
+
+| File | Covers |
+|---|---|
+| `tests/integration/spec-gaps.test.ts` (7) | Support requests (validation, own-restaurant only); plan change: same plan refused, upgrade request creates a pending plan + ticket, cancel, decline, apply, nothing pending; account: profile, wrong current password, short password, other devices signed out, login with new password, export without password hash; account deletion refused for the only owner, allowed with a second owner (name/email erased, sessions gone, tenant access and login refused); priority order first on the kitchen display, another restaurant cannot flag it; pickup point stored trimmed, shown via tracking, cleared when empty; birthdays this month only for members with birthday consent |
+| `tests/e2e/spec-gaps.spec.ts` (4) | Storefront opening hours, open now, weekday names in English and Portuguese; staff mark order #2 priority → badge on the board, first ticket with badge on the kitchen display; owner support request + plan change request → Super Admin sees both, applies the plan → owner sees Growth; waiter renames themself, downloads own data, deletes the account, can no longer sign in |
+| `tests/e2e-demo/demo-flow.spec.ts` (1) | **TEST 20** now on "Casa de Marrocos (DEMO)": the four real areas, downstairs kitchen and café stations, fictitious dishes; 5 languages + RTL; order 19,00 €; kitchen/café split; completed; takeaway checkout shows "Balcão de receção" |
+| `tests/unit/route-audit.test.ts` | Extended: `/account` page, account actions (session wrapper) and `/api/account/export` must check the session |
+
+Note: in the first full E2E run the first test (analytics) got a 404 for a just-seeded table page and timed out; the same spec passed alone and the next full run passed 37/37. The cause was not identified; watch for it. A demo run also failed once because another `next build` was still holding the build folder; the re-run passed.
+
+Not built (documented as FUTURE INTEGRATION): promotions restricted to identified customers, because MenuNiva has no verified customer identity (no SMS/email verification); a typed phone number could belong to anyone.
+

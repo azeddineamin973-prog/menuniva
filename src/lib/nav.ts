@@ -29,4 +29,5 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'settings', path: '/settings', permission: 'settings.manage', group: 'manage' },
   { key: 'setup', path: '/setup', permission: 'settings.manage', group: 'manage' },
   { key: 'subscription', path: '/subscription', permission: 'billing.view', group: 'manage' },
+  { key: 'support', path: '/support', permission: 'settings.manage', group: 'manage' },
 ];

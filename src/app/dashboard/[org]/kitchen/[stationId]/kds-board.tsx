@@ -23,6 +23,7 @@ type Ticket = {
     createdAt: string;
     acceptedAt: string | null;
     pickupAt: string | null;
+    isPriority?: boolean;
     table: { label: string } | null;
     items: { id: string; quantity: number; nameSnapshot: string; variantNameSnapshot: string | null; notes: string | null; modifiers: { nameSnapshot: string; quantity: number }[] }[];
   };
@@ -102,7 +103,7 @@ export function KdsBoard({ org, stationId, canUpdate, t }: { org: string; statio
                   >
                     <header className="flex items-start justify-between">
                       <div>
-                        <p className="text-2xl font-bold tabular-nums">#{tk.order.number}</p>
+                        <p className="flex items-center gap-2 text-2xl font-bold tabular-nums">#{tk.order.number}{tk.order.isPriority && <span className="rounded-md bg-danger px-2 py-0.5 text-sm font-semibold text-white" data-testid="kds-priority">{t.priority}</span>}</p>
                         <p className="text-lg">{tk.order.channel === 'TABLE' ? f(t.table, { label: tk.order.table?.label ?? '?' }) : tk.order.channel === 'TAKEAWAY' ? `${t.takeaway} ${tk.order.customerName ?? ''}` : t.delivery}</p>
                       </div>
                       <p className={cn('rounded-lg px-2 py-1 text-lg font-semibold tabular-nums', mins > 20 ? 'bg-danger' : mins > 10 ? 'bg-warning text-graphite' : 'bg-white/10')}>{elapsed(tk.order.acceptedAt ?? tk.createdAt, now)}</p>

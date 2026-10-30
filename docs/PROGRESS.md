@@ -20,8 +20,12 @@
 | M12 Analytics, subscriptions, admin | 10 | 0 | 10 | ✅ closed (billing processor needs configuration) |
 | M13 Security, backups, deployment | 13 | 0 | 13 | ✅ closed (not deployed: no hosting/domain yet) |
 
-Tests: 239 unit/integration + 33 browser E2E + 1 demo-environment E2E passing (QA_REPORT.md, Run 9). Master-spec TEST 1–20 all pass.
+Tests: 246 unit/integration + 37 browser E2E + 1 demo-environment E2E passing (QA_REPORT.md, Run 10). Master-spec TEST 1–20 all pass.
+Spec audit (session 6): 8 missing items built and tested (AUD-01..08); 1 left as FUTURE INTEGRATION (AUD-09, promotions for verified customers).
 
+## Completed in session 6 (spec audit)
+- Compared the master specification part by part with the app. Added: opening hours on the storefront, order priority on live board/kitchen displays, takeaway pickup point (Casa de Marrocos: reception counter), restaurant support requests, plan upgrade/downgrade requests handled by Super Admin, staff account page (profile, password, own-data export, account deletion), loyalty birthdays this month, and a Casa de Marrocos demo tenant (real layout, fictitious dishes) used by TEST 20.
+- Not built on purpose: promotions for identified customers (needs verified customer identity such as SMS/email verification).
 ## Completed in session 5
 - M13: automated authorization audit (static check of every page/route/action + runtime check as anonymous, another restaurant's owner and a waiter); every admin page now checks the Super Admin role itself; failed-only login rate limiting. GDPR guest data search/export/erasure and a daily retention job (per-restaurant period). Error monitoring with personal-data scrubbing, token masking and optional https forwarding; error page. Backup/restore without PostgreSQL client tools (consistent snapshot, checksum, FK-ordered verified restore). Environment rules (separate databases per environment, https and real secret for public ones, DEMO banner). Safe migration command (status → backup → deploy → verify) and migration lint. Mobile pass at 360 px (fixed small tap targets). Demo seed and TEST 20 in the demo environment. Deployment guide and launch checklist.
 ## Completed in session 3

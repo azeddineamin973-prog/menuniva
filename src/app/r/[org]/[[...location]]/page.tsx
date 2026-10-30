@@ -11,6 +11,8 @@ import { orgModules } from '@/server/modules';
 import { env } from '@/server/env';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storefront';
+import { StorefrontHours } from '@/components/storefront/opening-hours';
+import type { OpeningHours } from '@/lib/opening-hours';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,6 +109,7 @@ export default async function StorefrontPage({ params, searchParams }: { params:
           </div>
         )}
         {wa && <p className="text-xs opacity-60">{m.customer.whatsappOpenNote}</p>}
+        <StorefrontHours hours={(location.openingHours as OpeningHours | null) ?? null} timeZone={location.timeZone} tag={LANGUAGE_TAG[lang]} m={m.customer} />
         <div className="flex flex-wrap gap-3 text-sm">
           {location.phone && <a href={`tel:${location.phone.replace(/\s/g, '')}`} className="underline">{location.phone}</a>}
           {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className="underline">Website</a>}

@@ -12,7 +12,7 @@ export async function saveTakeawaySettingsAction(_p: ActionResult, form: FormDat
   return runTenantAction(
     form.get('org'),
     'takeaway.manage',
-    (ctx) => updateTakeawaySettings(ctx, { locationId: form.get('locationId'), leadTimeMinutes: form.get('leadTimeMinutes'), slotMinutes: form.get('slotMinutes'), minOrder: form.get('minOrder'), paused: on(form, 'paused'), pickupHours: form.get('pickupHours') }),
+    (ctx) => updateTakeawaySettings(ctx, { locationId: form.get('locationId'), leadTimeMinutes: form.get('leadTimeMinutes'), slotMinutes: form.get('slotMinutes'), minOrder: form.get('minOrder'), paused: on(form, 'paused'), pickupHours: form.get('pickupHours'), pickupPoint: form.get('pickupPoint') }),
     R,
   );
 }

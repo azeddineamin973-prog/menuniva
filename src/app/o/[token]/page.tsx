@@ -40,6 +40,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
           deliveryFeeCents: order.deliveryFeeCents,
           cancelReason: order.status === 'CANCELLED' ? order.cancelReason : null,
           tableLabel: order.table?.label ?? null,
+          pickupPoint: order.channel === 'TAKEAWAY' ? (order.location.takeawaySettings?.pickupPoint ?? null) : null,
           items: order.items.map((i) => ({ name: i.customerNameSnapshot ?? i.nameSnapshot, variant: i.variantNameSnapshot, quantity: i.quantity, lineTotalCents: i.lineTotalCents, modifiers: i.modifiers.map((x) => x.nameSnapshot) })),
         }}
         orderMoreHref={tableToken ? `/t/${tableToken}` : `/r/${org.slug}`}

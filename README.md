@@ -61,10 +61,11 @@ npm run typecheck
 ```
 Tests never touch your real restaurant data (they use `menuniva_test` and `menuniva_demo`).
 
-### Demo restaurant (fictitious, separate database)
+### Demo restaurants (fictitious, separate database)
 ```bash
-npm run demo:seed   # (re)creates "Restaurante Demo" in menuniva_demo and prints the logins
+npm run demo:seed   # (re)creates "Restaurante Demo" and "Casa de Marrocos (DEMO)" in menuniva_demo and prints the logins
 ```
+The Casa de Marrocos demo uses the real layout (rooms, downstairs kitchen, café, reception counter) with fictitious dishes and prices marked "(demo)". It is not the real menu.
 To open it, start the app against the demo database:
 `APP_ENV=demo DATABASE_URL=$DEMO_DATABASE_URL npm run dev` (every page then shows a DEMO banner).
 

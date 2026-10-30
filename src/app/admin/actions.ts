@@ -11,6 +11,7 @@ import { requirePlatformAdminAction } from '@/server/tenant';
 import { UserFacingError } from '@/server/errors';
 import { recordManualBilling, voidBillingRecord } from '@/server/billing';
 import { updatePlatformConfig } from '@/server/services/platform-config';
+import { decidePlanChange } from '@/server/services/support';
 
 async function adminRun<T>(fn: (adminId: string) => Promise<T>): Promise<ActionResult<T>> {
   try {
@@ -83,4 +84,7 @@ export async function updatePlatformConfigAction(_p: ActionResult, form: FormDat
       supportEmail: form.get('supportEmail'),
     }),
   );
+}
+export async function decidePlanChangeAction(_p: ActionResult, form: FormData) {
+  return adminRun((adminId) => decidePlanChange(adminId, String(form.get('organizationId')), form.get('apply') === 'true'));
 }

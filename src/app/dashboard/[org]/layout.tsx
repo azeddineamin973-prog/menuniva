@@ -59,7 +59,7 @@ export default async function DashboardLayout({ children, params }: { children: 
         footer={
           <div className="space-y-1">
             <p className="truncate px-3 text-xs text-muted">
-              {ctx.user.name} · {ctx.role.replace('RESTAURANT_', '').replace('_', ' ').toLowerCase()}
+              <Link href="/account" className="underline-offset-2 hover:underline" data-testid="my-account-link">{ctx.user.name}</Link> · {ctx.role.replace('RESTAURANT_', '').replace('_', ' ').toLowerCase()}
             </p>
             <ThemeToggle />
             <form action={logoutAction}>
