@@ -43,3 +43,4 @@ coverage/
 /audit/ux/out/
 # database CA certificates (downloaded, environment-specific)
 /certs/
+audit/phase2/inventory.json
