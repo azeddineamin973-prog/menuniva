@@ -73,14 +73,15 @@ export function RestaurantLinkCard({
               <Icon name="lock" /> Open restaurant website
             </span>
           )}
-          <CopyLinkButton value={link.url} label="Copy restaurant link" testId="copy-restaurant-link" />
+          {/* On a development address the link and QR only work on this computer: say so on the buttons. */}
+          <CopyLinkButton value={link.url} label={link.local ? 'Copy test link' : 'Copy restaurant link'} testId="copy-restaurant-link" />
           {showPreviewButton && (
             <ButtonLink href={`${base}/preview`} variant="secondary" icon="phone" data-testid="preview-mobile-menu">
               Preview mobile menu
             </ButtonLink>
           )}
           <a href={qrHref} download className={buttonClass('secondary', 'md')} data-testid="download-restaurant-qr">
-            <Icon name="qr" /> Download QR code
+            <Icon name="qr" /> {link.local ? 'Download test QR code' : 'Download QR code'}
           </a>
         </div>
         {!live && <p className="text-xs text-muted">The QR code can be printed now: until you publish, scanning it shows a “not published yet” notice, never your draft menu.</p>}

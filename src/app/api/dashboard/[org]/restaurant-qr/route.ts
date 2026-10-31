@@ -20,8 +20,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ org: str
     if (!location) return new Response('Not found', { status: 404 });
     const link = await getRestaurantLink(ctx, location.id, { checks: false });
     const format = sp.get('format') === 'svg' ? 'svg' : 'png';
-    const filename = `${ctx.org.slug}${link.path.split('/').length > 3 ? `-${link.location.slug}` : ''}-menu-qr.${format}`;
-    const headers: Record<string, string> = { 'Cache-Control': 'private, no-store', 'X-Restaurant-Url': link.url };
+    // A QR for a development address is marked in its file name so it is never mistaken for the real one.
+    const filename = `${ctx.org.slug}${link.path.split('/').length > 3 ? `-${link.location.slug}` : ''}-menu-qr${link.local ? '-local-test' : ''}.${format}`;
+    const headers: Record<string, string> = { 'Cache-Control': 'private, no-store', 'X-Restaurant-Url': link.url, 'X-Restaurant-Url-Public': link.local ? 'no' : 'yes' };
     if (format === 'png' || sp.get('download') === '1') headers['Content-Disposition'] = `attachment; filename="${filename.replace(/[^A-Za-z0-9._-]/g, '_')}"`;
     if (format === 'png') return new Response(new Uint8Array(await qrPng(link.url)), { headers: { ...headers, 'Content-Type': 'image/png' } });
     return new Response(await qrSvg(link.url), { headers: { ...headers, 'Content-Type': 'image/svg+xml' } });

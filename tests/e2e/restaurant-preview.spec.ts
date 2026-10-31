@@ -97,7 +97,11 @@ test('owner: Preview my restaurant shows the real draft menu in a phone, tablet 
   const png = await page.request.get(qrHref);
   expect(png.status()).toBe(200);
   expect(png.headers()['content-type']).toBe('image/png');
-  expect(png.headers()['content-disposition']).toMatch(/attachment; filename=".+-menu-qr\.png"/);
+  // The test server runs on localhost: the file and the buttons say it is a test QR, not a shareable one.
+  expect(png.headers()['content-disposition']).toMatch(/attachment; filename=".+-menu-qr-local-test\.png"/);
+  expect(png.headers()['x-restaurant-url-public']).toBe('no');
+  await expect(card.getByTestId('download-restaurant-qr')).toHaveText('Download test QR code');
+  await expect(card.getByTestId('copy-restaurant-link')).toContainText(/Copied|Copy test link/);
   expect(png.headers()['x-restaurant-url']).toBe(url);
   expect((await png.body()).subarray(1, 4).toString()).toBe('PNG');
 
