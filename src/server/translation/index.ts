@@ -1,24 +1,11 @@
 import 'server-only';
 import type { LanguageCode } from '@/generated/prisma/enums';
 import { env } from '../env';
+import { OpenRouterProvider, standInModelFetch } from './openrouter';
+import { TranslationUnavailableError, type TranslationProvider } from './types';
 
-/**
- * Translation provider abstraction (Part 4).
- *
- * - With no provider configured, MenuNiva keeps the original text and marks other languages
- *   as "Translation required". Nothing is invented.
- * - Provider output is stored with status MACHINE and is NOT shown to guests until a staff
- *   member reviews it (status REVIEWED).
- * - Allergen and ingredient safety information is never machine-translated automatically.
- */
-export interface TranslationProvider {
-  readonly id: 'none' | 'deepl' | 'libretranslate';
-  readonly label: string;
-  isConfigured(): boolean;
-  translate(texts: string[], from: LanguageCode, to: LanguageCode): Promise<string[]>;
-}
-
-export class TranslationUnavailableError extends Error {}
+export { TranslationUnavailableError };
+export type { TranslationProvider };
 
 const DEEPL_LANG: Record<LanguageCode, string> = { pt: 'PT-PT', en: 'EN-GB', fr: 'FR', ar: 'AR', es: 'ES' };
 const DEEPL_SOURCE: Record<LanguageCode, string> = { pt: 'PT', en: 'EN', fr: 'FR', ar: 'AR', es: 'ES' };
@@ -84,6 +71,10 @@ export function getTranslationProvider(): TranslationProvider {
       return new DeepLProvider();
     case 'libretranslate':
       return new LibreTranslateProvider();
+    case 'openrouter':
+      // In the browser suite the model is answered locally (see standInModelFetch), so the real
+      // translation code runs end to end without a billed request leaving the machine.
+      return new OpenRouterProvider(env.APP_ENV === 'test' && env.TEST_FETCH_FIXTURES ? standInModelFetch() : fetch);
     default:
       return new NoneProvider();
   }

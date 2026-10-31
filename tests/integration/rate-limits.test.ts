@@ -6,6 +6,7 @@ import { submitPickupOrder } from '@/server/services/fulfilment';
 import { RateLimitError } from '@/server/rate-limit';
 import { resetDatabase } from '../support/db';
 import { createOrderingFixture } from '../support/fixtures';
+import { awaitFreshWindow } from '../support/rate-window';
 
 /**
  * Audit BUG-05: guests on one restaurant Wi-Fi with the same phone model must not block each
@@ -47,6 +48,8 @@ describe('public order throttling (audit BUG-05)', () => {
     const f = await createOrderingFixture();
     const qr = await tables(f, 6);
     const ipLimit = TABLE_ORDER_LIMITS.ip[0];
+    // 150 orders take a few seconds; 60 s of window left is ample headroom.
+    await awaitFreshWindow(TABLE_ORDER_LIMITS.ip[1], 60_000);
     for (let i = 0; i < ipLimit; i++) await order(qr[i % 6], { guest: `g_fresh${i}`, ip: 'ip_attacker' }, f);
     await expect(order(qr[0], { guest: 'g_fresh-next', ip: 'ip_attacker' }, f)).rejects.toBeInstanceOf(RateLimitError);
     const abuse = await db.errorLog.findMany({ where: { source: 'abuse' } });
@@ -57,6 +60,7 @@ describe('public order throttling (audit BUG-05)', () => {
   it('without a trusted IP (no proxy configured) the per-table limit still caps one table', async () => {
     const f = await createOrderingFixture();
     const [limit] = TABLE_ORDER_LIMITS.table;
+    await awaitFreshWindow(TABLE_ORDER_LIMITS.table[1], 60_000);
     for (let i = 0; i < limit; i++) await order(f.qrToken, { guest: `g_anon${i}`, ip: null }, f);
     await expect(order(f.qrToken, { guest: 'g_anon-x', ip: null }, f)).rejects.toBeInstanceOf(RateLimitError);
   });
@@ -75,6 +79,7 @@ describe('public order throttling (audit BUG-05)', () => {
       submitPickupOrder({ orgSlug: f.org.slug, locationSlug: f.location.slug, idempotencyKey: randomUUID(), language: 'pt', items: [{ productId: f.dish.id, quantity: 1, modifiers: [] }], pickup: 'asap', customerName: `Guest ${i}`, phone }, { guest: `g_tk${i}`, ip: WIFI });
     const res = await Promise.allSettled(Array.from({ length: 20 }, (_, i) => pickup(i, `+351 91${String(i).padStart(7, '0')}`)));
     expect(res.filter((r) => r.status === 'rejected')).toEqual([]);
+    await awaitFreshWindow(3600, 60_000);
     for (let i = 0; i < 8; i++) await pickup(100 + i, '+351 912 345 678');
     await expect(pickup(200, '+351912345678')).rejects.toBeInstanceOf(RateLimitError);
   });

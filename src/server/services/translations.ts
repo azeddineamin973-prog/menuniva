@@ -4,35 +4,81 @@ import type { LanguageCode } from '@/generated/prisma/enums';
 import { LANGUAGES } from '@/i18n/config';
 import { audit } from '../audit';
 import { db } from '../db';
-import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
 import type { TenantContext } from '../tenant';
-import { getTranslationProvider, TranslationUnavailableError } from '../translation';
+import { getTranslationProvider } from '../translation';
 
 export type TranslationCell = { name: string; description: string | null; status: 'SOURCE' | 'MACHINE' | 'REVIEWED' } | null;
 
-/** Grid of every active category/product × enabled language for the translation editor. */
-export async function getTranslationGrid(ctx: TenantContext) {
+export type TranslationGridRow = { kind: 'category' | 'product'; id: string; sourceName: string; cells: Record<LanguageCode, TranslationCell> };
+
+export const gridQuerySchema = z.object({
+  /** `missing` = no translation yet, `machine` = waiting for review, `done` = all reviewed. */
+  filter: z.enum(['all', 'missing', 'machine', 'done']).default('all'),
+  language: z.enum(LANGUAGES as [LanguageCode, ...LanguageCode[]]).optional(),
+  query: z.string().trim().max(80).default(''),
+  page: z.number().int().min(1).default(1),
+  perPage: z.number().int().min(5).max(100).default(25),
+});
+
+/**
+ * Grid of active categories/products × enabled languages for the translation editor.
+ *
+ * Counts always cover the whole menu, while the returned rows are filtered and paginated: a
+ * menu with hundreds of dishes must not render hundreds of editors in one page.
+ */
+export async function getTranslationGrid(ctx: TenantContext, input: unknown = {}) {
+  const q = gridQuerySchema.parse(input);
   const org = await db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true } });
   const [categories, products] = await Promise.all([
     db.menuCategory.findMany({ where: { organizationId: ctx.org.id }, orderBy: { sortOrder: 'asc' }, include: { translations: true } }),
     db.menuProduct.findMany({ where: { organizationId: ctx.org.id, status: { not: 'ARCHIVED' } }, orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }], include: { translations: true } }),
   ]);
-  const toRow = (kind: 'category' | 'product', id: string, translations: { language: LanguageCode; name: string; description: string | null; status: 'SOURCE' | 'MACHINE' | 'REVIEWED' }[]) => ({
+  const targets = org.enabledLanguages.filter((l) => l !== org.sourceLanguage);
+  const toRow = (kind: 'category' | 'product', id: string, translations: { language: LanguageCode; name: string; description: string | null; status: 'SOURCE' | 'MACHINE' | 'REVIEWED' }[]): TranslationGridRow => ({
     kind,
     id,
+    sourceName: translations.find((t) => t.language === org.sourceLanguage)?.name ?? '',
     cells: Object.fromEntries(org.enabledLanguages.map((l) => [l, translations.find((t) => t.language === l) ?? null])) as Record<LanguageCode, TranslationCell>,
   });
-  const rows = [...categories.map((c) => toRow('category', c.id, c.translations)), ...products.map((p) => toRow('product', p.id, p.translations))];
+  const all = [...categories.map((c) => toRow('category', c.id, c.translations)), ...products.map((p) => toRow('product', p.id, p.translations))];
+
+  // Counts ignore the source language: a missing source name is a menu problem, not a translation one.
   let missing = 0;
   let unreviewed = 0;
-  for (const r of rows)
-    for (const l of org.enabledLanguages) {
+  for (const r of all)
+    for (const l of targets) {
       const c = r.cells[l];
       if (!c) missing++;
       else if (c.status === 'MACHINE') unreviewed++;
     }
-  return { org, rows, missing, unreviewed, provider: { id: getTranslationProvider().id, label: getTranslationProvider().label, configured: getTranslationProvider().isConfigured() } };
+
+  const langs = q.language ? [q.language] : targets;
+  const needle = q.query.toLowerCase();
+  const matches = (r: TranslationGridRow) => {
+    if (needle && !r.sourceName.toLowerCase().includes(needle) && !langs.some((l) => r.cells[l]?.name.toLowerCase().includes(needle))) return false;
+    if (q.filter === 'missing') return langs.some((l) => !r.cells[l]);
+    if (q.filter === 'machine') return langs.some((l) => r.cells[l]?.status === 'MACHINE');
+    if (q.filter === 'done') return langs.every((l) => r.cells[l] && r.cells[l]!.status !== 'MACHINE');
+    return true;
+  };
+  const filtered = all.filter(matches);
+  const pages = Math.max(1, Math.ceil(filtered.length / q.perPage));
+  const page = Math.min(q.page, pages);
+  const provider = getTranslationProvider();
+  return {
+    org,
+    targets,
+    rows: filtered.slice((page - 1) * q.perPage, page * q.perPage),
+    total: all.length,
+    matched: filtered.length,
+    page,
+    pages,
+    query: q,
+    missing,
+    unreviewed,
+    provider: { id: provider.id, label: provider.label, configured: provider.isConfigured() },
+  };
 }
 
 export const saveTranslationInput = z.object({
@@ -88,40 +134,4 @@ export async function approveTranslation(ctx: TenantContext, kind: 'category' | 
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.translation_approved', entityType: kind, entityId: id, metadata: { language } });
 }
 
-/**
- * Bulk machine translation of names/descriptions for missing languages. Only runs when a
- * provider is configured. Ingredients are deliberately excluded (safety-critical).
- */
-export async function bulkTranslateMissing(ctx: TenantContext): Promise<{ created: number }> {
-  await assertModule(ctx.org.id, 'translations');
-  const provider = getTranslationProvider();
-  if (!provider.isConfigured()) throw new UserFacingError('No translation provider is configured. Use the manual editor.');
-  const org = await db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true } });
-  const src = org.sourceLanguage;
-  let created = 0;
-  try {
-    const products = await db.menuProduct.findMany({ where: { organizationId: ctx.org.id, status: { not: 'ARCHIVED' } }, include: { translations: true } });
-    const categories = await db.menuCategory.findMany({ where: { organizationId: ctx.org.id }, include: { translations: true } });
-    for (const target of org.enabledLanguages.filter((l) => l !== src)) {
-      for (const p of products) {
-        const source = p.translations.find((t) => t.language === src);
-        if (!source || p.translations.some((t) => t.language === target)) continue;
-        const [name, description] = await provider.translate([source.name, source.description ?? ''], src, target);
-        await db.productTranslation.create({ data: { productId: p.id, language: target, name, description: source.description ? description : null, status: 'MACHINE' } });
-        created++;
-      }
-      for (const c of categories) {
-        const source = c.translations.find((t) => t.language === src);
-        if (!source || c.translations.some((t) => t.language === target)) continue;
-        const [name] = await provider.translate([source.name], src, target);
-        await db.categoryTranslation.create({ data: { categoryId: c.id, language: target, name, status: 'MACHINE' } });
-        created++;
-      }
-    }
-  } catch (e) {
-    if (e instanceof TranslationUnavailableError) throw new UserFacingError(`Translation provider error: ${e.message}`);
-    throw e;
-  }
-  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.bulk_translated', entityType: 'Menu', metadata: { created, provider: provider.id } });
-  return { created };
-}
+export { bulkTranslateMissing } from './ai-translate';

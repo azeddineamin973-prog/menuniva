@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Alert, Card, CardBody, CardHeader, EmptyState, Input, PageHeader, Stat } from '@/components/ui';
+import { Alert, Button, buttonClass, Card, CardBody, CardHeader, EmptyState, Input, PageHeader, Stat, statGrid } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { formatCents } from '@/lib/money';
 import { cn } from '@/lib/cn';
@@ -55,16 +55,16 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {PRESETS.map(([k, label]) => (
-              <Link key={k} href={`${base}?p=${k}`} className={cn('rounded-full px-3 py-1 text-sm ring-1 ring-line', range.preset === k && 'bg-graphite text-white')} data-testid={`range-${k}`}>{label}</Link>
+              <Link key={k} href={`${base}?p=${k}`} aria-current={range.preset === k ? 'page' : undefined} className={cn('inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium ring-1 ring-line pointer-coarse:h-10', range.preset === k ? 'bg-graphite text-white dark:bg-lime dark:text-graphite' : 'hover:bg-surface-2')} data-testid={`range-${k}`}>{label}</Link>
             ))}
-            <form className="flex items-center gap-1" data-testid="range-custom">
+            <form className="flex flex-wrap items-center gap-1.5" data-testid="range-custom">
               <input type="hidden" name="p" value="custom" />
-              <Input type="date" name="from" defaultValue={range.from} className="h-8 w-36" aria-label="From" />
-              <Input type="date" name="to" defaultValue={range.to} className="h-8 w-36" aria-label="To" />
-              <button className="text-sm underline">Apply</button>
+              <Input type="date" name="from" defaultValue={range.from} className="w-38!" aria-label="From" />
+              <Input type="date" name="to" defaultValue={range.to} className="w-38!" aria-label="To" />
+              <Button type="submit" variant="secondary" size="sm">Apply</Button>
             </form>
             {canExport ? (
-              <a href={`/api/dashboard/${ctx.org.slug}/analytics/export?${q}`} className="rounded-full bg-lime px-3 py-1 text-sm font-medium text-graphite" data-testid="export-csv">Export CSV</a>
+              <a href={`/api/dashboard/${ctx.org.slug}/analytics/export?${q}`} className={buttonClass('primary', 'sm')} data-testid="export-csv">Export CSV</a>
             ) : (
               <span className="text-xs text-muted" title="Not included in your plan">CSV export not in plan</span>
             )}
@@ -74,7 +74,7 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
       <div className="mb-4">
         <Alert tone="info">Order value is what orders were worth. Collected is money actually recorded as paid. They are different numbers on purpose.</Alert>
       </div>
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={statGrid(4, 'mb-6')}>
         <Stat label="Order value" value={<span data-testid="m-order-value">{money(a.money.orderValueCents)}</span>} hint={`${a.orders.total - a.orders.cancelled} orders, cancelled excluded`} />
         <Stat label="Collected payments" value={<span data-testid="m-collected">{money(a.money.collectedCents)}</span>} hint="Recorded in this period, voided excluded" />
         <Stat label="Unpaid" value={<span data-testid="m-unpaid">{money(a.money.unpaidCents)}</span>} hint={`${money(a.money.unpaidFinishedCents)} on finished orders`} />
@@ -150,7 +150,7 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
           </Card>
         </div>
       )}
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+      <div className={statGrid(3, 'mt-6')}>
         <Stat label="Reservations" value={a.reservations.total} hint={`${a.reservations.covers} confirmed guests · ${a.reservations.byStatus.NO_SHOW ?? 0} no-shows`} />
         <Stat label="Guest feedback" value={a.feedback.average ?? '—'} hint={`${a.feedback.count} ratings · ${a.feedback.complaints} complaints, ${a.feedback.complaintsResolved} resolved`} />
         <Stat label="Cart suggestions" value={a.upsell.acceptanceRate === null ? '—' : `${a.upsell.acceptanceRate} %`} hint={`${a.upsell.accepted} accepted of ${a.upsell.shown} shown (all locations)`} />

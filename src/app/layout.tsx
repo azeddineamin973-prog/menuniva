@@ -23,7 +23,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();
   const langCookie = jar.get(LANG_COOKIE)?.value;
-  const lang = isLanguage(langCookie) ? langCookie : 'pt';
+  const lang = isLanguage(langCookie) ? langCookie : 'en';
   const dark = jar.get('mn_theme')?.value === 'dark';
   return (
     <html lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)} className={dark ? 'dark' : undefined} suppressHydrationWarning>

@@ -1,5 +1,24 @@
 import type { ExtractionMethod, ImportSourceType, IntegrationStatus } from '@/generated/prisma/enums';
 
+/** One choice inside an extracted option group, e.g. "Extra queijo +1,50 €". */
+export type ParsedModifierOption = {
+  name: string;
+  /** Surcharge for this choice, in cents. 0 when the choice is free. */
+  priceDeltaCents?: number;
+  available?: boolean;
+};
+
+/**
+ * An "extras"/customisation group as offered by the source, e.g. "Molhos (choose up to 2)".
+ * `minSelect`/`maxSelect` are only set when the source states them; otherwise review decides.
+ */
+export type ParsedModifierGroup = {
+  name: string;
+  minSelect?: number;
+  maxSelect?: number;
+  options: ParsedModifierOption[];
+};
+
 /** One menu item as extracted from a source, before review. Missing data stays missing. */
 export type ParsedMenuItem = {
   categoryName?: string;
@@ -8,7 +27,10 @@ export type ParsedMenuItem = {
   priceCents?: number;
   currency?: string;
   imageUrl?: string;
+  /** Sizes. `priceCents` is the ABSOLUTE price of the size, as in spreadsheet imports. */
   variants?: { name: string; priceCents?: number }[];
+  /** Extras/modifiers. Option prices are surcharges, not absolute prices. */
+  modifiers?: ParsedModifierGroup[];
   available?: boolean;
   externalId?: string;
   rowNumber?: number;
@@ -24,7 +46,14 @@ export type ParseResult = {
   error?: string;
 };
 
-export type ImportInput = { text?: string; bytes?: Uint8Array; fileName?: string; url?: string };
+export type ImportInput = {
+  text?: string;
+  bytes?: Uint8Array;
+  fileName?: string;
+  url?: string;
+  /** Tenant asking for the import; used to rate-limit adapters that fetch a remote page. */
+  organizationId?: string;
+};
 
 export interface MenuImportAdapter {
   readonly type: ImportSourceType;

@@ -1,7 +1,10 @@
 import 'server-only';
 import { lookup as dnsLookup } from 'node:dns';
+import { readFileSync } from 'node:fs';
 import https from 'node:https';
 import net from 'node:net';
+import path from 'node:path';
+import { env } from '../env';
 
 /**
  * SSRF-safe HTTPS fetching for URL imports (Part 25):
@@ -60,12 +63,38 @@ const safeLookup: net.LookupFunction = (hostname, options, callback) => {
   });
 };
 
-export async function safeFetch(raw: string, opts: { maxBytes?: number; timeoutMs?: number; allowedHosts?: RegExp } = {}): Promise<{ status: number; contentType: string; body: Buffer; finalUrl: string }> {
+export type SafeFetchOptions = {
+  maxBytes?: number;
+  timeoutMs?: number;
+  allowedHosts?: RegExp;
+  userAgent?: string;
+  accept?: string;
+  /** HEAD asks for headers only; useful for resolving a redirect without downloading a page. */
+  method?: 'GET' | 'HEAD';
+  /** false returns the 3xx itself (with `location`) instead of following it. Default true. */
+  followRedirects?: boolean;
+};
+
+export type SafeFetchResult = {
+  status: number;
+  contentType: string;
+  body: Buffer;
+  finalUrl: string;
+  /** The validated absolute `Location` of a 3xx, when the redirect was not followed. */
+  location?: string;
+};
+
+export async function safeFetch(raw: string, opts: SafeFetchOptions = {}): Promise<SafeFetchResult> {
   const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024;
+  // Requests always identify MenuNiva; no caller may disguise them as a browser.
+  const userAgent = opts.userAgent?.startsWith('MenuNiva') ? opts.userAgent : 'MenuNiva-Import/1.0';
+  const method = opts.method ?? 'GET';
+  const follow = opts.followRedirects !== false;
   let url = validatePublicUrl(raw, opts.allowedHosts);
+  if (env.APP_ENV === 'test' && env.TEST_FETCH_FIXTURES) return fixtureResponse(url, env.TEST_FETCH_FIXTURES, maxBytes);
   for (let redirects = 0; redirects <= 3; redirects++) {
     const res = await new Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: Buffer }>((resolve, reject) => {
-      const req = https.request(url, { method: 'GET', lookup: safeLookup, timeout: opts.timeoutMs ?? 10_000, headers: { 'User-Agent': 'MenuNiva-Import/1.0', Accept: '*/*' } }, (r) => {
+      const req = https.request(url, { method, lookup: safeLookup, timeout: opts.timeoutMs ?? 10_000, headers: { 'User-Agent': userAgent, Accept: opts.accept ?? '*/*' } }, (r) => {
         const chunks: Buffer[] = [];
         let size = 0;
         r.on('data', (c: Buffer) => {
@@ -83,11 +112,43 @@ export async function safeFetch(raw: string, opts: { maxBytes?: number; timeoutM
       req.on('error', reject);
       req.end();
     });
-    if (res.status >= 300 && res.status < 400 && res.headers.location) {
-      url = validatePublicUrl(new URL(String(res.headers.location), url).toString(), opts.allowedHosts);
-      continue;
+    const redirecting = res.status >= 300 && res.status < 400 && !!res.headers.location;
+    if (redirecting) {
+      // The target is validated either way, so a caller reading `location` never receives a
+      // private-network or non-https address.
+      const target = validatePublicUrl(new URL(String(res.headers.location), url).toString(), opts.allowedHosts);
+      if (follow) {
+        url = target;
+        continue;
+      }
+      return { status: res.status, contentType: String(res.headers['content-type'] ?? ''), body: res.body, finalUrl: url.toString(), location: target.toString() };
     }
     return { status: res.status, contentType: String(res.headers['content-type'] ?? ''), body: res.body, finalUrl: url.toString() };
   }
   throw new UnsafeUrlError('Too many redirects.');
+}
+
+type Fixture = { status?: number; contentType?: string; file?: string; body?: string; location?: string };
+
+/**
+ * Browser-test seam (APP_ENV=test with TEST_FETCH_FIXTURES only; env.ts refuses the variable in
+ * any other environment). Every outbound request is answered from a JSON manifest
+ * `{ "<url>": { status, contentType, file | body } }`, so the browser suite exercises the real
+ * import code without reaching the internet. URL validation above still runs first.
+ * The manifest is read per request so a test can add fixtures while the server is running.
+ */
+function fixtureResponse(url: URL, manifestFile: string, maxBytes: number) {
+  const manifestPath = path.resolve(manifestFile);
+  let manifest: Record<string, Fixture> = {};
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, Fixture>;
+  } catch {
+    // no fixtures written yet
+  }
+  const f = manifest[url.toString()] ?? manifest[`${url.origin}${url.pathname}`];
+  const finalUrl = url.toString();
+  if (!f) return { status: 404, contentType: 'text/plain', body: Buffer.from('No test fixture for this URL'), finalUrl };
+  const body = f.file ? readFileSync(path.resolve(path.dirname(manifestPath), f.file)) : Buffer.from(f.body ?? '', 'utf8');
+  if (body.length > maxBytes) throw new UnsafeUrlError('The file is too large.');
+  return { status: f.status ?? 200, contentType: f.contentType ?? 'application/octet-stream', body, finalUrl, location: f.location };
 }

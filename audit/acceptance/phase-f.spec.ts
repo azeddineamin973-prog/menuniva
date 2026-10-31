@@ -134,10 +134,10 @@ test('DELIVERY: postal-code zone and fee, unsupported address refused, driver in
   const dctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
   const driver = await dctx.newPage();
   await driver.goto(`/signup?next=${encodeURIComponent(new URL(link).pathname)}`);
-  await driver.getByLabel('Nome completo').fill('Audit Driver');
+  await driver.getByLabel(/Full name|Nome completo/).fill('Audit Driver');
   await driver.getByLabel('Email').fill(driverEmail);
-  await driver.getByLabel('Palavra-passe').fill(PASSWORD);
-  await driver.getByRole('button', { name: 'Criar conta' }).click();
+  await driver.getByLabel(/^(Password|Palavra-passe)$/).fill(PASSWORD);
+  await driver.getByRole('button', { name: /Create account|Criar conta/ }).click();
   await driver.waitForURL(/\/invite\/|\/onboarding|\/dashboard/);
   if (!/\/invite\//.test(driver.url())) await driver.goto(new URL(link).pathname);
   await driver.getByRole('button', { name: 'Accept invitation' }).click();

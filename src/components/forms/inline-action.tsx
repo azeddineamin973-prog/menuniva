@@ -24,7 +24,7 @@ export function InlineAction({
   action: Action;
   fields: Record<string, string>;
   label: React.ReactNode;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'dark';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'dangerGhost' | 'dark';
   size?: 'sm' | 'md';
   className?: string;
   confirm?: string;

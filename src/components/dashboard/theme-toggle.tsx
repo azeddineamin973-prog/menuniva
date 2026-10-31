@@ -2,22 +2,38 @@
 
 import { useEffect, useState } from 'react';
 
-/** Light/dark mode for the MenuNiva dashboard, persisted in a cookie so the server renders it without flashing. */
-export function ThemeToggle() {
+/**
+ * Light/dark mode for the MenuNiva dashboard, persisted in a cookie so the server renders it
+ * without flashing. Shown as a compact icon button in the sidebar footer.
+ */
+export function ThemeToggle({ labels = { dark: 'Dark mode', light: 'Light mode' } }: { labels?: { dark: string; light: string } }) {
   const [dark, setDark] = useState(false);
   useEffect(() => setDark(document.documentElement.classList.contains('dark')), []);
+  const label = dark ? labels.light : labels.dark;
   return (
     <button
       type="button"
-      className="w-full rounded-xl px-3 py-2 text-start text-sm text-ink/80 hover:bg-surface-2"
+      className="flex size-10 shrink-0 items-center justify-center rounded-xl text-ink/80 hover:bg-surface-2 hover:text-ink"
+      aria-label={label}
+      title={label}
       onClick={() => {
         const next = !document.documentElement.classList.contains('dark');
         document.documentElement.classList.toggle('dark', next);
         document.cookie = `mn_theme=${next ? 'dark' : 'light'}; path=/; max-age=31536000; samesite=lax`;
         setDark(next);
       }}
+      data-testid="theme-toggle"
     >
-      {dark ? '☀︎ Light mode' : '☾ Dark mode'}
+      {dark ? (
+        <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+        </svg>
+      )}
     </button>
   );
 }

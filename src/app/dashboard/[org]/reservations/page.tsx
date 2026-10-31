@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Input, Label, PageHeader, Select } from '@/components/ui';
-import { getMessages } from '@/i18n';
+import { Alert, Badge, Button, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Input, Label, PageHeader, Select } from '@/components/ui';
+import { getMessages, LANGUAGE_TAG } from '@/i18n';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { formatTimeInZone, zonedParts } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
@@ -13,9 +13,9 @@ import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { assignTableAction, reservationStatusAction, saveReservationSettingsAction, unassignTableAction } from './actions';
 
-const NEXT: Record<string, { to: string; label: string; variant: 'primary' | 'secondary' | 'ghost' | 'dark' }[]> = {
+const NEXT: Record<string, { to: string; label: string; variant: 'primary' | 'secondary' | 'ghost' | 'dangerGhost' | 'dark' }[]> = {
   REQUESTED: [{ to: 'CONFIRMED', label: 'Confirm', variant: 'primary' }, { to: 'REJECTED', label: 'Reject', variant: 'secondary' }],
-  CONFIRMED: [{ to: 'ARRIVED', label: 'Arrived', variant: 'dark' }, { to: 'NO_SHOW', label: 'No-show', variant: 'secondary' }, { to: 'CANCELLED', label: 'Cancel', variant: 'ghost' }],
+  CONFIRMED: [{ to: 'ARRIVED', label: 'Arrived', variant: 'dark' }, { to: 'NO_SHOW', label: 'No-show', variant: 'secondary' }, { to: 'CANCELLED', label: 'Cancel', variant: 'dangerGhost' }],
   ARRIVED: [{ to: 'COMPLETED', label: 'Completed', variant: 'secondary' }],
 };
 const TONE: Record<string, 'warning' | 'success' | 'info' | 'neutral' | 'danger'> = { REQUESTED: 'warning', CONFIRMED: 'success', ARRIVED: 'info', COMPLETED: 'neutral', REJECTED: 'danger', CANCELLED: 'neutral', NO_SHOW: 'danger' };
@@ -50,17 +50,21 @@ export default async function ReservationsPage({ params, searchParams }: { param
         title={m.nav.reservations}
         description="Guests request a time; you confirm. No SMS is sent — guests check their private status page."
         actions={
-          <div className="flex items-center gap-2">
-            <ButtonLink href={`${base}?date=${shift(date, -1)}`} variant="secondary" size="sm">←</ButtonLink>
-            <form className="flex items-center gap-2"><Input type="date" name="date" defaultValue={date} className="h-8 w-40" aria-label="Date" /><button className="text-sm underline">Go</button></form>
-            <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm">→</ButtonLink>
+          <div className="flex flex-wrap items-center gap-2">
+            <ButtonLink href={`${base}?date=${shift(date, -1)}`} variant="secondary" size="sm" aria-label="Previous day">←</ButtonLink>
+            <form className="flex items-center gap-2">
+              <Input type="date" name="date" defaultValue={date} className="w-40" aria-label="Date" />
+              <Button type="submit" variant="secondary" size="sm">Go</Button>
+            </form>
+            <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm" aria-label="Next day">→</ButtonLink>
+            {date !== today && <ButtonLink href={base} variant="ghost" size="sm">Today</ButtonLink>}
           </div>
         }
       />
       {!location.reservationsEnabled && <div className="mb-4"><Alert tone="warning">Reservations are switched off. Turn them on in <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card>
-          <CardHeader title={new Date(`${date}T12:00:00Z`).toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })} description={`${list.length} reservations · ${covers} guests expected`} />
+          <CardHeader title={new Date(`${date}T12:00:00Z`).toLocaleDateString(LANGUAGE_TAG[ctx.user.preferredLanguage], { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })} description={`${list.length} reservations · ${covers} guests expected`} />
           {list.length === 0 ? (
             <CardBody><EmptyState title="No reservations for this day" /></CardBody>
           ) : (
@@ -78,14 +82,14 @@ export default async function ReservationsPage({ params, searchParams }: { param
                     {r.assignments.map((a) => (
                       <span key={a.id} className="flex items-center gap-1">
                         <Badge tone="dark" data-testid="assigned-table">Table {a.table.label}</Badge>
-                        <InlineAction action={unassignTableAction} fields={{ org: ctx.org.slug, reservationId: r.id, tableId: a.table.id }} label="✕" variant="ghost" />
+                        <InlineAction action={unassignTableAction} fields={{ org: ctx.org.slug, reservationId: r.id, tableId: a.table.id }} label={<><span aria-hidden>✕</span><span className="sr-only">Remove table {a.table.label}</span></>} title="Remove table" variant="ghost" />
                       </span>
                     ))}
                     {['REQUESTED', 'CONFIRMED', 'ARRIVED'].includes(r.status) && tables.length > 0 && (
                       <ActionForm action={assignTableAction} submitLabel="Assign table" submitVariant="secondary" className="flex items-center gap-2 space-y-0">
                         <input type="hidden" name="org" value={ctx.org.slug} />
                         <input type="hidden" name="reservationId" value={r.id} />
-                        <Select name="tableId" className="h-8 w-36" aria-label="Table" data-testid="reservation-table">
+                        <Select name="tableId" className="w-36" aria-label="Table" data-testid="reservation-table">
                           {tables.map((t) => <option key={t.id} value={t.id}>Table {t.label}{t.seats ? ` (${t.seats})` : ''}</option>)}
                         </Select>
                       </ActionForm>
@@ -122,7 +126,7 @@ export default async function ReservationsPage({ params, searchParams }: { param
                 <div>
                   <Label>Bookable hours</Label>
                   <p className="mb-2 text-xs text-muted">Leave empty to use opening hours. Without any hours, guests cannot book online.</p>
-                  <OpeningHoursEditor name="bookableHours" initial={(settings?.bookableHours as OpeningHours | null) ?? null} />
+                  <OpeningHoursEditor name="bookableHours" inheritsFrom="opening hours" initial={(settings?.bookableHours as OpeningHours | null) ?? null} />
                 </div>
               </ActionForm>
             </CardBody>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, PageHeader, Select, Stat, Textarea } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, PageHeader, Select, Stat, Textarea, statGrid } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { formatTimeInZone } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
@@ -12,6 +12,9 @@ import { requireTenantPage } from '@/server/tenant';
 import { feedbackNoteAction, feedbackStatusAction, reviewSettingsAction } from './actions';
 
 const STATUSES = ['NEW', 'INVESTIGATING', 'RESOLVED', 'ARCHIVED'] as const;
+/** Inbox filter chip. */
+const pill = (active: boolean) =>
+  `inline-flex min-h-8 items-center rounded-full px-3 text-sm ring-1 ring-line pointer-coarse:min-h-10 ${active ? 'bg-graphite font-medium text-white ring-graphite dark:bg-lime dark:text-graphite dark:ring-lime' : 'text-ink hover:bg-surface-2'}`;
 const TONE: Record<string, 'warning' | 'info' | 'success' | 'neutral'> = { NEW: 'warning', INVESTIGATING: 'info', RESOLVED: 'success', ARCHIVED: 'neutral' };
 
 export default async function ReviewsPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ status?: string; max?: string }> }) {
@@ -62,7 +65,7 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
           </Alert>
         </div>
       )}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={statGrid(4, 'mb-6')}>
         <Stat label="Average (30 days)" value={<span data-testid="stat-average">{stats.average ?? '—'}</span>} hint={`${stats.count} responses`} />
         <Stat label="Open" value={<span data-testid="stat-open">{stats.open}</span>} hint="New or investigating" />
         <Stat label="Low ratings resolved" value={`${stats.lowResolved} / ${stats.lowTotal}`} hint="Ratings of 3★ or less" />
@@ -85,13 +88,12 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
           <CardHeader
             title="Feedback inbox"
             description={
-              <span className="flex flex-wrap gap-2">
-                <Link href={q(undefined, maxRating)} className={!status ? 'font-semibold underline' : 'underline-offset-2 hover:underline'}>Active</Link>
+              <span className="mt-2 flex flex-wrap gap-1.5">
+                <Link href={q(undefined, maxRating)} aria-current={!status ? 'page' : undefined} className={pill(!status)}>Active</Link>
                 {STATUSES.map((s) => (
-                  <Link key={s} href={q(s, maxRating)} className={status === s ? 'font-semibold underline' : 'underline-offset-2 hover:underline'}>{s.toLowerCase()}</Link>
+                  <Link key={s} href={q(s, maxRating)} aria-current={status === s ? 'page' : undefined} className={pill(status === s)}>{s.charAt(0) + s.slice(1).toLowerCase()}</Link>
                 ))}
-                <span aria-hidden>·</span>
-                <Link href={q(status, maxRating ? undefined : 3)} className={maxRating ? 'font-semibold underline' : 'underline-offset-2 hover:underline'} data-testid="filter-low">Only 3★ or less</Link>
+                <Link href={q(status, maxRating ? undefined : 3)} aria-current={maxRating ? 'page' : undefined} className={pill(!!maxRating)} data-testid="filter-low">Only 3★ or less</Link>
               </span>
             }
           />
@@ -102,7 +104,7 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
               {items.map((f) => (
                 <li key={f.id} className="space-y-2 px-5 py-4" data-testid="feedback-row">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-lg font-semibold" aria-label={`${f.rating} out of 5`} data-testid="feedback-rating">{'★'.repeat(f.rating)}<span className="text-muted">{'★'.repeat(5 - f.rating)}</span></span>
+                    <span className="text-lg font-semibold tracking-tight" aria-label={`${f.rating} out of 5`} data-testid="feedback-rating"><span className="text-amber-500">{'★'.repeat(f.rating)}</span><span className="text-muted/35">{'★'.repeat(5 - f.rating)}</span></span>
                     <Badge tone={TONE[f.status]} data-testid="feedback-status">{f.status.toLowerCase()}</Badge>
                     {f.order && <Badge tone="neutral">Order #{f.order.number} · {f.order.channel.toLowerCase().replace('_', '-')}</Badge>}
                     <span className="ms-auto text-xs text-muted">{f.createdAt.toLocaleDateString('pt-PT')} {formatTimeInZone(f.createdAt, location.timeZone)} · {f.language.toUpperCase()}</span>

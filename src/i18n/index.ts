@@ -10,6 +10,9 @@ export * from './config';
 
 const DICTIONARIES: Record<LanguageCode, Messages> = { pt, en, fr, ar, es };
 
+/** Interface language used when nobody has chosen one. Restaurant menu content keeps its own language. */
+export const DEFAULT_UI_LANGUAGE: LanguageCode = 'en';
+
 export function getMessages(lang: LanguageCode): Messages {
-  return DICTIONARIES[lang] ?? DICTIONARIES.pt;
+  return DICTIONARIES[lang] ?? DICTIONARIES[DEFAULT_UI_LANGUAGE];
 }

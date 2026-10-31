@@ -69,7 +69,11 @@ test.describe('mobile (360 × 740)', () => {
     await login(page, s.owner, s.password);
     await page.goto(`/dashboard/${s.orgSlug}`);
     await expect(page.locator('aside')).toBeHidden();
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    // Phones get a bottom bar for the busiest sections; the full navigation opens from "More"
+    // (or the menu button in the top bar).
+    const bottom = page.getByTestId('bottom-nav');
+    await expect(bottom.getByRole('link', { name: 'Orders' })).toBeVisible();
+    await page.getByRole('button', { name: 'Open navigation' }).click();
     const mobileNav = page.locator('#mobile-nav');
     await expect(mobileNav.getByRole('link', { name: 'Live Orders' })).toBeVisible();
     await mobileNav.getByRole('button', { name: /Dark mode/ }).click();

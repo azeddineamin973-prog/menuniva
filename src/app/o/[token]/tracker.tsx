@@ -107,7 +107,9 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
       </div>
 
       <div className="flex flex-col gap-2">
-        {!done && initial.channel === 'TABLE' && <Link href={orderMoreHref} className="rounded-2xl bg-sf-primary py-3 text-center font-medium text-white">{m.customer.orderMore}</Link>}
+        {/* Pickup and delivery guests get this too: `orderMoreHref` already falls back to the
+            restaurant's storefront, so hiding it only cost them the way back. */}
+        {!done && <Link href={orderMoreHref} className="rounded-2xl bg-sf-primary py-3 text-center font-medium text-white" data-testid="order-more">{m.customer.orderMore}</Link>}
         {feedbackHref && <Link href={feedbackHref} className="rounded-2xl py-3 text-center font-medium ring-1 ring-black/10">{m.customer.leaveFeedback}</Link>}
       </div>
       {status !== 'CANCELLED' && loyalty}

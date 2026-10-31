@@ -1,20 +1,64 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Checkbox, PageHeader, Select, Stat } from '@/components/ui';
-import { LANGUAGE_NATIVE_NAME } from '@/i18n/config';
+import { ProductThumb } from '@/components/dashboard/product-thumb';
+import { Alert, Badge, ButtonLink, Card, EmptyState } from '@/components/ui';
+import { LANGUAGE_NATIVE_NAME, LANGUAGE_TAG } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
+import { formatDateTimeInZone } from '@/lib/time';
+import { currentLocation } from '@/server/current-location';
 import { UserFacingError } from '@/server/errors';
-import { getImportPreview } from '@/server/import/service';
+import { PLATFORM_SOURCES } from '@/server/import/adapters';
+import { adapterStatuses, getImportPreview } from '@/server/import/service';
 import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
-import { cancelImportAction, chooseCanonicalAction, publishImportAction, setDecisionAction } from '../actions';
-import { AddSourceForm } from './source-form';
+import { cancelImportAction, chooseCanonicalAction } from '../actions';
+import { AdvancedImport } from '../advanced-import';
+import { PublishPanel } from './publish-panel';
+import { ReviewTable } from './review-table';
+import { SOURCE_LABEL, type ReviewDecision, type ReviewExtraGroup, type ReviewItem, type ReviewSize } from './review-types';
 
-const SRC: Record<string, string> = { CSV: 'CSV', XLSX: 'Excel', PDF: 'PDF', TEXT: 'Text', GLOVO: 'Glovo', UBER_EATS: 'Uber Eats', IMAGE: 'Photo', MANUAL: 'Manual' };
-const DECISION: Record<string, string> = { CREATE: 'Create new dish', MERGE_WITH_IMPORTED: 'Merge into chosen version', MERGE_INTO_EXISTING: 'Link to existing dish', SKIP: 'Skip' };
-const METHOD: Record<string, string> = { STRUCTURED_FILE: 'Structured file', NATIVE_TEXT: 'Native PDF text', OCR: 'OCR', AI_ASSISTED: 'AI-assisted', PARTNER_API: 'Partner API', MANUAL_PASTE: 'Pasted text' };
+const STATUS: Record<string, { tone: 'neutral' | 'warning' | 'success' | 'danger'; label: string }> = {
+  DRAFT: { tone: 'neutral', label: 'Nothing imported yet' },
+  NEEDS_REVIEW: { tone: 'warning', label: 'Ready to review' },
+  PUBLISHED: { tone: 'success', label: 'Saved to menu' },
+  CANCELLED: { tone: 'neutral', label: 'Cancelled' },
+  FAILED: { tone: 'danger', label: 'Failed' },
+};
+
+type Summary = { created: number; visible: number; drafts: number; linkedPrices: number; modifierGroups?: number; imagesRequested?: number; imagesSaved?: number; ownPhotos?: number; withoutStation?: number };
+
+/** Narrows the JSON columns written by the parsers; anything malformed is dropped, never guessed. */
+function sizesOf(v: unknown): ReviewSize[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((s) => (s && typeof s === 'object' && typeof (s as ReviewSize).name === 'string' ? [{ name: (s as ReviewSize).name, priceCents: typeof (s as ReviewSize).priceCents === 'number' ? (s as ReviewSize).priceCents : undefined }] : []));
+}
+function extrasOf(v: unknown): ReviewExtraGroup[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((g) => {
+    const group = g as ReviewExtraGroup | null;
+    if (!group || typeof group.name !== 'string' || !Array.isArray(group.options)) return [];
+    const options = group.options.filter((o) => o && typeof o.name === 'string').map((o) => ({ name: o.name, priceDeltaCents: typeof o.priceDeltaCents === 'number' ? o.priceDeltaCents : undefined }));
+    return options.length ? [{ name: group.name, minSelect: group.minSelect, maxSelect: group.maxSelect, options }] : [];
+  });
+}
+/** The photo the source gave: remembered in `raw` once the owner changes it, otherwise the current one. */
+function sourcePhoto(raw: unknown, current: string | null): string | null {
+  if (raw && typeof raw === 'object' && 'sourceImageUrl' in raw) {
+    const v = (raw as { sourceImageUrl?: unknown }).sourceImageUrl;
+    return typeof v === 'string' ? v : null;
+  }
+  return current && !current.startsWith('/media/') ? current : null;
+}
+function sourceDetail(s: { url: string | null; fileName: string | null }) {
+  if (s.fileName) return s.fileName;
+  if (!s.url) return null;
+  try {
+    return new URL(s.url).pathname.split('/').filter(Boolean).pop() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function ImportJobPage({ params }: { params: Promise<{ org: string; jobId: string }> }) {
   const { org, jobId } = await params;
@@ -27,229 +71,183 @@ export default async function ImportJobPage({ params }: { params: Promise<{ org:
     if (e instanceof UserFacingError) notFound();
     throw e;
   }
-  const { job, sources, products, mappings, summary, existingProducts, stations, stationTargets } = data;
+  const location = await currentLocation(ctx);
+  const { job, sources, products, mappings, summary, existingProducts, stations, stationTargets, categoryOptions } = data;
   const base = `/dashboard/${ctx.org.slug}`;
-  const open = job.status === 'DRAFT' || job.status === 'NEEDS_REVIEW';
-  const money = (c: number | null) => (c === null ? '—' : formatCents(c));
-  const byId = new Map(products.map((p) => [p.id, p]));
+  const reviewing = job.status === 'NEEDS_REVIEW';
+  const canAddSource = job.status === 'DRAFT' || job.status === 'NEEDS_REVIEW';
+  const existingName = new Map(existingProducts.map((e) => [e.id, e.name]));
+
+  const items: ReviewItem[] = products.map((p) => {
+    const decision = (p.decision?.decision ?? 'CREATE') as ReviewDecision;
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      categoryName: p.categoryName,
+      priceCents: p.priceCents,
+      imageUrl: p.imageUrl,
+      sourceImageUrl: sourcePhoto(p.raw, p.imageUrl),
+      available: p.available,
+      sizes: sizesOf(p.variants),
+      extras: extrasOf(p.modifiers),
+      warnings: p.warnings,
+      sourceType: p.source.type,
+      platform: PLATFORM_SOURCES.includes(p.source.type),
+      decision,
+      targetProductId: p.decision?.targetProductId ?? null,
+      mergeGroupKey: p.decision?.mergeGroupKey ?? null,
+      similarTo: decision === 'SKIP' && p.decision?.targetProductId ? (existingName.get(p.decision.targetProductId) ?? null) : null,
+    };
+  });
+  const toCreate = items.filter((i) => i.decision === 'CREATE');
+  const byId = new Map(items.map((i) => [i.id, i]));
   const groups = mappings.filter((m) => !m.existingProductId);
-  const fields = (extra: Record<string, string>) => ({ org: ctx.org.slug, jobId: job.id, ...extra });
+  const failedSources = sources.filter((s) => s.status !== 'PARSED' && s.errorMessage);
+  const s = STATUS[job.status];
+  const result = job.status === 'PUBLISHED' ? (job.summary as Summary | null) : null;
+  const tz = location?.timeZone ?? 'Europe/Lisbon';
+  const tag = LANGUAGE_TAG[ctx.user.preferredLanguage];
+  const translationNote = summary.otherLanguages.length
+    ? `Translation required for ${summary.otherLanguages.map((l) => LANGUAGE_NATIVE_NAME[l]).join(', ')} (names stay in ${LANGUAGE_NATIVE_NAME[job.sourceLanguage]}).`
+    : null;
 
   return (
-    <>
-      <PageHeader
-        title="Review import"
-        description={`Source language: ${LANGUAGE_NATIVE_NAME[job.sourceLanguage]}. Check every item. Nothing changes on your menu until you press Publish.`}
-        actions={
-          <>
-            <Badge tone={job.status === 'PUBLISHED' ? 'success' : job.status === 'NEEDS_REVIEW' ? 'warning' : 'neutral'} data-testid="job-status">{job.status.replace('_', ' ')}</Badge>
-            {open && <InlineAction action={cancelImportAction} fields={fields({})} label="Cancel import" confirm="Cancel this import? Extracted items will be discarded. Your menu is not changed." />}
-          </>
-        }
-      />
-
-      {job.status === 'PUBLISHED' && (
-        <div className="mb-6">
-          <Alert tone="success" title="Import published">
-            {JSON.stringify(job.summary) !== 'null' && (
-              <span data-testid="publish-summary">
-                {(job.summary as { created: number; visible: number; drafts: number; linkedPrices: number }).created} dishes created ({(job.summary as { visible: number }).visible} visible, {(job.summary as { drafts: number }).drafts} drafts to finish). {(job.summary as { linkedPrices: number }).linkedPrices} platform prices linked.{' '}
-              </span>
-            )}
-            {!!(job.summary as { withoutStation?: number } | null)?.withoutStation && (
-              <span className="block text-warning" data-testid="publish-unrouted">⚠ {(job.summary as { withoutStation: number }).withoutStation} dishes have no preparation station and will not appear on any kitchen screen.</span>
-            )}
-            <Link href={`${base}/menu`} className="underline">Open the menu</Link> to add prices, translations and verified allergens.
-          </Alert>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <Link href={`${base}/import`} className="inline-flex min-h-9 items-center text-sm text-muted hover:text-ink pointer-coarse:min-h-10">
+            ← Import Studio
+          </Link>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Review import</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={s.tone} data-testid="job-status">
+              {s.label}
+            </Badge>
+            {sources.map((src) => {
+              const detail = sourceDetail(src);
+              return (
+                <span key={src.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs" data-testid="import-source" title={src.url ?? undefined}>
+                  <span className="font-medium text-ink">{SOURCE_LABEL[src.type]}</span>
+                  {detail && <span className="truncate text-muted">{detail}</span>}
+                  {src.status !== 'PARSED' && <span className="text-danger">· {src.status.toLowerCase()}</span>}
+                </span>
+              );
+            })}
+            <span className="text-xs text-muted">{formatDateTimeInZone(job.createdAt, tz, tag)}</span>
+          </div>
         </div>
-      )}
-      {job.status === 'CANCELLED' && <div className="mb-6"><Alert tone="info">This import was cancelled. Your menu was not changed.</Alert></div>}
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader title="Sources" description="Combine several sources (e.g. Glovo and Uber Eats): duplicates are detected automatically." />
-            {sources.length === 0 ? (
-              <CardBody className="text-sm text-muted">No source added yet.</CardBody>
-            ) : (
-              <ul className="divide-y divide-line">
-                {sources.map((s) => (
-                  <li key={s.id} className="px-5 py-3 text-sm" data-testid="import-source">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{SRC[s.type]} {s.fileName && <span className="text-muted">· {s.fileName}</span>}</span>
-                      <span className="flex gap-1.5">
-                        {s.extractionMethod && <Badge>{METHOD[s.extractionMethod]}</Badge>}
-                        <Badge tone={s.status === 'PARSED' ? 'success' : s.status === 'UNSUPPORTED' ? 'warning' : 'danger'}>{s.status.toLowerCase()}</Badge>
-                      </span>
-                    </div>
-                    {s.url && <p className="truncate text-xs text-muted">Link: {s.url}</p>}
-                    {s.errorMessage && <p className="mt-1 text-xs whitespace-pre-wrap text-muted">{s.errorMessage}</p>}
-                  </li>
-                ))}
-              </ul>
+        {canAddSource && (
+          <div className="flex flex-wrap items-center gap-2">
+            <InlineAction action={cancelImportAction} fields={{ org: ctx.org.slug, jobId: job.id }} label="Cancel import" variant="ghost" size="md" confirm="Cancel this import? The extracted products are discarded. Your menu is not changed." />
+            {reviewing && toCreate.length > 0 && (
+              <ButtonLink href="#finish" data-testid="go-finish">
+                Save to menu ↓
+              </ButtonLink>
             )}
-          </Card>
-
-          {products.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-4" data-testid="import-summary">
-              <Stat label="Items detected" value={summary.items} />
-              <Stat label="Categories" value={summary.categories} />
-              <Stat label="With images" value={summary.images} />
-              <Stat label="Warnings" value={summary.warnings} hint={`${summary.missingPrice} without price · ${summary.missingCategory} without category`} />
-            </div>
-          )}
-
-          {groups.length > 0 && (
-            <Card>
-              <CardHeader title={`Likely duplicates (${groups.length})`} description="Choose which version becomes your dish. Prices from Glovo/Uber Eats are kept as references only." />
-              <ul className="divide-y divide-line">
-                {groups.map((g) => (
-                  <li key={g.id} className="px-5 py-4" data-testid="duplicate-group">
-                    <p className="mb-2 text-xs text-muted">{g.reason} · {g.confidence}% similar</p>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {g.importedProductIds.map((id) => {
-                        const p = byId.get(id);
-                        if (!p) return null;
-                        const canonical = p.decision?.decision === 'CREATE';
-                        return (
-                          <div key={id} className={`rounded-xl border p-3 text-sm ${canonical ? 'border-graphite ring-2 ring-lime' : 'border-line'}`}>
-                            <div className="flex items-center justify-between">
-                              <Badge>{SRC[p.source.type]}</Badge>
-                              {canonical ? <Badge tone="lime">Chosen version</Badge> : open && <InlineAction action={chooseCanonicalAction} fields={fields({ mappingId: g.id, importedProductId: id })} label="Use this version" testId="choose-canonical" />}
-                            </div>
-                            <p className="mt-2 font-medium">{p.name}</p>
-                            {p.description && <p className="text-muted">{p.description}</p>}
-                            <p className="mt-1 tabular-nums">{money(p.priceCents)} {['GLOVO', 'UBER_EATS'].includes(p.source.type) && <span className="text-xs text-muted">(platform price — reference only)</span>}</p>
-                            {p.imageUrl && <p className="truncate text-xs text-muted">Image: {p.imageUrl}</p>}
-                            {p.categoryName && <p className="text-xs text-muted">Category: {p.categoryName}</p>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          {products.length > 0 && (
-            <Card>
-              <CardHeader title="Items" description="Decide what happens to each item. Items similar to dishes already on your menu are skipped by default — nothing is overwritten." />
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="import-items">
-                  <thead className="text-xs text-muted uppercase">
-                    <tr>
-                      <th className="px-4 py-2 text-start">Item</th>
-                      <th className="px-4 py-2 text-start">Category</th>
-                      <th className="px-4 py-2 text-end">Price</th>
-                      <th className="px-4 py-2 text-start">Source</th>
-                      <th className="px-4 py-2 text-start">Decision</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.map((p) => (
-                      <tr key={p.id} className="border-t border-line align-top" data-testid="import-item">
-                        <td className="px-4 py-2">
-                          <p className="font-medium">{p.name}</p>
-                          {p.description && <p className="line-clamp-2 text-xs text-muted">{p.description}</p>}
-                          {(p.variants as { name: string }[] | null)?.length ? <p className="text-xs text-muted">Sizes: {(p.variants as { name: string }[]).map((v) => v.name).join(', ')}</p> : null}
-                          {p.warnings.map((w) => <p key={w} className="text-xs text-warning">⚠ {w}</p>)}
-                        </td>
-                        <td className="px-4 py-2">{p.categoryName ?? <span className="text-muted">—</span>}</td>
-                        <td className="px-4 py-2 text-end tabular-nums">{money(p.priceCents)}</td>
-                        <td className="px-4 py-2"><Badge>{SRC[p.source.type]}</Badge></td>
-                        <td className="px-4 py-2">
-                          {open ? (
-                            <ActionForm action={setDecisionAction} submitLabel="Apply" submitVariant="secondary" className="flex flex-wrap items-center gap-2 space-y-0">
-                              <input type="hidden" name="org" value={ctx.org.slug} />
-                              <input type="hidden" name="jobId" value={job.id} />
-                              <input type="hidden" name="importedProductId" value={p.id} />
-                              <Select name="decision" defaultValue={p.decision?.decision ?? 'CREATE'} className="h-8 w-48 text-xs" aria-label="Decision">
-                                <option value="CREATE">{DECISION.CREATE}</option>
-                                {p.decision?.mergeGroupKey && <option value="MERGE_WITH_IMPORTED">{DECISION.MERGE_WITH_IMPORTED}</option>}
-                                <option value="MERGE_INTO_EXISTING">{DECISION.MERGE_INTO_EXISTING}</option>
-                                <option value="SKIP">{DECISION.SKIP}</option>
-                              </Select>
-                              {existingProducts.length > 0 && (
-                                <Select name="targetProductId" defaultValue={p.decision?.targetProductId ?? ''} className="h-8 w-44 text-xs" aria-label="Existing dish">
-                                  <option value="">Existing dish…</option>
-                                  {existingProducts.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                                </Select>
-                              )}
-                            </ActionForm>
-                          ) : (
-                            <span className="text-xs">{DECISION[p.decision?.decision ?? 'CREATE']}</span>
-                          )}
-                          {p.decision?.decision === 'SKIP' && p.decision.targetProductId && <p className="mt-1 text-xs text-muted">Similar to an existing dish</p>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          {open && (
-            <Card>
-              <CardHeader title="Add a source" />
-              <CardBody><AddSourceForm org={ctx.org.slug} jobId={job.id} /></CardBody>
-            </Card>
-          )}
-          {products.length > 0 && (
-            <Card>
-              <CardHeader title="Before → after" />
-              <CardBody className="space-y-2 text-sm" data-testid="before-after">
-                <p className="flex justify-between"><span>Dishes</span><span className="tabular-nums">{summary.before.products} → <strong>{summary.after.products}</strong></span></p>
-                <p className="flex justify-between"><span>Categories</span><span className="tabular-nums">{summary.before.categories} → <strong>{summary.after.categories}</strong></span></p>
-                {summary.after.newCategories.length > 0 && <p className="text-xs text-muted">New categories: {summary.after.newCategories.join(', ')}</p>}
-                <p className="flex justify-between"><span>Skipped / merged</span><span className="tabular-nums">{summary.skipped} / {summary.merged}</span></p>
-                <p className="flex justify-between"><span>Missing descriptions</span><span className="tabular-nums">{summary.missingDescription}</span></p>
-                {summary.otherLanguages.length > 0 && (
-                  <p className="text-xs text-muted">
-                    Translation required: {summary.translationRequired} texts ({summary.otherLanguages.map((l) => LANGUAGE_NATIVE_NAME[l]).join(', ')}). Imported text is kept in {LANGUAGE_NATIVE_NAME[job.sourceLanguage]}; translate it afterwards in Menu → Translations.
-                  </p>
-                )}
-                <p className="text-xs text-muted">Allergen information is never imported as verified — declare and confirm it per dish.</p>
-              </CardBody>
-            </Card>
-          )}
-          {job.status === 'NEEDS_REVIEW' && (
-            <Card>
-              <CardHeader title="Publish" />
-              <CardBody>
-                <ActionForm action={publishImportAction} submitLabel={`Publish ${summary.toCreate} new dishes`} testId="publish-import-form">
-                  <input type="hidden" name="org" value={ctx.org.slug} />
-                  <input type="hidden" name="jobId" value={job.id} />
-                  {stationTargets.length > 0 && (
-                    <fieldset className="space-y-2" data-testid="import-stations">
-                      <legend className="text-sm font-medium">Preparation station</legend>
-                      <p className="text-xs text-muted">Where are these dishes prepared? Orders are sent to that Kitchen or Café screen. Dishes without a station appear on no kitchen screen.</p>
-                      {stations.length === 0 && <Alert tone="warning">No kitchen stations exist yet. Create them in Kitchen Stations first, or the imported dishes will not reach any kitchen screen.</Alert>}
-                      {stationTargets.map((t) => (
-                        <label key={t.label} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <span>{t.label}{t.isNew ? <span className="text-xs text-muted"> (new category)</span> : null}</span>
-                          <Select name={`station:${t.label}`} defaultValue="" className="h-8 w-48 text-xs" aria-label={`Station for ${t.label}`} data-testid="import-station-select">
-                            <option value="">Choose…</option>
-                            {stations.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
-                            <option value="NO_STATION">No station (no kitchen ticket)</option>
-                          </Select>
-                        </label>
-                      ))}
-                    </fieldset>
-                  )}
-                  <Checkbox name="makeVisible" label="Make dishes visible to guests now" description="Only dishes with a price from your own file. Platform-only prices and dishes without price stay as drafts." />
-                  {summary.images > 0 && <Checkbox name="imageRights" label="I have the right to publish the imported photos" description="Photos are copied to MenuNiva only with this confirmation." />}
-                  <Checkbox name="confirm" label="I reviewed the items above." />
-                </ActionForm>
-              </CardBody>
-            </Card>
-          )}
-          {job.status === 'PUBLISHED' && <ButtonLink href={`${base}/import`} variant="secondary">Back to Import Studio</ButtonLink>}
-        </div>
+          </div>
+        )}
       </div>
-    </>
+
+      {result && (
+        <section className="rounded-[var(--radius-card)] border border-success/30 bg-success/5 p-5" data-testid="publish-result">
+          <h2 className="text-base font-semibold text-ink">Import saved to your menu</h2>
+          <p className="mt-1 text-sm text-ink/80" data-testid="publish-summary">
+            {result.created} {result.created === 1 ? 'product' : 'products'} created: {result.drafts} {result.drafts === 1 ? 'draft' : 'drafts'}, {result.visible} visible.
+            {result.imagesRequested ? ` ${result.imagesSaved ?? 0} of ${result.imagesRequested} photos copied.` : result.ownPhotos ? '' : ' No photos copied.'}
+            {result.ownPhotos ? ` ${result.ownPhotos} uploaded ${result.ownPhotos === 1 ? 'photo' : 'photos'} added.` : ''}
+            {result.modifierGroups ? ` ${result.modifierGroups} option ${result.modifierGroups === 1 ? 'group' : 'groups'} created.` : ''}
+            {result.linkedPrices ? ` ${result.linkedPrices} platform ${result.linkedPrices === 1 ? 'price' : 'prices'} linked.` : ''}
+          </p>
+          {!!result.withoutStation && (
+            <p className="mt-1 text-sm text-warning" data-testid="publish-unrouted">
+              ⚠ {result.withoutStation} dishes have no preparation station and will not appear on any kitchen screen.
+            </p>
+          )}
+          <p className="mt-2 text-sm text-muted">Next: add your dine-in prices in the menu, then make the dishes visible to guests.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <ButtonLink href={`${base}/menu`}>Open menu</ButtonLink>
+            <ButtonLink href={`${base}/import`} variant="secondary">
+              Back to Import Studio
+            </ButtonLink>
+          </div>
+        </section>
+      )}
+      {job.status === 'CANCELLED' && <Alert tone="info">This import was cancelled. Your menu was not changed.</Alert>}
+      {failedSources.map((src) => (
+        <Alert key={src.id} tone="warning" title={`${SOURCE_LABEL[src.type]} could not be read`}>
+          <span className="whitespace-pre-wrap">{src.errorMessage}</span>
+        </Alert>
+      ))}
+
+      {items.length === 0 ? (
+        canAddSource && <EmptyState title="Nothing imported yet" description="Add a source below to extract products into this import." />
+      ) : (
+        <ReviewTable org={ctx.org.slug} jobId={job.id} items={items} editable={reviewing} categories={categoryOptions} existingProducts={existingProducts} />
+      )}
+
+      {groups.length > 0 && (
+        <Card>
+          <div className="border-b border-line px-5 py-4">
+            <h2 className="text-base font-semibold text-ink">Same dish in several sources ({groups.length})</h2>
+            <p className="mt-0.5 text-sm text-muted">Choose which version becomes your dish. The others only add their platform price as a reference.</p>
+          </div>
+          <ul className="divide-y divide-line">
+            {groups.map((g) => (
+              <li key={g.id} className="px-5 py-4" data-testid="duplicate-group">
+                <p className="mb-2 text-xs text-muted">{g.confidence}% similar</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {g.importedProductIds.map((id) => {
+                    const p = byId.get(id);
+                    if (!p) return null;
+                    const chosen = p.decision === 'CREATE';
+                    return (
+                      <div key={id} className={`flex gap-3 rounded-xl border p-3 text-sm ${chosen ? 'border-graphite ring-1 ring-graphite dark:border-lime dark:ring-lime' : 'border-line'}`}>
+                        <ProductThumb src={p.imageUrl} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge>{SOURCE_LABEL[p.sourceType]}</Badge>
+                            {chosen ? <Badge tone="lime">Chosen version</Badge> : reviewing && <InlineAction action={chooseCanonicalAction} fields={{ org: ctx.org.slug, jobId: job.id, mappingId: g.id, importedProductId: id }} label="Use this version" testId="choose-canonical" />}
+                          </div>
+                          <p className="mt-1.5 truncate font-medium">{p.name}</p>
+                          <p className="text-xs text-muted tabular-nums">
+                            {p.priceCents === null ? 'No price' : formatCents(p.priceCents)}
+                            {p.platform && ' · reference price'}
+                            {p.categoryName && ` · ${p.categoryName}`}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {reviewing && (
+        <PublishPanel
+          org={ctx.org.slug}
+          jobId={job.id}
+          toCreate={summary.toCreate}
+          photos={toCreate.filter((i) => i.imageUrl && !i.imageUrl.startsWith('/media/')).length}
+          ownPhotos={toCreate.filter((i) => i.imageUrl?.startsWith('/media/')).length}
+          canMakeVisible={toCreate.some((i) => !i.platform && i.priceCents !== null)}
+          platformPrices={toCreate.some((i) => i.platform)}
+          stations={stations}
+          stationTargets={stationTargets}
+          stationsHref={`${base}/stations`}
+          before={summary.before}
+          after={summary.after}
+          newCategories={summary.after.newCategories}
+          translationNote={translationNote}
+        />
+      )}
+
+      {canAddSource && (
+        <AdvancedImport org={ctx.org.slug} jobId={job.id} adapters={adapterStatuses()} title="Add another source" defaultOpen={items.length === 0} />
+      )}
+    </div>
   );
 }

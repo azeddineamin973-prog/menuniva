@@ -3,6 +3,7 @@ import { audit } from '../audit';
 import { db } from '../db';
 import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
+import { unroutedDishes } from './routing';
 import { getSetupProgress } from './setup-progress';
 
 /** Requirements that must be met before guests can see and order from a location. */
@@ -28,23 +29,7 @@ export async function publishChecks(ctx: TenantContext, locationId: string) {
   return { location, blockers, warnings, unrouted, stations };
 }
 
-/**
- * Visible dishes that reach no Kitchen/Café display: no own active station and no active
- * category default station. Audit GAP-01.
- */
-export async function unroutedDishes(organizationId: string) {
-  const rows = await db.menuProduct.findMany({
-    where: {
-      organizationId,
-      status: 'ACTIVE',
-      OR: [{ stationId: null }, { station: { isActive: false } }],
-      AND: [{ OR: [{ category: { defaultStationId: null } }, { category: { defaultStation: { isActive: false } } }] }],
-    },
-    select: { id: true, categoryId: true, translations: { select: { name: true, status: true } } },
-    orderBy: { createdAt: 'asc' },
-  });
-  return rows.map((r) => ({ id: r.id, categoryId: r.categoryId, name: r.translations.find((t) => t.status === 'SOURCE')?.name ?? r.translations[0]?.name ?? '(no name)' }));
-}
+export { unroutedDishes };
 
 export async function publishLocation(ctx: TenantContext, locationId: string, confirmed: boolean, confirmUnrouted = false) {
   if (!confirmed) throw new UserFacingError('Please confirm you reviewed the menu, prices and allergen information.');

@@ -39,10 +39,10 @@ test('Super Admin creates a tenant, owner joins via invitation, suspension block
   const owner = await ownerCtx.newPage();
   await owner.goto(new URL(inviteLink).pathname);
   await owner.getByRole('link', { name: 'Create account' }).click();
-  await owner.getByLabel('Nome completo').fill('E2E New Owner');
+  await owner.getByLabel('Full name').fill('E2E New Owner');
   await owner.getByLabel('Email').fill(ownerEmail);
-  await owner.getByLabel('Palavra-passe').fill('owner-password-123');
-  await owner.getByRole('button', { name: 'Criar conta' }).click();
+  await owner.getByLabel('Password').fill('owner-password-123');
+  await owner.getByRole('button', { name: 'Create account' }).click();
   await expect(owner).toHaveURL(/\/invite\//);
   await owner.getByRole('button', { name: 'Accept invitation' }).click();
   await expect(owner).toHaveURL(/\/dashboard\/e2e-admin-tenant/);

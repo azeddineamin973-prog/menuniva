@@ -26,7 +26,13 @@
   --sf-text: #1e2420;
 }
 
+:root {
+  color-scheme: light;
+}
+
 .dark {
+  /* Native controls (date/time pickers, select menus, scrollbars) follow the dashboard theme. */
+  color-scheme: dark;
   --mn-bg: #0f1113;
   --mn-surface: #171a1d;
   --mn-surface-2: #1f2327;
@@ -34,6 +40,11 @@
   --mn-text: #eef0ec;
   --mn-muted: #9aa1a7;
   --mn-focus: #b9ff36;
+  /* Status colours lightened for dark surfaces: the light-theme shades fall to ~3:1 contrast. */
+  --mn-danger: #ff7a66;
+  --mn-warning: #f2b03d;
+  --mn-success: #52c983;
+  --mn-info: #6aa9ff;
 }
 
 @theme inline {
@@ -65,6 +76,28 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer base {
+  /*
+   * A grid without a column template gets one implicit `auto` column, which grows to fit its
+   * widest content: a row of tabs or a long button then pushed whole pages wider than a phone
+   * (the browser zoomed the page out). One column that can never exceed its container fixes
+   * every single-column grid at once; any grid-cols-* utility still overrides it.
+   */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Options of selects drawn on coloured headers (storefront) stay readable in the open list. */
+  option {
+    color: #171a1d;
+    background-color: #fff;
+  }
+  .dark option {
+    color: var(--mn-text);
+    background-color: var(--mn-surface);
+  }
 }
 
 body {
@@ -77,6 +110,22 @@ body {
 :focus-visible {
   outline: 2px solid var(--mn-focus);
   outline-offset: 2px;
+}
+
+/*
+ * Promotion form: only the amount fields of the chosen promotion type are shown. Pure CSS, so
+ * it works in the server-rendered form; browsers without :has() keep showing every field.
+ */
+@supports selector(:has(*)) {
+  .promo-fields [data-promo-field] {
+    display: none;
+  }
+  .promo-fields:has(select[name='type'] option[value='PERCENTAGE']:checked) [data-promo-field='PERCENTAGE'],
+  .promo-fields:has(select[name='type'] option[value='FIXED_AMOUNT']:checked) [data-promo-field='FIXED_AMOUNT'],
+  .promo-fields:has(select[name='type'] option[value='BUY_X_GET_Y']:checked) [data-promo-field='BUY_X_GET_Y'],
+  .promo-fields:has(select[name='type'] option[value='COMBO']:checked) [data-promo-field='COMBO'] {
+    display: block;
+  }
 }
 
 /* Subtle Moroccan zellige-inspired pattern for restaurant storefronts (original geometric star). */

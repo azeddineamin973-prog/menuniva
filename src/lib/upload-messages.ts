@@ -48,7 +48,7 @@ const T: Record<Lang, Record<UploadMessageCode, (mb: string) => string>> = {
 
 const toLang = (tag: string | null | undefined): Lang => {
   const l = (tag ?? '').slice(0, 2).toLowerCase();
-  return l === 'en' || l === 'fr' || l === 'ar' || l === 'es' ? l : 'pt';
+  return l === 'pt' || l === 'fr' || l === 'ar' || l === 'es' ? l : 'en';
 };
 const mbOf = (bytes: number) => String(Math.round((bytes / (1024 * 1024)) * 10) / 10).replace(/\.0$/, '');
 

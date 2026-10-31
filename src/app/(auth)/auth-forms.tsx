@@ -42,11 +42,11 @@ export function LoginForm({ m, next }: { m: Messages; next?: string }) {
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? m.common.loading : m.auth.signIn}
       </Button>
-      <div className="flex justify-between text-sm">
-        <Link href="/forgot-password" className="text-muted hover:text-ink">
+      <div className="flex flex-wrap justify-between gap-x-4 text-sm">
+        <Link href="/forgot-password" className="inline-flex min-h-10 items-center text-muted hover:text-ink">
           {m.auth.forgotPassword}
         </Link>
-        <Link href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-medium text-ink underline-offset-4 hover:underline">
+        <Link href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="inline-flex min-h-10 items-center font-medium text-ink underline-offset-4 hover:underline">
           {m.auth.signUp}
         </Link>
       </div>
@@ -75,7 +75,7 @@ export function SignupForm({ m, next }: { m: Messages; next?: string }) {
       </Button>
       <p className="text-center text-sm text-muted">
         {m.auth.haveAccount}{' '}
-        <Link href="/login" className="font-medium text-ink underline-offset-4 hover:underline">
+        <Link href="/login" className="inline-flex min-h-10 items-center font-medium text-ink underline underline-offset-4">
           {m.auth.signIn}
         </Link>
       </p>
@@ -105,7 +105,7 @@ export function ResetPasswordForm({ m, token }: { m: Messages; token: string }) 
     return (
       <div className="space-y-4">
         <Alert tone="success">{m.auth.resetDone}</Alert>
-        <Link href="/login" className="block text-center text-sm font-medium underline">
+        <Link href="/login" className="flex min-h-10 items-center justify-center text-sm font-medium underline">
           {m.auth.signIn}
         </Link>
       </div>

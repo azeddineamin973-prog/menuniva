@@ -1,6 +1,7 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, PageHeader, Select } from '@/components/ui';
+import { Badge, Button, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, PageHeader, Select } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
 import { loyaltyMembers, rewardText } from '@/server/services/loyalty';
@@ -33,10 +34,16 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
           <CardHeader
             title={`Members (${members.length})`}
             action={
-              <form className="flex items-center gap-2">
-                <Input name="q" defaultValue={sp.q ?? ''} placeholder="Phone or name" className="h-8 w-48" aria-label="Search members" data-testid="member-search" />
-                <button className="text-sm underline">Search</button>
-                <a href={sp.birthdays ? `/dashboard/${ctx.org.slug}/loyalty` : `/dashboard/${ctx.org.slug}/loyalty?birthdays=1`} className="text-sm underline" data-testid="birthdays-filter">{sp.birthdays ? 'All members' : `Birthdays this month (${birthdayCount})`}</a>
+              <form className="flex w-full flex-wrap items-center gap-2 sm:w-auto" role="search">
+                <Input name="q" type="search" defaultValue={sp.q ?? ''} placeholder="Phone or name" className="min-w-0 flex-1 sm:w-48 sm:flex-none" aria-label="Search members" data-testid="member-search" />
+                <Button type="submit" variant="secondary" size="sm">Search</Button>
+                <a
+                  href={sp.birthdays ? `/dashboard/${ctx.org.slug}/loyalty` : `/dashboard/${ctx.org.slug}/loyalty?birthdays=1`}
+                  className={cn('inline-flex min-h-8 items-center rounded-full px-3 text-sm whitespace-nowrap ring-1 ring-line pointer-coarse:min-h-10', sp.birthdays ? 'bg-graphite text-white dark:bg-lime dark:text-graphite' : 'hover:bg-surface-2')}
+                  data-testid="birthdays-filter"
+                >
+                  {sp.birthdays ? 'All members' : `Birthdays this month (${birthdayCount})`}
+                </a>
               </form>
             }
           />
@@ -62,7 +69,7 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
                   <div className="flex flex-wrap gap-1.5">
                     {a.balance >= target && <InlineAction action={redeemAction} fields={{ org: ctx.org.slug, accountId: a.id }} label="Redeem reward" variant="primary" testId="member-redeem" confirm={`Redeem ${target} ${unit} for this guest?`} />}
                     {a.marketingOptIn && <InlineAction action={withdrawMarketingAction} fields={{ org: ctx.org.slug, accountId: a.id }} label="Withdraw marketing consent" variant="ghost" />}
-                    <InlineAction action={deleteMemberAction} fields={{ org: ctx.org.slug, accountId: a.id }} label="Delete member" variant="danger" confirm="Delete this member and their history? This cannot be undone." testId="member-delete" />
+                    <InlineAction action={deleteMemberAction} fields={{ org: ctx.org.slug, accountId: a.id }} label="Delete member" variant="dangerGhost" confirm="Delete this member and their history? This cannot be undone." testId="member-delete" />
                   </div>
                 </li>
               ))}

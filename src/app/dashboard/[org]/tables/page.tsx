@@ -5,6 +5,7 @@ import { db } from '@/server/db';
 import { listTablesForLocation } from '@/server/services/tables';
 import { requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
+import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { createTablesAction, rotateQrAction, saveAreaAction } from './actions';
 import { openTableAction } from '../bills/actions';
 
@@ -21,6 +22,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
   const canManage = ctx.can('tables.manage');
   return (
     <>
+      <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="tables" locationId={location.id} />
       <PageHeader
         title="Tables & QR codes"
         description="Each table has its own QR code. Guests scan it to order — no app, no login. Orders still need staff acceptance."
@@ -91,7 +93,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
               const token = t.qrTokens[0]?.token;
               return (
                 <li key={t.id} className="flex items-center gap-3 bg-surface p-4" data-testid="table-card">
-                  {token && <img src={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=svg`} alt={`QR code for table ${t.label}`} className="h-20 w-20 rounded-lg border border-line" />}
+                  {token && <img src={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=svg`} alt={`QR code for table ${t.label}`} className="h-20 w-20 shrink-0 rounded-lg border border-line bg-white" width={80} height={80} loading="lazy" decoding="async" />}
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">Table {t.label} {!t.isActive && <Badge tone="danger">inactive</Badge>}</p>
                     <p className="text-xs text-muted">{t.area?.name ?? 'No area'}{t.seats ? ` · ${t.seats} seats` : ''}</p>
@@ -99,7 +101,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
                       <span className="flex flex-wrap items-center gap-1.5">
                         <Badge tone="lime">Occupied</Badge>
                         {t.sessions[0].verificationCode && <Badge tone="dark" data-testid="table-code">Code {t.sessions[0].verificationCode}</Badge>}
-                        {ctx.can('payments.record') && <a href={`${base}/bills/${t.sessions[0].id}`} className="text-xs font-medium underline" data-testid="bill-link">Bill</a>}
+                        {ctx.can('payments.record') && <a href={`${base}/bills/${t.sessions[0].id}`} className="inline-flex min-h-8 items-center rounded-lg px-2 text-sm font-medium underline underline-offset-2 hover:bg-surface-2 pointer-coarse:min-h-10" data-testid="bill-link">Bill</a>}
                       </span>
                     ) : (
                       location.tableCodeRequired && ctx.can('tasks.manage') && <InlineAction action={openTableAction} fields={{ org: ctx.org.slug, tableId: t.id }} label="Open table" variant="primary" testId="open-table" />
@@ -109,7 +111,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
                         <>
                           <ButtonLink href={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=png`} variant="secondary" size="sm" prefetch={false}>PNG</ButtonLink>
                           <ButtonLink href={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=svg&download=1`} variant="secondary" size="sm" prefetch={false}>SVG</ButtonLink>
-                          <a href={`/t/${token}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center px-2 text-sm underline-offset-2 hover:underline" data-testid="open-table-link">Open</a>
+                          <a href={`/t/${token}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg px-2 text-sm underline-offset-2 hover:bg-surface-2 hover:underline pointer-coarse:h-10" data-testid="open-table-link">Open ↗</a>
                         </>
                       )}
                       {canManage && <InlineAction action={rotateQrAction} fields={{ org: ctx.org.slug, tableId: t.id }} label="New QR" variant="ghost" confirm="Create a new QR code? The old printed code will stop working." />}

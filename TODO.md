@@ -51,6 +51,8 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 
 - [x] **M3-01** Restaurant registration: org + first location + owner membership + trial — P0 · Deps: M2-09, M2-13 · **AC** one transaction; slug unique · **Verify** integration test
 - [x] **M3-02** 10-step onboarding wizard framework with progress + saved drafts — P0 · Deps: M3-01 · **AC** steps: details, branding, import menu, translations, prices, tables, channels, kitchen, preview, publish · **Verify** E2E
+- [x] **M3-02b** Magic Restaurant Setup: one-click discovery from a Google Maps link, the restaurant's own website or name + city — P0 · **AC** fills name, address, postal code, city, phone, WhatsApp, email, weekly opening hours, website and social/ordering links; every field shows its source and any disagreement; `/maps/` is never crawled (robots); own website outranks third-party data; reverse geocoding contributes address only; nothing saved until the owner reviews; no ordering channel switched on · `tests/unit/discovery-{hours,website}.test.ts`, `tests/integration/magic-setup.test.ts`, `tests/e2e/magic-setup.spec.ts`
+- [ ] **M3-02c** Collapse the remaining wizard steps (branding, tables, channels, kitchen) into the same one-screen flow — P1 · discovery step done; the other steps still have their own pages
 - [x] **M3-03** Step 1 restaurant details: country, language, address, phone, time zone, PT/ES postal validation — P0 · Deps: M3-02 · **AC** PT `NNNN-NNN`, ES `NNNNN` · **Verify** unit tests
 - [x] **M3-04** Step 2 branding: logo/cover upload, colors, theme preset — P1 · Deps: M3-05 · **AC** preview updates; only validated images stored · **Verify** E2E
 - [x] **M3-05** Safe file upload service (magic-byte check, size limit, random names, storage abstraction) — P0 · Deps: M2-09 · **AC** rejects SVG/HTML/oversized; serves with correct content-type · **Verify** unit tests
@@ -91,7 +93,7 @@ Execution order: M1 → M2 → M3 → M4 → M6 → M7 → M5 → M8 → M9 → 
 - [x] **M5-05** TextMenuImporter (pasted text heuristics) — P1 · **Verify** unit tests
 - [x] **M5-06** PDFMenuImporter: native text extraction; scanned PDFs → clear fallback — P1 · **Verify** unit tests
 - [x] **M5-07** ImageMenuImporter: OCR only if configured; otherwise honest fallback — P2 · fallback verified; OCR engine itself **NEEDS CONFIGURATION**
-- [x] **M5-08** GlovoCatalogAdapter: partner API when credentials exist; merchant export/paste otherwise — P1 · merchant export/paste + honest status verified; partner API **REQUIRES EXTERNAL APPROVAL**
+- [x] **M5-08** GlovoCatalogAdapter: paste a store link and the menu is read from the public store page; browser capture / merchant export / paste as fallbacks — P1 · **AC** one page per import on owner request (no crawler), 12 reads/hour/tenant, robots `Disallow` honoured, User-Agent always identifies MenuNiva, method recorded as `PUBLIC_PAGE` not `PARTNER_API`; Glovo prices stored only as `ExternalSourcePrice`; sizes → variants, extras → modifier groups with min/max; sold-out imported as unavailable; soft-404 reported by name · `tests/unit/glovo-parser.test.ts`, `tests/integration/glovo-url-import.test.ts`, `tests/integration/glovo-import.test.ts`, `tests/e2e/glovo-import.spec.ts`, `tests/e2e/glovo-capture-snippet.spec.ts` · partner API **REQUIRES EXTERNAL APPROVAL**
 - [x] **M5-09** UberEatsMenuAdapter: same model — P1 · merchant export/paste + honest status verified; Menu API **REQUIRES EXTERNAL APPROVAL**
 - [x] **M5-10** SSRF-safe URL validation/fetch (no private IPs, redirect limit, timeout, size cap) — P0 · **Verify** unit tests
 - [x] **M5-11** Duplicate detection & merge suggestions across sources and existing products — P1
@@ -263,7 +265,7 @@ Open — needs an owner decision, hardware, a provider or hosting (never mark do
 - [ ] **EXT-06** Direct thermal printer (ESC/POS over network) — **NOT IMPLEMENTED, BLOCKED (hardware)**; browser print + PDF tickets work
 - [ ] **EXT-07** Photo OCR — **NEEDS CONFIGURATION (no engine)**
 - [ ] **EXT-08** Automatic translation (DeepL/LibreTranslate) — **NEEDS CONFIGURATION**, client code never run against a real provider
-- [ ] **EXT-09** Glovo / Uber Eats partner APIs — **BLOCKED (partner approval)**; merchant-export import works
+- [ ] **EXT-09** Glovo / Uber Eats partner APIs — **BLOCKED (partner approval)**; Glovo browser capture and merchant-export import work
 - [ ] **EXT-10** Online payments (MB WAY, Multibanco, cards, Bizum) — **BLOCKED (provider contract)**
 - [ ] **EXT-11** Certified invoicing (PT AT-certified software / ES Verifactu) — **BLOCKED (certified provider)**
 - [ ] **EXT-12** SaaS billing processor — **NEEDS CONFIGURATION** (manual billing works)

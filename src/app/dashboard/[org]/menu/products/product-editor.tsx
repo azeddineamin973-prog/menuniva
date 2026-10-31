@@ -63,6 +63,7 @@ export function ProductEditor({
       action={saveProductAction}
       submitLabel={v.id ? 'Save dish' : 'Create dish'}
       testId="product-form"
+      stickySubmit
       onSuccess={(data) => {
         const id = (data as { id?: string } | undefined)?.id;
         if (!v.id && id) router.push(`${base}/menu/products/${id}`);
@@ -71,10 +72,10 @@ export function ProductEditor({
     >
       <input type="hidden" name="org" value={org} />
       <input type="hidden" name="payload" value={payload} />
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader title="Name & description" description="Write in your source language first. Other languages show “Translation required” until you fill them." />
-          <div className="flex gap-1 overflow-x-auto border-b border-line px-3 pt-2">
+          <div className="flex gap-1 overflow-x-auto border-b border-line px-3 pt-2 [scrollbar-width:thin]" role="tablist" aria-label="Languages">
             {ordered.map((l) => {
               const filled = !!tr(l).name.trim();
               return (
@@ -82,7 +83,9 @@ export function ProductEditor({
                   key={l}
                   type="button"
                   onClick={() => setTab(l)}
-                  className={cn('rounded-t-xl border-b-2 px-3 py-2 text-sm whitespace-nowrap', tab === l ? 'border-graphite font-medium dark:border-lime' : 'border-transparent text-muted')}
+                  role="tab"
+                  aria-selected={tab === l}
+                  className={cn('inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-t-xl border-b-2 px-3 text-sm whitespace-nowrap', tab === l ? 'border-graphite font-medium dark:border-lime' : 'border-transparent text-muted hover:text-ink')}
                   data-testid={`lang-tab-${l}`}
                 >
                   {LANGUAGE_NATIVE_NAME[l]} {l === sourceLanguage ? <Badge tone="dark">source</Badge> : !filled && <span className="text-warning">•</span>}

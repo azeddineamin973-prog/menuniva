@@ -58,9 +58,11 @@ export async function deleteTenantMedia(organizationId: string, mediaPaths: (str
 }
 
 async function isReferenced(mediaPath: string) {
-  const [branding, images] = await Promise.all([
+  const [branding, images, reviewPhotos] = await Promise.all([
     db.restaurantBranding.count({ where: { OR: [{ logoUrl: mediaPath }, { coverUrl: mediaPath }] } }),
     db.productImage.count({ where: { url: mediaPath } }),
+    // A photo uploaded while reviewing an import that is still open.
+    db.importedProduct.count({ where: { imageUrl: mediaPath, job: { status: { in: ['DRAFT', 'NEEDS_REVIEW'] } } } }),
   ]);
-  return branding + images > 0;
+  return branding + images + reviewPhotos > 0;
 }

@@ -7,6 +7,7 @@ import { formatCents } from '@/lib/money';
 import { getMenuAdmin, pickName } from '@/server/services/menu';
 import { unroutedDishes } from '@/server/services/publish';
 import { requireTenantPage } from '@/server/tenant';
+import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { moveCategoryAction, moveProductAction, quickAddCategoryAction, setCategoryStationAction, toggleSoldOutAction, deleteCategoryAction } from './actions';
 
 export default async function MenuPage({ params }: { params: Promise<{ org: string }> }) {
@@ -24,12 +25,13 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
 
   return (
     <>
+      <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="import" />
       <PageHeader
         title="Menu"
         description={`Source language: ${LANGUAGE_NATIVE_NAME[o.sourceLanguage]}. Prices are entered by you and stored exactly (no rounding).`}
         actions={
           <>
-            <ButtonLink href={`${base}/menu/quick`} variant="secondary">Quick prices & sold out</ButtonLink>
+            <ButtonLink href={`${base}/menu/quick`} variant="secondary">Prices & sold out</ButtonLink>
             {canEdit && <ButtonLink href={`${base}/menu/translations`} variant="secondary">Translations</ButtonLink>}
             {canEdit && <ButtonLink href={`${base}/menu/upsell`} variant="secondary">Cart suggestions</ButtonLink>}
             {ctx.can('import.manage') && <ButtonLink href={`${base}/import`} variant="secondary">Import menu</ButtonLink>}
@@ -126,14 +128,33 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
                       const price = (ch: string) => p.prices.find((x) => x.channel === ch)?.amountCents;
                       const dineIn = price('DINE_IN');
                       return (
-                        <li key={p.id} className="flex flex-wrap items-center gap-3 px-5 py-3" data-testid="menu-product">
-                          {p.images[0] ? (
+                        // Phones: photo, name and price on one line, prices per channel under the price,
+                        // actions on their own row. From `sm` up everything sits on one line.
+                        <li key={p.id} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto] sm:items-center sm:px-5" data-testid="menu-product">
+                          {canEdit ? (
+                            <Link
+                              href={`${base}/menu/products/${p.id}#photos`}
+                              className="group relative block size-12 shrink-0 overflow-hidden rounded-xl"
+                              title={p.images[0] ? 'Change photo' : 'Add photo'}
+                              aria-label={`${p.images[0] ? 'Change' : 'Add'} photo for ${pickName(p.translations, langs) ?? 'dish'}`}
+                              data-testid="menu-photo-link"
+                            >
+                              {p.images[0] ? (
+                                <img src={p.images[0].url} alt="" className="size-12 object-cover" />
+                              ) : (
+                                <span className="flex size-12 items-center justify-center border border-dashed border-line bg-surface-2 text-lg text-muted">+</span>
+                              )}
+                              <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-[10px] font-semibold text-white group-hover:flex group-focus-visible:flex">
+                                {p.images[0] ? 'Change' : 'Add'}
+                              </span>
+                            </Link>
+                          ) : p.images[0] ? (
                             <img src={p.images[0].url} alt="" className="h-12 w-12 rounded-xl object-cover" />
                           ) : (
                             <div className="h-12 w-12 rounded-xl bg-surface-2" aria-hidden />
                           )}
-                          <div className="min-w-0 flex-1">
-                            <Link href={`${base}/menu/products/${p.id}`} className="font-medium hover:underline">
+                          <div className="min-w-0">
+                            <Link href={`${base}/menu/products/${p.id}`} className="font-medium break-words hover:underline">
                               {pickName(p.translations, langs)}
                             </Link>
                             <div className="mt-0.5 flex flex-wrap gap-1.5">
@@ -148,12 +169,14 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
                             </div>
                           </div>
                           <div className="text-end text-sm tabular-nums">
-                            <p className="font-semibold">{dineIn !== undefined ? formatCents(dineIn, tag) : <span className="text-danger">No dine-in price</span>}</p>
-                            <p className="text-xs text-muted">
-                              Takeaway {price('TAKEAWAY') !== undefined ? formatCents(price('TAKEAWAY')!, tag) : '—'} · Delivery {price('DELIVERY') !== undefined ? formatCents(price('DELIVERY')!, tag) : '—'}
+                            <p className="font-semibold whitespace-nowrap">{dineIn !== undefined ? formatCents(dineIn, tag) : <span className="text-danger">No dine-in price</span>}</p>
+                            <p className="text-xs whitespace-nowrap text-muted">
+                              <span className="block sm:inline">Takeaway {price('TAKEAWAY') !== undefined ? formatCents(price('TAKEAWAY')!, tag) : '—'}</span>
+                              <span className="hidden sm:inline"> · </span>
+                              <span className="block sm:inline">Delivery {price('DELIVERY') !== undefined ? formatCents(price('DELIVERY')!, tag) : '—'}</span>
                             </p>
                           </div>
-                          <div className="flex gap-1.5">
+                          <div className="col-span-2 col-start-2 flex flex-wrap gap-1.5 sm:col-span-1 sm:col-start-auto">
                             {ctx.can('menu.availability') && (
                               <InlineAction
                                 action={toggleSoldOutAction}

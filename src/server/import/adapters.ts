@@ -1,6 +1,9 @@
 import 'server-only';
 import type { ImportSourceType } from '@/generated/prisma/enums';
+import { GLOVO_CAPTURE_SOURCE } from '@/lib/glovo-capture';
 import { env } from '../env';
+import { parseGlovoCapture } from './glovo';
+import { importGlovoMenuFromUrl } from './glovo-fetch';
 import { UnsafeUrlError, validatePublicUrl } from './safe-fetch';
 import { parseCsv, rowsToItems } from './tabular';
 import { parseMenuText } from './text';
@@ -110,9 +113,19 @@ export class ImageMenuImporter implements MenuImportAdapter {
 }
 
 /**
- * Glovo / Uber Eats. Reading their public store pages is not authorised, so MenuNiva does not
- * scrape them. Supported today: the restaurant's own merchant export (CSV/XLSX) or pasted
- * text. A partner API connection needs approval from the provider (BLOCKED BY EXTERNAL APPROVAL).
+ * Glovo / Uber Eats.
+ *
+ * MenuNiva never crawls their store pages from the server: the pages carry `noindex, nofollow`
+ * and serve no menu data to a non-browser client anyway, and their menu endpoints reject
+ * requests without an app session. A partner API connection needs the provider's approval
+ * (BLOCKED BY EXTERNAL APPROVAL).
+ *
+ * What does work, in order of data quality:
+ * 1. the merchant export from the partner portal (CSV/XLSX) — includes every field the platform holds;
+ * 2. a capture the owner makes in their own browser on their own store page (Glovo only) —
+ *    includes categories, prices, photos, sizes and extras (see `./glovo.ts`);
+ * 3. pasted menu text — names and prices only.
+ *
  * Prices from these sources are stored as platform reference prices, never as in-house prices.
  */
 class PlatformAdapter implements MenuImportAdapter {
@@ -121,30 +134,49 @@ class PlatformAdapter implements MenuImportAdapter {
     readonly label: string,
     private hosts: RegExp,
     private hasCredentials: () => boolean,
+    /** Parser for a capture made in the owner's browser, where one exists for this platform. */
+    private capture?: (raw: string) => ParseResult,
+    /** Reads the menu straight from a public store page, where that platform serves one. */
+    private fromUrl?: (url: string, organizationId: string) => Promise<ParseResult>,
   ) {}
   connectionStatus() {
-    return this.hasCredentials()
-      ? { status: 'LIMITED' as const, note: `Credentials are configured but the ${this.label} partner API connection has not been verified. Use your merchant export.` }
-      : { status: 'NOT_CONFIGURED' as const, note: `No ${this.label} partner API access (requires ${this.label} approval). Upload your merchant export or paste your menu.` };
+    if (this.fromUrl)
+      return { status: 'LIMITED' as const, note: `Paste your ${this.label} store link and the menu is read from your public store page. No ${this.label} partner API access (that needs ${this.label} approval).` };
+    if (this.hasCredentials())
+      return { status: 'LIMITED' as const, note: `Credentials are configured but the ${this.label} partner API connection has not been verified. Use your merchant export.` };
+    return { status: 'NOT_CONFIGURED' as const, note: `No ${this.label} partner API access (requires ${this.label} approval). Upload your merchant export or paste your menu.` };
   }
   async parse(input: ImportInput) {
-    if (input.url && !input.bytes && !input.text) {
+    if (input.url) {
       try {
         validatePublicUrl(input.url, this.hosts);
       } catch (e) {
         return failed(e instanceof UnsafeUrlError ? e.message : 'Invalid link.');
       }
+    }
+    // An uploaded file or pasted content is what the owner explicitly supplied: use it first.
+    if (input.bytes) return parseTabular(input);
+    if (input.text?.trim()) {
+      const text = input.text;
+      // A browser capture is JSON; a merchant export is delimited; anything else is menu text.
+      if (this.capture && looksLikeCapture(text)) return this.capture(text);
+      const looksTabular = /[,;\t]/.test(text.split('\n', 1)[0] ?? '') && text.split('\n').length > 1;
+      return looksTabular ? parseTabular(input) : parseMenuText(text, 'MANUAL_PASTE');
+    }
+    if (input.url) {
+      if (this.fromUrl && input.organizationId) return this.fromUrl(input.url, input.organizationId);
       return unsupported(
         `MenuNiva does not copy menus from ${this.label} store pages: this requires authorisation from ${this.label}. Your link was saved for reference. Download your menu export from the ${this.label} partner portal (CSV/Excel) and upload it here, or paste the menu text.`,
       );
     }
-    if (input.bytes) return parseTabular(input);
-    if (input.text) {
-      const looksTabular = /[,;\t]/.test(input.text.split('\n', 1)[0] ?? '') && input.text.split('\n').length > 1;
-      return looksTabular ? parseTabular(input) : parseMenuText(input.text, 'MANUAL_PASTE');
-    }
-    return failed('Upload your merchant export or paste the menu.');
+    return failed('Paste your store link, upload your menu export, or paste the menu.');
   }
+}
+
+/** True when the pasted text is a MenuNiva browser capture or a raw platform JSON payload. */
+function looksLikeCapture(text: string): boolean {
+  const t = text.trimStart();
+  return t.startsWith('{') || t.startsWith('[') || t.includes(GLOVO_CAPTURE_SOURCE) || /self\.__next_f\.push|<script/i.test(t);
 }
 
 export const ADAPTERS: Record<Exclude<ImportSourceType, 'MANUAL'>, MenuImportAdapter> = {
@@ -153,7 +185,9 @@ export const ADAPTERS: Record<Exclude<ImportSourceType, 'MANUAL'>, MenuImportAda
   TEXT: new TextMenuImporter(),
   PDF: new PDFMenuImporter(),
   IMAGE: new ImageMenuImporter(),
-  GLOVO: new PlatformAdapter('GLOVO', 'Glovo', /(^|\.)glovoapp\.com$/, () => !!env.GLOVO_PARTNER_API_KEY),
+  GLOVO: new PlatformAdapter('GLOVO', 'Glovo', /(^|\.)glovoapp\.com$/, () => !!env.GLOVO_PARTNER_API_KEY, parseGlovoCapture, (url, organizationId) =>
+    importGlovoMenuFromUrl(url, { organizationId }),
+  ),
   UBER_EATS: new PlatformAdapter('UBER_EATS', 'Uber Eats', /(^|\.)ubereats\.com$/, () => !!(env.UBER_EATS_CLIENT_ID && env.UBER_EATS_CLIENT_SECRET)),
 };
 

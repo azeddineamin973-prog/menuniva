@@ -54,10 +54,10 @@ export async function login(page: Page, email: string, password: string) {
 /** Signs up through /signup and registers a restaurant through /onboarding/new. Returns the slug. */
 export async function signUpAndRegister(page: Page, owner: { name: string; email: string }, restaurant: string, city: string): Promise<string> {
   await page.goto('/signup');
-  await page.getByLabel('Nome completo').fill(owner.name);
+  await page.getByLabel(/Full name|Nome completo/).fill(owner.name);
   await page.getByLabel('Email').fill(owner.email);
-  await page.getByLabel('Palavra-passe').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Criar conta' }).click();
+  await page.getByLabel(/^(Password|Palavra-passe)$/).fill(PASSWORD);
+  await page.getByRole('button', { name: /Create account|Criar conta/ }).click();
   await expect(page).toHaveURL(/\/onboarding\/new/);
   await page.getByLabel('Restaurant name').fill(restaurant);
   await page.getByLabel('City').fill(city);

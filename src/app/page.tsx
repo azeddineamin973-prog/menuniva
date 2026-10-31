@@ -14,16 +14,20 @@ const FEATURES = [
 export default function HomePage() {
   return (
     <div className="min-h-dvh bg-bg">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 sm:px-6 sm:py-5">
         <Logo />
-        <nav className="flex items-center gap-2">
-          <ButtonLink href="/login" variant="ghost">Sign in</ButtonLink>
-          <ButtonLink href="/signup">Start free trial</ButtonLink>
+        <nav className="flex items-center gap-1 sm:gap-2">
+          {/* The hero repeats "Sign in", so the smallest phones keep just the trial button here. */}
+          <ButtonLink href="/login" variant="ghost" className="px-3! max-[359px]:hidden">Sign in</ButtonLink>
+          <ButtonLink href="/signup" className="px-3! sm:px-4!">
+            <span className="sm:hidden">Free trial</span>
+            <span className="hidden sm:inline">Start free trial</span>
+          </ButtonLink>
         </nav>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 pt-10 pb-20">
-        <div className="relative overflow-hidden rounded-[2rem] bg-graphite px-8 py-16 text-white sm:px-14 sm:py-20">
+      <section className="mx-auto max-w-6xl px-4 pt-6 pb-16 sm:px-6 sm:pt-10 sm:pb-20">
+        <div className="relative overflow-hidden rounded-[2rem] bg-graphite px-6 py-12 text-white sm:px-14 sm:py-20">
           <div aria-hidden className="absolute -end-20 -top-20 h-72 w-72 rounded-full bg-lime/15 blur-3xl" />
           <LogoMark className="mb-8 h-14 w-14" />
           <h1 className="max-w-3xl text-4xl leading-[1.08] font-semibold tracking-tight sm:text-6xl">
@@ -45,7 +49,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-4 px-6 pb-24 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-20 sm:grid-cols-2 sm:px-6 sm:pb-24 lg:grid-cols-3">
         {FEATURES.map(([title, body]) => (
           <div key={title} className="rounded-[var(--radius-card)] border border-line bg-surface p-6">
             <div className="mb-4 h-1.5 w-10 rounded-full bg-lime" />
@@ -56,12 +60,12 @@ export default function HomePage() {
       </section>
 
       <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-muted">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:px-6">
           <span>© MenuNiva</span>
           <span>
             Payments are taken at the restaurant. Online payments and certified invoicing require separate providers.
           </span>
-          <Link href="/login" className="hover:text-ink">Staff sign in</Link>
+          <Link href="/login" className="inline-flex min-h-10 items-center hover:text-ink">Staff sign in</Link>
         </div>
       </footer>
     </div>

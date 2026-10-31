@@ -27,14 +27,14 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
         <div aria-hidden className="absolute -end-24 -bottom-24 h-80 w-80 rounded-full bg-lime/10 blur-3xl" />
         <p className="text-sm text-white/40">© MenuNiva</p>
       </aside>
-      <main className="flex flex-col px-6 py-8 sm:px-10">
+      <main className="flex flex-col px-5 py-6 sm:px-10 sm:py-8">
         <div className="flex items-center justify-between">
           <Link href="/" className="lg:invisible">
             <Logo />
           </Link>
           <LanguageCookieSwitcher current={lang} />
         </div>
-        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">{children}</div>
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-8 sm:py-10">{children}</div>
       </main>
     </div>
   );

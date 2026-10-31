@@ -7,6 +7,7 @@ import {
   deleteCategory,
   moveCategory,
   moveProduct,
+  arrangeProductImage,
   removeProductImage,
   saveAllergens,
   saveCategory,
@@ -19,6 +20,8 @@ import {
   uploadProductImage,
 } from '@/server/services/menu';
 import { approveTranslation, bulkTranslateMissing, saveTranslation } from '@/server/services/translations';
+import { approveAllMachineTranslations, detectMenuSourceLanguage, translateMissing, type TranslateProgress } from '@/server/services/ai-translate';
+import { applyExternalPrices, setPricesInBulk } from '@/server/services/price-bulk';
 import { markOnboardingFlag } from '@/server/services/settings';
 import { createLocation, deleteTaxClass, saveLocationOverride, saveSchedule, saveTaxClass } from '@/server/services/menu-advanced';
 
@@ -103,7 +106,8 @@ export async function uploadProductImageAction(_p: ActionResult, form: FormData)
     form.get('org'),
     'menu.edit',
     async (ctx) => {
-      await uploadProductImage(ctx, String(form.get('productId')), form.get('image'), form.get('rightsConfirmed') === 'on');
+      // A new photo becomes the main one unless the owner chose "add as an extra photo".
+      await uploadProductImage(ctx, String(form.get('productId')), form.get('image'), form.get('rightsConfirmed') === 'on', { main: form.get('placement') !== 'extra' });
     },
     REVALIDATE,
   );
@@ -111,6 +115,12 @@ export async function uploadProductImageAction(_p: ActionResult, form: FormData)
 
 export async function removeProductImageAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'menu.edit', (ctx) => removeProductImage(ctx, String(form.get('imageId'))), REVALIDATE);
+}
+
+export async function arrangeProductImageAction(_p: ActionResult, form: FormData) {
+  const move = form.get('move');
+  if (move !== 'main' && move !== 'left' && move !== 'right') return { ok: false as const, error: 'Invalid move.' };
+  return runTenantAction(form.get('org'), 'menu.edit', (ctx) => arrangeProductImage(ctx, String(form.get('imageId')), move), REVALIDATE);
 }
 
 export async function saveTranslationAction(_p: ActionResult, form: FormData) {
@@ -128,6 +138,55 @@ export async function approveTranslationAction(_p: ActionResult, form: FormData)
 
 export async function bulkTranslateAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'menu.edit', (ctx) => bulkTranslateMissing(ctx), REVALIDATE);
+}
+
+/**
+ * One bounded pass of AI translation. The browser calls this repeatedly so it can show real
+ * progress and retry only what failed; each call is independently safe and skips work already
+ * done. It deliberately does not revalidate — the page is refreshed once, after the last pass.
+ */
+export async function translatePassAction(input: { org: string; limit?: number; language?: string; only?: { kind: 'category' | 'product'; id: string }[] }): Promise<ActionResult<TranslateProgress>> {
+  return runTenantAction(input.org, 'menu.edit', (ctx) => translateMissing(ctx, { limit: input.limit, language: input.language, only: input.only }));
+}
+
+export async function approveAllTranslationsAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'menu.edit',
+    (ctx) => approveAllMachineTranslations(ctx, { language: (form.get('language') as string) || undefined, confirmReviewed: form.get('confirmReviewed') === 'on' }),
+    REVALIDATE,
+  );
+}
+
+export async function detectSourceLanguageAction(input: { org: string }) {
+  return runTenantAction(input.org, 'menu.edit', (ctx) => detectMenuSourceLanguage(ctx));
+}
+
+/** Copies imported Glovo/Uber Eats prices into dine-in prices after the owner confirms them. */
+export async function applyExternalPricesAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'menu.edit',
+    (ctx) =>
+      applyExternalPrices(ctx, {
+        provider: form.get('provider'),
+        confirm: form.get('confirm') === 'on',
+        productIds: form.getAll('productIds').length ? form.getAll('productIds').map(String) : undefined,
+        overwriteExisting: form.get('overwriteExisting') === 'on',
+        applyVariants: form.get('applyVariants') !== 'off',
+        makeVisible: form.get('makeVisible') === 'on',
+      }),
+    REVALIDATE,
+  );
+}
+
+export async function setPricesInBulkAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'menu.edit',
+    (ctx) => setPricesInBulk(ctx, { productIds: form.getAll('productIds').map(String), channel: form.get('channel'), price: form.get('price') }),
+    REVALIDATE,
+  );
 }
 
 export async function markTranslationsReviewedAction(_p: ActionResult, form: FormData) {

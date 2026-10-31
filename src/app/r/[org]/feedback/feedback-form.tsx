@@ -43,7 +43,7 @@ export function FeedbackForm({ org, l, orderToken, lang, m }: { org: string; l?:
 
   if (state === 'done') return <p className="rounded-2xl bg-white/80 p-5 text-center text-lg" role="status" data-testid="feedback-thanks">{f.thanks}</p>;
 
-  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-sm';
+  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-base';
   return (
     <form onSubmit={submit} className="space-y-4" data-testid="feedback-form">
       <fieldset>
@@ -60,13 +60,13 @@ export function FeedbackForm({ org, l, orderToken, lang, m }: { org: string; l?:
         <legend className="mb-2 text-sm font-medium">{f.categoriesLabel} <span className="opacity-60">({m.common.optional})</span></legend>
         <div className="flex flex-wrap gap-2">
           {CATS.map((c) => (
-            <button key={c} type="button" aria-pressed={cats.includes(c)} onClick={() => setCats(cats.includes(c) ? cats.filter((x) => x !== c) : [...cats, c])} className={cn('rounded-full px-3 py-1.5 text-sm ring-1', cats.includes(c) ? 'bg-sf-primary text-white ring-sf-primary' : 'bg-white/80 ring-black/10')}>
+            <button key={c} type="button" aria-pressed={cats.includes(c)} onClick={() => setCats(cats.includes(c) ? cats.filter((x) => x !== c) : [...cats, c])} className={cn('min-h-10 rounded-full px-3.5 py-2 text-sm ring-1', cats.includes(c) ? 'bg-sf-primary text-white ring-sf-primary' : 'bg-white/80 ring-black/10')}>
               {f.categories[c]}
             </button>
           ))}
         </div>
       </fieldset>
-      <textarea value={comment} onChange={(e) => setComment(e.target.value.slice(0, 2000))} placeholder={f.comment} aria-label={f.comment} className="min-h-[100px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-sm" />
+      <textarea value={comment} onChange={(e) => setComment(e.target.value.slice(0, 2000))} placeholder={f.comment} aria-label={f.comment} className="min-h-[100px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-base" />
       <label className="flex min-h-11 items-start gap-2 py-1 text-sm">
         <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" data-testid="follow-up" />
         {f.followUp}

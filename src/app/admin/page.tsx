@@ -15,7 +15,7 @@ export default async function AdminHome() {
   return (
     <>
       <PageHeader title="Restaurants" description="All tenants on the platform. Metrics are aggregate counts; private guest feedback is never shown here." actions={<ButtonLink href="/admin/tenants/new">Create tenant</ButtonLink>} />
-      <div className="mb-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
         <Stat label="Real tenants" value={metrics.tenants} />
         <Stat label="Active" value={metrics.active} />
         <Stat label="Trialing" value={metrics.trialing} />

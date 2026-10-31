@@ -127,9 +127,9 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
               <p className="mb-1 text-muted">Staff</p>
               <ul className="space-y-1">
                 {org.memberships.map((m) => (
-                  <li key={m.id} className="flex justify-between">
-                    <span>{m.user.name} · {m.user.email}</span>
-                    <Badge>{m.role}</Badge>
+                  <li key={m.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                    <span className="min-w-0 break-words">{m.user.name} · {m.user.email}</span>
+                    <Badge>{m.role.replace('RESTAURANT_', '').replace(/_/g, ' ').toLowerCase()}</Badge>
                   </li>
                 ))}
               </ul>
@@ -142,7 +142,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         <CardHeader title="Billing records (manual)" description="Record only payments really received (e.g. bank transfer). The owner sees this list as their billing history." />
         <CardBody className="space-y-4">
           {sub ? (
-            <ActionForm action={recordBillingAction} submitLabel="Record payment received" resetOnSuccess testId="billing-form" className="grid gap-3 space-y-0 sm:grid-cols-5 sm:items-end">
+            <ActionForm action={recordBillingAction} submitLabel="Record payment received" resetOnSuccess testId="billing-form" className="grid gap-3 space-y-0 sm:grid-cols-2 sm:items-end xl:grid-cols-5">
               <input type="hidden" name="organizationId" value={org.id} />
               <Field label="Amount (€)" htmlFor="b-amount"><Input id="b-amount" name="amount" inputMode="decimal" placeholder="49,00" /></Field>
               <Field label="Period from" htmlFor="b-from"><Input id="b-from" name="periodStart" type="date" /></Field>

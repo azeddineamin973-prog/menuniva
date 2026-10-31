@@ -55,7 +55,7 @@ test('STEP 1: two independent restaurants are created through sign-up + onboardi
 
 test('STEP 2: Restaurant A owner signs out and signs in again', async () => {
   await owner.goto(`/dashboard/${A.slug}`);
-  await owner.getByRole('button', { name: 'Terminar sessão' }).first().click();
+  await owner.getByRole('button', { name: /Sign out|Terminar sessão/ }).first().click();
   await expect(owner).toHaveURL(/\/login/);
   expect((await ownerCtx.cookies()).find((c) => c.name === 'mn_session')).toBeUndefined();
   const blocked = await owner.goto(`/dashboard/${A.slug}/orders`);

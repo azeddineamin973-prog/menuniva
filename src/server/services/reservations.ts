@@ -183,6 +183,40 @@ export async function trackReservation(token: string) {
   });
 }
 
+/** How close to the booking a guest may still cancel online. Inside this, they must call. */
+export const GUEST_CANCEL_NOTICE_MINUTES = 60;
+
+/**
+ * Lets the guest who holds the private link cancel their own reservation, which frees the
+ * capacity for everyone else. Only possible while the booking is still ahead of us by the notice
+ * period: cancelling a table five minutes before the sitting is a phone call, not a web form.
+ *
+ * The token is the authorisation — it is unguessable and only the guest has it — and only this
+ * one reservation can ever be reached with it.
+ */
+export async function cancelReservationByToken(token: string, client: string | ClientIdentity, now = new Date()): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'too_late' | 'not_cancellable' }> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return { ok: false, reason: 'not_found' };
+  const hash = hashToken(token);
+  const existing = await db.reservation.findUnique({ where: { trackingTokenHash: hash }, select: { id: true, organizationId: true, locationId: true, status: true, startsAt: true, name: true } });
+  if (!existing) return { ok: false, reason: 'not_found' };
+  // Already cancelled or finished: say so plainly rather than pretending to act.
+  if (!['REQUESTED', 'CONFIRMED'].includes(existing.status)) return { ok: false, reason: 'not_cancellable' };
+  if (existing.startsAt.getTime() - now.getTime() < GUEST_CANCEL_NOTICE_MINUTES * 60_000) return { ok: false, reason: 'too_late' };
+  await limitPublic(`reservation-cancel:${existing.locationId}`, asIdentity(client), { guest: [10, 3600], ip: [30, 3600] });
+  await db.$transaction(async (tx) => {
+    // Status is re-checked in the write so two taps cannot cancel twice or fight the restaurant.
+    const res = await tx.reservation.updateMany({ where: { id: existing.id, status: { in: ['REQUESTED', 'CONFIRMED'] } }, data: { status: 'CANCELLED' } });
+    if (res.count !== 1) return;
+    // Table holds are released with the reservation; capacity is derived from status.
+    await tx.reservationTableAssignment.deleteMany({ where: { reservationId: existing.id } });
+    await tx.notification.create({
+      data: { organizationId: existing.organizationId, locationId: existing.locationId, type: 'RESERVATION_REQUEST', title: `Reservation cancelled by the guest — ${existing.name}`, entityId: existing.id },
+    });
+    await audit({ organizationId: existing.organizationId, actorUserId: null, action: 'reservation.cancelled_by_guest', entityType: 'Reservation', entityId: existing.id }, tx);
+  });
+  return { ok: true };
+}
+
 // ------------------------------------------------------------------ management (M10-08/09)
 
 export const reservationStatusSchema = z.object({

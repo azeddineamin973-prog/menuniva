@@ -32,10 +32,12 @@ async function addDish(page: Page, base: string, categoryIndex: number, name: st
 test('restaurant setup → QR table order → kitchen & café → completed', async ({ page, browser }) => {
   // 1. Owner signs up and registers the restaurant
   await page.goto('/signup');
-  await page.getByLabel('Nome completo').fill(owner.name);
+  // The interface is English unless the visitor picks another language.
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.getByLabel('Full name').fill(owner.name);
   await page.getByLabel('Email').fill(owner.email);
-  await page.getByLabel('Palavra-passe').fill(owner.password);
-  await page.getByRole('button', { name: 'Criar conta' }).click();
+  await page.getByLabel('Password').fill(owner.password);
+  await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page).toHaveURL(/\/onboarding\/new/);
   await page.getByLabel('Restaurant name').fill('E2E Test Restaurant');
   await page.getByLabel('City').fill('Braga');
@@ -123,9 +125,11 @@ test('restaurant setup → QR table order → kitchen & café → completed', as
   await page.goto(`${base}/orders`);
   const card = page.getByTestId('column-new').getByTestId('order-card');
   await expect(card).toHaveCount(1);
-  await expect(card).toContainText('Mesa 01'); // staff UI follows the owner's language (pt-PT)
+  // Staff screens follow the owner's own language, English by default; guests above see the
+  // restaurant's language. Menu content (dish names) is never translated automatically.
+  await expect(card).toContainText('Table 01');
   await expect(card).toContainText('Prato de teste');
-  await expect(card).toContainText('19,40');
+  await expect(card).toContainText('19.40');
   await expect(page.getByTestId('unread-count')).toBeVisible();
   await card.getByTestId('action-ACCEPTED').click();
   await expect(page.getByTestId('column-accepted').getByTestId('order-card')).toHaveCount(1);

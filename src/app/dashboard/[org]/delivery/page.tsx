@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ActionForm, FieldError } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select, disclosureClass } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { centsToInputValue, formatCents } from '@/lib/money';
@@ -99,7 +99,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
                 <div>
                   <Label>Delivery hours</Label>
                   <p className="mb-2 text-xs text-muted">Leave empty to use your opening hours.</p>
-                  <OpeningHoursEditor name="deliveryHours" initial={(settings?.deliveryHours as OpeningHours | null) ?? null} />
+                  <OpeningHoursEditor name="deliveryHours" inheritsFrom="opening hours" initial={(settings?.deliveryHours as OpeningHours | null) ?? null} />
                 </div>
               </ActionForm>
             </CardBody>
@@ -116,7 +116,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
                     <span className="text-muted">{formatCents(z.feeCents)}{z.minOrderCents ? ` · min ${formatCents(z.minOrderCents)}` : ''}{z.freeDeliveryThresholdCents !== null ? ` · free from ${formatCents(z.freeDeliveryThresholdCents)}` : ''}</span>
                   </div>
                   <details>
-                    <summary className="cursor-pointer text-xs text-muted">Edit · {z.postalCodePatterns.join(', ')}</summary>
+                    <summary className={disclosureClass}>Edit · {z.postalCodePatterns.join(', ')}</summary>
                     <ActionForm action={saveZoneAction} submitLabel="Save zone" submitVariant="secondary" className="mt-2">
                       <ZoneFields z={z} />
                       <Checkbox name="isActive" label="Active" defaultChecked={z.isActive} />

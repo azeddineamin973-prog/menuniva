@@ -2,7 +2,7 @@
 
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { createContext, useActionState, useContext, useEffect, useRef, useState } from 'react';
-import { Alert, Button } from '@/components/ui';
+import { Alert, Button, wrapButtonClass } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { DEFAULT_UPLOAD_MAX_BYTES, parseUploadErrorCode, uploadMessage } from '@/lib/upload-messages';
@@ -62,6 +62,7 @@ export function ActionForm({
   submitVariant = 'primary',
   testId,
   onSuccess,
+  stickySubmit = false,
 }: {
   action: Action;
   children: React.ReactNode;
@@ -73,6 +74,8 @@ export function ActionForm({
   submitVariant?: 'primary' | 'secondary' | 'dark' | 'danger';
   testId?: string;
   onSuccess?: (data: unknown) => void;
+  /** Long forms: the save button stays visible at the bottom of the screen while the form is in view. */
+  stickySubmit?: boolean;
 }) {
   // A request refused before our server code runs (e.g. Next.js body limit for an oversized photo)
   // used to crash the whole page; it now becomes a form error (audit BUG-06).
@@ -135,8 +138,16 @@ export function ActionForm({
             <Alert tone="danger">{fileError}</Alert>
           </div>
         )}
-        <div className={cn('flex flex-wrap items-center gap-3', hiddenSubmit && 'hidden')}>
-          <Button type="submit" disabled={pending} variant={submitVariant}>
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-3',
+            hiddenSubmit && 'hidden',
+            // Above the phone bottom bar (4 rem); at the screen edge from `lg`, where there is none.
+            stickySubmit && 'sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 -mx-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:bottom-0 lg:-mx-8 lg:px-8',
+          )}
+          data-testid={stickySubmit ? 'sticky-submit' : undefined}
+        >
+          <Button type="submit" disabled={pending} variant={submitVariant} className={wrapButtonClass}>
             {pending ? 'Saving…' : submitLabel}
           </Button>
           {shown?.ok && (

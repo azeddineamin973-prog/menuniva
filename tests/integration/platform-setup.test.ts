@@ -4,6 +4,7 @@ import { db } from '@/server/db';
 import { rateLimit, RateLimitError } from '@/server/rate-limit';
 import { bootstrapPlatformAdmin, isSetupTokenUsable } from '@/server/services/platform-setup';
 import { resetDatabase } from '../support/db';
+import { awaitFreshWindow } from '../support/rate-window';
 
 async function issueToken(expiresInMs = 60_000) {
   const token = newSecretToken();
@@ -51,6 +52,8 @@ describe('Super Admin one-time bootstrap', () => {
 describe('PostgreSQL rate limiter', () => {
   beforeEach(resetDatabase);
   it('blocks after the limit within a window', async () => {
+    // Four database round-trips; 10 s of window left is far more than they need.
+    await awaitFreshWindow(60, 10_000);
     for (let i = 0; i < 3; i++) await rateLimit('test:key', 3, 60);
     await expect(rateLimit('test:key', 3, 60)).rejects.toBeInstanceOf(RateLimitError);
     await expect(rateLimit('test:other', 3, 60)).resolves.toBeUndefined();

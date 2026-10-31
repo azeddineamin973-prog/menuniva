@@ -203,6 +203,7 @@ enum ExtractionMethod {
   AI_ASSISTED
   PARTNER_API
   MANUAL_PASTE
+  PUBLIC_PAGE // read from a public store page on the owner's request (not a partner API)
 }
 
 enum ImportDecisionType {
@@ -292,7 +293,7 @@ model User {
   name          String
   passwordHash  String
   platformRole  PlatformRole @default(USER)
-  preferredLanguage LanguageCode @default(pt)
+  preferredLanguage LanguageCode @default(en) // dashboard language; English unless the person chooses another
   emailVerifiedAt DateTime?
   disabledAt    DateTime?
   createdAt     DateTime     @default(now())

@@ -5,6 +5,7 @@ import { LANGUAGE_NATIVE_NAME, LANGUAGES } from '@/i18n/config';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { db } from '@/server/db';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
+import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { saveLocationDetailsAction, saveOrganizationSettingsAction } from './actions';
 import { createLocationAction } from '../menu/actions';
 import { SettingsTabs } from './tabs';
@@ -20,6 +21,7 @@ export default async function SettingsPage({ params, searchParams }: { params: P
 
   return (
     <>
+      <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="details" locationId={location?.id} />
       <PageHeader title="Restaurant settings" description="Information entered here is shown to your guests. Nothing is filled in automatically." />
       <SettingsTabs base={base} active="details" />
       <div className="grid gap-6 xl:grid-cols-2">

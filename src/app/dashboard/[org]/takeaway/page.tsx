@@ -53,7 +53,7 @@ export default async function TakeawayPage({ params }: { params: Promise<{ org: 
               <div>
                 <Label>Pickup hours</Label>
                 <p className="mb-2 text-xs text-muted">Leave empty to use your opening hours{location.openingHours ? '' : ' (not set either — guests can then only choose “as soon as possible”)'}.</p>
-                <OpeningHoursEditor name="pickupHours" initial={(settings?.pickupHours as OpeningHours | null) ?? null} />
+                <OpeningHoursEditor name="pickupHours" inheritsFrom="opening hours" initial={(settings?.pickupHours as OpeningHours | null) ?? null} />
               </div>
             </ActionForm>
           </CardBody>

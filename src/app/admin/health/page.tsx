@@ -20,7 +20,7 @@ export default async function HealthPage() {
           <ul className="divide-y divide-line text-sm">
             {integrationHealth().map((i) => (
               <li key={i.name} className="flex items-start justify-between gap-3 px-5 py-3">
-                <span>
+                <span className="min-w-0">
                   <span className="font-medium">{i.name}</span>
                   <span className="block text-xs text-muted">{i.note}</span>
                 </span>
@@ -46,11 +46,11 @@ export default async function HealthPage() {
           <ul className="divide-y divide-line text-sm">
             {errors.map((e) => (
               <li key={e.id} className="px-5 py-3">
-                <div className="flex justify-between gap-2">
-                  <span className="font-mono text-xs">{e.source}</span>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <span className="font-mono text-xs break-all">{e.source}</span>
                   <span className="text-xs text-muted">{e.createdAt.toISOString().replace('T', ' ').slice(0, 19)} UTC</span>
                 </div>
-                <p className="mt-1 text-sm">{e.message}</p>
+                <p className="mt-1 text-sm break-words">{e.message}</p>
               </li>
             ))}
           </ul>

@@ -1,6 +1,6 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { LinkResultForm } from '@/components/forms/link-result-form';
-import { Alert, Badge, Card, CardBody, CardHeader, Field, Input, PageHeader, Select } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass } from '@/components/ui';
 import { assignableRoles } from '@/lib/permissions';
 import { db } from '@/server/db';
 import { EMAIL_DELIVERY_AVAILABLE } from '@/server/email';
@@ -57,7 +57,7 @@ export default async function StaffPage({ params }: { params: Promise<{ org: str
                   </div>
                   {editable && (
                     <details className="mt-3">
-                      <summary className="cursor-pointer text-sm text-muted">Edit access</summary>
+                      <summary className={disclosureClass}>Edit access</summary>
                       <div className="mt-3 grid gap-4 md:grid-cols-2">
                         <ActionForm action={updateMemberAction} submitLabel="Save" submitVariant="secondary">
                           <input type="hidden" name="org" value={ctx.org.slug} />

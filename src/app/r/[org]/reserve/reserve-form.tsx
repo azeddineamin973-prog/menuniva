@@ -56,7 +56,7 @@ export function ReserveForm({ org, l, lang, today, maxParty, m }: { org: string;
     setBusy(false);
   };
 
-  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-sm';
+  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-base';
   return (
     <form onSubmit={submit} className="space-y-4" data-testid="reserve-form">
       <div className="grid grid-cols-2 gap-3">
@@ -102,7 +102,7 @@ export function ReserveForm({ org, l, lang, today, maxParty, m }: { org: string;
       <input required placeholder={r.name} aria-label={r.name} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input} maxLength={80} />
       <input required type="tel" placeholder={r.phone} aria-label={r.phone} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={input} maxLength={20} />
       <input type="email" placeholder={`${r.email} (${m.common.optional})`} aria-label={r.email} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={input} />
-      <textarea placeholder={`${r.specialRequest} (${m.common.optional})`} aria-label={r.specialRequest} value={form.specialRequest} onChange={(e) => setForm({ ...form, specialRequest: e.target.value.slice(0, 500) })} className="min-h-[70px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-sm" />
+      <textarea placeholder={`${r.specialRequest} (${m.common.optional})`} aria-label={r.specialRequest} value={form.specialRequest} onChange={(e) => setForm({ ...form, specialRequest: e.target.value.slice(0, 500) })} className="min-h-[70px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-base" />
       {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
       <button type="submit" disabled={busy} className="h-12 w-full rounded-2xl bg-sf-primary font-medium text-white disabled:opacity-50" data-testid="reserve-submit">
         {r.submit}

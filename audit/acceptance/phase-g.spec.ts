@@ -198,10 +198,10 @@ test('G7 password and session security', async ({ browser }) => {
   out.replayAfterLogout = res.status();
   expect(res.status()).toBe(401);
   await rp.goto('/signup');
-  await rp.getByLabel('Nome completo').fill('Weak');
+  await rp.getByLabel(/Full name|Nome completo/).fill('Weak');
   await rp.getByLabel('Email').fill(`weak.${runId()}@audit.menuniva.invalid`);
-  await rp.getByLabel('Palavra-passe').fill('short');
-  await rp.getByRole('button', { name: 'Criar conta' }).click();
+  await rp.getByLabel(/^(Password|Palavra-passe)$/).fill('short');
+  await rp.getByRole('button', { name: /Create account|Criar conta/ }).click();
   out.weakPasswordSignup = rp.url();
   await replay.close();
   await ctx.close();

@@ -68,7 +68,7 @@ export async function getPublicMenu(locationId: string, lang: LanguageCode, chan
         include: {
           translations: true,
           prices: true,
-          images: { orderBy: { sortOrder: 'asc' }, take: 1, where: { rightsConfirmed: true } },
+          images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1, where: { rightsConfirmed: true } },
           variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
           modifierGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } } } },
           allergens: true,

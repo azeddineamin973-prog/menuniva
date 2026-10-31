@@ -22,18 +22,18 @@ test('GAP-01: import → assign Kitchen/Café → publish → guest order → ea
   await expect(page.getByRole('paragraph').filter({ hasText: 'Seed Café' })).toBeVisible();
 
   await page.goto(`/dashboard/${s.orgSlug}/import`);
-  await page.getByTestId('new-import-form').getByRole('button', { name: 'Start a new import' }).click();
+  await page.getByTestId('advanced-import').locator('summary').click();
   const form = page.getByTestId('add-source-form');
   await form.locator('#file').setInputFiles({ name: 'menu.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
-  await form.getByRole('button', { name: 'Read this source' }).click();
+  await form.getByRole('button', { name: 'Import', exact: true }).click();
   await expect(page.getByTestId('import-item')).toHaveCount(2);
   const publish = page.getByTestId('publish-import-form');
   await publish.getByLabel('Station for Pratos importados').selectOption({ label: 'Seed Kitchen' });
   await publish.getByLabel('Station for Bebidas importadas').selectOption({ label: 'Seed Café' });
-  await publish.getByLabel('Make dishes visible to guests now').check();
-  await publish.getByLabel('I reviewed the items above.').check();
-  await publish.getByRole('button', { name: /Publish 2 new dishes/ }).click();
-  await expect(page.getByTestId('publish-summary')).toContainText('2 dishes created');
+  await publish.getByLabel('Show priced dishes to guests now').check();
+  await publish.getByLabel('I reviewed the products').check();
+  await publish.getByRole('button', { name: 'Import 2 products' }).click();
+  await expect(page.getByTestId('publish-summary')).toContainText('2 products created');
   await expect(page.getByTestId('publish-unrouted')).toHaveCount(0);
 
   const guest = await (await browser.newContext()).newPage();

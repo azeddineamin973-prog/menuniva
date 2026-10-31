@@ -378,7 +378,7 @@ export async function getMenuAdmin(ctx: TenantContext) {
         products: {
           where: { status: { not: 'ARCHIVED' } },
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-          include: { translations: true, prices: true, station: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 }, _count: { select: { allergens: true, variants: true, modifierGroups: true } } },
+          include: { translations: true, prices: true, station: true, images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1 }, _count: { select: { allergens: true, variants: true, modifierGroups: true } } },
         },
       },
     }),
@@ -394,7 +394,7 @@ export async function getProductAdmin(ctx: TenantContext, productId: string) {
     include: {
       translations: true,
       prices: true,
-      images: { orderBy: { sortOrder: 'asc' } },
+      images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
       variants: { orderBy: { sortOrder: 'asc' } },
       modifierGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { orderBy: { sortOrder: 'asc' } } } },
       allergens: true,
@@ -414,30 +414,64 @@ export function pickName(translations: { language: string; name: string }[], pre
   return translations[0]?.name ?? null;
 }
 
-/** Links an already stored image to a product. `url` must be a dish-photo path of THIS tenant. */
-export async function addProductImage(ctx: TenantContext, productId: string, url: string, rightsConfirmed: boolean) {
+/** A dish has at most this many photos; guests see the first one. */
+export const MAX_PRODUCT_IMAGES = 8;
+
+/**
+ * Links an already stored image to a product. `url` must be a dish-photo path of THIS tenant.
+ * `main` puts it first, which is the photo the menu and the guest page show; otherwise it is
+ * added after the existing photos.
+ */
+export async function addProductImage(ctx: TenantContext, productId: string, url: string, rightsConfirmed: boolean, opts: { main?: boolean; origin?: 'MANUAL' | 'IMPORTED' } = {}) {
   if (!rightsConfirmed) throw new UserFacingError('Please confirm you have the right to publish this photo.');
   if (!mediaKeyFromPath(url)?.startsWith(`${ctx.org.id}/products/`)) throw new UserFacingError('Image not found.', 404);
   await assertProduct(ctx, productId);
-  const max = await db.productImage.aggregate({ where: { productId }, _max: { sortOrder: true } });
-  return db.productImage.create({ data: { productId, url, rightsConfirmed: true, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
+  return db.$transaction(async (tx) => {
+    const existing = await tx.productImage.findMany({ where: { productId }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { id: true } });
+    if (existing.length >= MAX_PRODUCT_IMAGES) throw new UserFacingError(`A dish can have up to ${MAX_PRODUCT_IMAGES} photos. Remove one first.`);
+    if (!opts.main) return tx.productImage.create({ data: { productId, url, rightsConfirmed: true, origin: opts.origin ?? 'MANUAL', sortOrder: existing.length } });
+    // Renumber 1..n so the new photo can take position 0 without ties.
+    for (const [i, img] of existing.entries()) await tx.productImage.update({ where: { id: img.id }, data: { sortOrder: i + 1 } });
+    return tx.productImage.create({ data: { productId, url, rightsConfirmed: true, origin: opts.origin ?? 'MANUAL', sortOrder: 0 } });
+  });
 }
 
 /**
  * Uploads a dish photo. Rights and product ownership are checked before anything is stored;
- * if saving fails afterwards the stored file is removed again.
+ * if saving fails afterwards the stored file is removed again. A new upload becomes the main
+ * photo unless `main: false` is passed, so uploading a photo changes what guests see.
  */
-export async function uploadProductImage(ctx: TenantContext, productId: string, file: unknown, rightsConfirmed: boolean) {
-  if (!(file instanceof File)) throw new UserFacingError('Please choose a photo.');
+export async function uploadProductImage(ctx: TenantContext, productId: string, file: unknown, rightsConfirmed: boolean, opts: { main?: boolean } = {}) {
+  if (!(file instanceof File) || file.size === 0) throw new UserFacingError('Please choose a photo.');
   if (!rightsConfirmed) throw new UserFacingError('Please confirm you have the right to publish this photo.');
   await assertProduct(ctx, productId);
-  return withStoredImages(ctx.org.id, { image: { file, folder: 'products' } }, (paths) => addProductImage(ctx, productId, paths.image!, rightsConfirmed));
+  if ((await db.productImage.count({ where: { productId } })) >= MAX_PRODUCT_IMAGES) throw new UserFacingError(`A dish can have up to ${MAX_PRODUCT_IMAGES} photos. Remove one first.`);
+  const image = await withStoredImages(ctx.org.id, { image: { file, folder: 'products' } }, (paths) => addProductImage(ctx, productId, paths.image!, rightsConfirmed, { main: opts.main ?? true }));
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.photo_added', entityType: 'MenuProduct', entityId: productId, metadata: { imageId: image.id } });
+  return image;
 }
 
-/** Removes a dish photo of this tenant and deletes the stored file. */
+/** Removes a dish photo of this tenant and deletes the stored file. The next photo becomes the main one. */
 export async function removeProductImage(ctx: TenantContext, imageId: string) {
   const img = await db.productImage.findFirst({ where: { id: imageId, product: { organizationId: ctx.org.id } } });
   if (!img) throw new UserFacingError('Image not found.', 404);
   await db.productImage.delete({ where: { id: img.id } });
   await deleteTenantMedia(ctx.org.id, [img.url]);
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.photo_removed', entityType: 'MenuProduct', entityId: img.productId, metadata: { imageId: img.id } });
+}
+
+/** Changes the order of a dish's photos: make one the main photo, or move it one place. */
+export async function arrangeProductImage(ctx: TenantContext, imageId: string, move: 'main' | 'left' | 'right') {
+  const img = await db.productImage.findFirst({ where: { id: imageId, product: { organizationId: ctx.org.id } }, select: { id: true, productId: true } });
+  if (!img) throw new UserFacingError('Image not found.', 404);
+  await db.$transaction(async (tx) => {
+    const ids = (await tx.productImage.findMany({ where: { productId: img.productId }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { id: true } })).map((x) => x.id);
+    const at = ids.indexOf(img.id);
+    const to = move === 'main' ? 0 : move === 'left' ? Math.max(0, at - 1) : Math.min(ids.length - 1, at + 1);
+    if (to === at) return;
+    ids.splice(at, 1);
+    ids.splice(to, 0, img.id);
+    for (const [i, id] of ids.entries()) await tx.productImage.update({ where: { id }, data: { sortOrder: i } });
+  });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.photo_arranged', entityType: 'MenuProduct', entityId: img.productId, metadata: { imageId: img.id, move } });
 }

@@ -1,72 +1,91 @@
 import Link from 'next/link';
-import { ActionForm } from '@/components/forms/action-form';
-import { Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui';
-import { adapterStatuses, listImportJobs } from '@/server/import/service';
+import { Badge, Card, PageHeader } from '@/components/ui';
+import { LANGUAGE_TAG } from '@/i18n/config';
+import { formatDateTimeInZone } from '@/lib/time';
+import { currentLocation } from '@/server/current-location';
+import { adapterStatuses, listImportJobs, savedGlovoUrl } from '@/server/import/service';
 import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
-import { createImportJobAction } from './actions';
+import { AdvancedImport } from './advanced-import';
+import { GlovoImportForm } from './glovo-import-form';
 
-const STATUS_TONE = { CONNECTED: 'success', LIMITED: 'warning', NOT_CONFIGURED: 'neutral', ERROR: 'danger' } as const;
-const STATUS_LABEL = { CONNECTED: 'Available', LIMITED: 'Limited', NOT_CONFIGURED: 'Not connected', ERROR: 'Error' } as const;
-const JOB_TONE = { DRAFT: 'neutral', NEEDS_REVIEW: 'warning', PUBLISHED: 'success', CANCELLED: 'neutral', FAILED: 'danger' } as const;
+const SRC: Record<string, string> = { CSV: 'CSV', XLSX: 'Excel', PDF: 'PDF', TEXT: 'Text', GLOVO: 'Glovo', UBER_EATS: 'Uber Eats', IMAGE: 'Photo', MANUAL: 'Manual' };
+const JOB: Record<string, { tone: 'neutral' | 'warning' | 'success' | 'danger'; label: string }> = {
+  DRAFT: { tone: 'neutral', label: 'Empty' },
+  NEEDS_REVIEW: { tone: 'warning', label: 'Ready to review' },
+  PUBLISHED: { tone: 'success', label: 'Saved to menu' },
+  CANCELLED: { tone: 'neutral', label: 'Cancelled' },
+  FAILED: { tone: 'danger', label: 'Failed' },
+};
+
+/** "glovoapp.com/…/stores/casa-de-marrocos-brg" → "casa-de-marrocos-brg"; file sources show the file name. */
+function sourceDetail(s: { url: string | null; fileName: string | null }) {
+  if (s.fileName) return s.fileName;
+  if (!s.url) return null;
+  try {
+    return new URL(s.url).pathname.split('/').filter(Boolean).pop() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function ImportStudioPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'import.manage');
   await requireModulePage(ctx, 'import');
-  const [jobs, adapters] = await Promise.all([listImportJobs(ctx), Promise.resolve(adapterStatuses())]);
+  const [jobs, glovoUrl, location] = await Promise.all([listImportJobs(ctx), savedGlovoUrl(ctx), currentLocation(ctx)]);
   const base = `/dashboard/${ctx.org.slug}`;
+  const tz = location?.timeZone ?? 'Europe/Lisbon';
+  const tag = LANGUAGE_TAG[ctx.user.preferredLanguage];
+
   return (
-    <>
-      <PageHeader
-        title="Menu Import Studio"
-        description="Bring in your existing menu instead of typing it again. Every item is reviewed by you before it is published; nothing goes live automatically."
-        actions={
-          <ActionForm action={createImportJobAction} submitLabel="Start a new import" testId="new-import-form">
-            <input type="hidden" name="org" value={ctx.org.slug} />
-          </ActionForm>
-        }
-      />
-      <Card className="mb-6">
-        <CardHeader title="Import sources" description="Status reflects what genuinely works today." />
-        <ul className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
-          {adapters.map((a) => (
-            <li key={a.type} className="bg-surface p-4" data-testid={`adapter-${a.type}`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-medium">{a.label}</p>
-                <Badge tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status]}</Badge>
-              </div>
-              <p className="mt-1 text-xs text-muted">{a.note}</p>
-            </li>
-          ))}
-          <li className="bg-surface p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium">Manual entry</p>
-              <Badge tone="success">Available</Badge>
-            </div>
-            <p className="mt-1 text-xs text-muted"><Link href={`${base}/menu`} className="underline">Add dishes one by one</Link> in the menu editor.</p>
-          </li>
-        </ul>
-      </Card>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <PageHeader title="Import Studio" description="Bring your existing menu into MenuNiva. Nothing changes on your menu until you review and save." />
+
+      <GlovoImportForm org={ctx.org.slug} defaultUrl={glovoUrl} />
+
+      <AdvancedImport org={ctx.org.slug} adapters={adapterStatuses()} menuHref={`${base}/menu`} />
+
       <Card>
-        <CardHeader title="Your imports" />
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <h2 className="text-base font-semibold text-ink">Recent imports</h2>
+          {jobs.length > 0 && <span className="text-xs text-muted tabular-nums">{jobs.length}</span>}
+        </div>
         {jobs.length === 0 ? (
-          <CardBody className="text-sm text-muted">No imports yet.</CardBody>
+          <p className="px-5 py-8 text-center text-sm text-muted" data-testid="no-imports">
+            No imports yet. Paste your Glovo link above to start.
+          </p>
         ) : (
           <ul className="divide-y divide-line">
-            {jobs.map((j) => (
-              <li key={j.id}>
-                <Link href={`${base}/import/${j.id}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 hover:bg-surface-2">
-                  <span className="text-sm">
-                    {j.createdAt.toISOString().slice(0, 16).replace('T', ' ')} UTC · {j.sources.map((s) => s.type).join(' + ') || 'no sources'} · {j._count.products} items
-                  </span>
-                  <Badge tone={JOB_TONE[j.status]}>{j.status.replace('_', ' ').toLowerCase()}</Badge>
-                </Link>
-              </li>
-            ))}
+            {jobs.map((j) => {
+              const s = JOB[j.status];
+              const first = j.sources[0];
+              const detail = first ? sourceDetail(first) : null;
+              return (
+                <li key={j.id} data-testid="recent-import">
+                  <Link href={`${base}/import/${j.id}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-surface-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink">
+                        {[...new Set(j.sources.map((x) => SRC[x.type]))].join(' + ') || 'No source'}
+                        {detail && <span className="font-normal text-muted"> · {detail}</span>}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted tabular-nums">
+                        {formatDateTimeInZone(j.createdAt, tz, tag)} · {j._count.products} {j._count.products === 1 ? 'product' : 'products'}
+                      </span>
+                    </span>
+                    <Badge tone={s.tone} className="shrink-0">
+                      {s.label}
+                    </Badge>
+                    <span className="shrink-0 text-sm text-muted" aria-hidden>
+                      →
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
-    </>
+    </div>
   );
 }

@@ -7,10 +7,11 @@ import type { LanguageCode } from '@/generated/prisma/enums';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { centsToInputValue, formatCents } from '@/lib/money';
-import { getMenuAdmin, getProductAdmin, pickName } from '@/server/services/menu';
+import { getMenuAdmin, getProductAdmin, MAX_PRODUCT_IMAGES, pickName } from '@/server/services/menu';
 import { db } from '@/server/db';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
-import { removeProductImageAction, saveLocationOverrideAction, setProductStatusAction, uploadProductImageAction } from '../../actions';
+import { saveLocationOverrideAction, setProductStatusAction } from '../../actions';
+import { PhotoManager } from '../photo-manager';
 import { ScheduleEditor } from '../../schedule-editor';
 import { groupSchedules } from '@/lib/schedules';
 import { AllergenEditor } from '../allergen-editor';
@@ -98,31 +99,13 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
             verifiedAt={product.allergensVerifiedAt?.toISOString() ?? null}
             hasUnverifiedSuggestions={product.allergens.some((a) => a.origin !== 'MANUAL' && !a.verifiedAt)}
           />
-          <Card>
-            <CardHeader title="Photos" description="Only publish photos you own or have permission to use." />
-            <CardBody className="space-y-4">
-              {product.images.length > 0 && (
-                <div className="flex flex-wrap gap-3">
-                  {product.images.map((img) => (
-                    <div key={img.id} className="relative">
-                      <img src={img.url} alt="" className="h-24 w-24 rounded-xl object-cover" />
-                      <div className="mt-1">
-                        <InlineAction action={removeProductImageAction} fields={{ org: ctx.org.slug, imageId: img.id }} label="Remove" variant="ghost" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <ActionForm action={uploadProductImageAction} submitLabel="Upload photo" resetOnSuccess>
-                <input type="hidden" name="org" value={ctx.org.slug} />
-                <input type="hidden" name="productId" value={product.id} />
-                <Field label="Photo" htmlFor="image" hint="PNG, JPEG or WebP, max 5 MB.">
-                  <Input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" data-max-bytes={env.UPLOAD_MAX_BYTES} required className="pt-2" />
-                </Field>
-                <Checkbox name="rightsConfirmed" label="I have the right to publish this photo." />
-              </ActionForm>
-            </CardBody>
-          </Card>
+          <PhotoManager
+            org={ctx.org.slug}
+            productId={product.id}
+            photos={product.images.map((img) => ({ id: img.id, url: img.url, origin: img.origin }))}
+            maxPhotos={MAX_PRODUCT_IMAGES}
+            maxBytes={env.UPLOAD_MAX_BYTES}
+          />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-2">

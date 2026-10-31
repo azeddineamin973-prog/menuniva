@@ -33,17 +33,26 @@ type Payload = { station: { id: string; name: string }; tickets: Ticket[] };
 const POLL_MS = 4000;
 
 /** Fullscreen, tablet-friendly kitchen/café display for one station. */
-export function KdsBoard({ org, stationId, canUpdate, t }: { org: string; stationId: string; canUpdate: boolean; t: Messages['staff'] }) {
+export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: string; stationId: string; stationName: string; canUpdate: boolean; t: Messages['staff'] }) {
   const { data, online, lastOk, authError, refresh } = usePolling<Payload>(`/api/dashboard/${org}/kds/${stationId}`, POLL_MS);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sound, setSound] = useState(false);
+  // iPhone Safari has no Fullscreen API: the button is only offered where it actually works.
+  const [canFullscreen, setCanFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const seen = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10000);
-    return () => clearInterval(t);
+    setCanFullscreen(!!document.fullscreenEnabled && typeof document.documentElement.requestFullscreen === 'function');
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('fullscreenchange', onFs);
+    };
   }, []);
 
   useEffect(() => {
@@ -80,15 +89,35 @@ export function KdsBoard({ org, stationId, canUpdate, t }: { org: string; statio
   return (
     <div className="min-h-dvh bg-graphite p-4 text-white" data-testid="kds">
       <header className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{data?.station.name ?? 'Station'}</h1>
+        <h1 className="min-w-0 text-2xl font-semibold">{data?.station.name ?? stationName}</h1>
         <ConnectionBadge online={online} lastOk={lastOk} intervalMs={POLL_MS} labels={{ live: t.live, lost: t.connectionLost }} />
-        <div className="ms-auto flex gap-2">
+        <div className="ms-auto flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => { setSound(!sound); if (!sound) playChime(); }}>{sound ? `🔔 ${t.soundOn}` : `🔕 ${t.enableSound}`}</Button>
-          <Button size="sm" variant="secondary" onClick={() => document.documentElement.requestFullscreen?.()}>{t.fullscreen}</Button>
+          {canFullscreen && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => undefined)}
+              data-testid="kds-fullscreen"
+            >
+              {isFullscreen ? t.exitFullscreen : t.fullscreen}
+            </Button>
+          )}
         </div>
       </header>
       {error && <div className="mb-3"><Alert tone="danger">{error}</Alert></div>}
-      <div className="grid gap-4 lg:grid-cols-3">
+      {!data && (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="status" aria-busy="true">
+          <span className="sr-only">{t.loading}</span>
+          {[0, 1].map((i) => (
+            <div key={i} className={cn('space-y-3', i > 0 && 'hidden md:block')}>
+              <div className="h-4 w-24 animate-pulse rounded bg-white/10" />
+              <div className="h-48 animate-pulse rounded-2xl bg-white/5" />
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={cn('grid gap-4 md:grid-cols-2 xl:grid-cols-3', !data && 'hidden')}>
         {columns.map((col) => (
           <section key={col.key} data-testid={`kds-${col.key}`}>
             <h2 className="mb-2 text-sm font-semibold tracking-wide text-white/60 uppercase">{col.title} · {col.list.length}</h2>
@@ -134,7 +163,6 @@ export function KdsBoard({ org, stationId, canUpdate, t }: { org: string; statio
           </section>
         ))}
       </div>
-      {!data && <p className="text-white/60">{t.loading}</p>}
     </div>
   );
 }

@@ -80,7 +80,7 @@ export function LoyaltyCard({ token, restaurant, view, m }: { token: string; res
     );
   }
 
-  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-sm';
+  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-base';
   const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
   return (

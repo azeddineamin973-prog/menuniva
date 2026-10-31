@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { SetupChecklist } from '@/components/dashboard/setup-checklist';
-import { ButtonLink, Card, CardBody, CardHeader, PageHeader, Stat } from '@/components/ui';
+import { ButtonLink, Card, CardBody, CardHeader, PageHeader, Stat, statGrid } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { formatCents } from '@/lib/money';
 import { db } from '@/server/db';
@@ -40,19 +40,21 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
         description={`${ctx.org.name} — today at a glance. All figures come from real orders in this restaurant.`}
         actions={ctx.can('orders.view') && <ButtonLink href={`${base}/orders`}>{m.nav.liveOrders}</ButtonLink>}
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Orders today" value={todayOrders} />
-        <Stat label="Active orders" value={activeOrders} />
-        <Stat label="Open table requests" value={openTasks} />
+      {/* Each figure opens the screen where it can be acted on. */}
+      <div className={statGrid(4)}>
+        <Stat label="Orders today" value={todayOrders} href={ctx.can('analytics.view') ? `${base}/analytics` : undefined} />
+        <Stat label="Active orders" value={activeOrders} href={ctx.can('orders.view') ? `${base}/orders` : undefined} />
+        <Stat label="Open table requests" value={openTasks} href={ctx.can('tasks.manage') ? `${base}/tasks` : undefined} />
         <Stat
           label="Order value today"
           value={formatCents(todayValue._sum.totalCents ?? 0)}
           hint={`Payments recorded: ${formatCents(todayValue._sum.paidCents ?? 0)} — order value is not the same as money collected.`}
+          href={ctx.can('analytics.view') ? `${base}/analytics` : undefined}
         />
       </div>
       {setup && setup.completed < setup.steps.length && (
         <div className="mt-6">
-          <SetupChecklist steps={setup.steps} base={base} />
+          <SetupChecklist steps={setup.steps} base={base} onlyRemaining />
         </div>
       )}
       {todayOrders === 0 && (

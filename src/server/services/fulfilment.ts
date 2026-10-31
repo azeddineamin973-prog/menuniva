@@ -78,11 +78,31 @@ export async function updateTakeawaySettings(ctx: TenantContext, input: unknown)
 
 // =============================================================== M9-02 pickup slots
 
-export type PickupOptions = { asap: { allowed: boolean; minutes: number }; slots: { value: string; minuteOfDay: number }[] };
+export type PickupOptions = { asap: { allowed: boolean; minutes: number }; slots: { value: string; minuteOfDay: number; dayOffset: number }[] };
+
+/** Most slots offered at once, so the picker stays usable on a phone. */
+const MAX_PICKUP_SLOTS = 96;
+/** How far ahead to look for the next open day when today has no time left. */
+const PICKUP_LOOKAHEAD_DAYS = 7;
+
+/** Open ranges on one weekday, including a range that started the previous day and runs past midnight. */
+function rangesOnDay(hours: OpeningHours, weekday: number): Array<[number, number]> {
+  return [
+    ...rangesFor(hours, weekday),
+    ...rangesFor(hours, (weekday + 6) % 7)
+      .filter(([, c]) => c > 1440)
+      .map(([, c]) => [0, c - 1440] as [number, number]),
+  ];
+}
 
 /**
- * Pickup times for today in the location's time zone. Hours = pickup hours, else opening
- * hours. If neither is configured, only "as soon as possible" is offered.
+ * Pickup times in the location's time zone. Hours = pickup hours, else opening hours. If
+ * neither is configured, only "as soon as possible" is offered.
+ *
+ * When today has no time left — the guest is browsing at 23:30, or the restaurant is closed
+ * today — the next open day is offered instead. Without that, a late guest was simply told
+ * "no pickup times are available" and could not order at all, which lost the order rather than
+ * moving it to tomorrow. Each slot carries `dayOffset` so the picker can label it.
  */
 export function pickupOptions(
   location: { timeZone: string; openingHours: unknown },
@@ -93,16 +113,30 @@ export function pickupOptions(
   const step = settings?.slotMinutes ?? 15;
   const hours = (settings?.pickupHours ?? location.openingHours ?? null) as OpeningHours | null;
   if (!hours) return { asap: { allowed: true, minutes: lead }, slots: [] };
-  const p = zonedParts(now, location.timeZone);
-  const nowMin = p.hour * 60 + p.minute;
-  const earliest = nowMin + lead;
-  const ranges: Array<[number, number]> = [...rangesFor(hours, p.weekday), ...rangesFor(hours, (p.weekday + 6) % 7).filter(([, c]) => c > 1440).map(([, c]) => [0, c - 1440] as [number, number])];
-  const minutes = new Set<number>();
-  for (const [o, c] of ranges) {
-    for (let m = Math.ceil(Math.max(o, earliest) / step) * step; m < c && minutes.size < 96; m += step) minutes.add(m);
+  const earliestAt = now.getTime() + lead * 60_000;
+  const slots: PickupOptions['slots'] = [];
+  // Stop at the first day that has any time left: today's remaining slots if there are any,
+  // otherwise the next day the restaurant is actually open.
+  for (let dayOffset = 0; dayOffset < PICKUP_LOOKAHEAD_DAYS && slots.length === 0; dayOffset++) {
+    const p = zonedParts(new Date(now.getTime() + dayOffset * 86_400_000), location.timeZone);
+    const minutes = new Set<number>();
+    for (const [o, c] of rangesOnDay(hours, p.weekday)) {
+      for (let m = Math.ceil(o / step) * step; m < c; m += step) minutes.add(m);
+    }
+    for (const m of [...minutes].sort((a, b) => a - b)) {
+      // Compared as absolute instants, so the lead time is respected across midnight and
+      // across a daylight-saving change.
+      const at = zonedTimeToUtc(p.year, p.month, p.day, Math.floor(m / 60), m % 60, location.timeZone);
+      if (at.getTime() < earliestAt) continue;
+      slots.push({ minuteOfDay: m, value: at.toISOString(), dayOffset });
+      if (slots.length >= MAX_PICKUP_SLOTS) break;
+    }
   }
-  const slots = [...minutes].sort((a, b) => a - b).map((m) => ({ minuteOfDay: m, value: zonedTimeToUtc(p.year, p.month, p.day, Math.floor(m / 60), m % 60, location.timeZone).toISOString() }));
-  const openNowWithTime = ranges.some(([o, c]) => nowMin >= o && earliest <= c);
+  const p0 = zonedParts(now, location.timeZone);
+  const nowMin = p0.hour * 60 + p0.minute;
+  // "As soon as possible" only when the restaurant is open now and would still be open when the
+  // food is ready.
+  const openNowWithTime = rangesOnDay(hours, p0.weekday).some(([o, c]) => nowMin >= o && nowMin + lead <= c);
   return { asap: { allowed: openNowWithTime, minutes: lead }, slots };
 }
 

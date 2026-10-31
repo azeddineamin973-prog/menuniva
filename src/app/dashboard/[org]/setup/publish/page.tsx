@@ -3,6 +3,7 @@ import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, PageHeader } from '
 import { publishChecks } from '@/server/services/publish';
 import { requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
+import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { publishAction, unpublishAction } from '../actions';
 
 export default async function PublishPage({ params }: { params: Promise<{ org: string }> }) {
@@ -13,6 +14,7 @@ export default async function PublishPage({ params }: { params: Promise<{ org: s
   const { location, blockers, warnings, unrouted, stations } = await publishChecks(ctx, loc.id);
   return (
     <>
+      <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="publish" locationId={loc.id} />
       <PageHeader title="Publish" description="Publishing makes your menu public and turns on the ordering channels you enabled." />
       <Card className="max-w-2xl">
         <CardHeader title={location.name} action={location.isPublished ? <Badge tone="success">Published</Badge> : <Badge tone="warning">Not published</Badge>} />

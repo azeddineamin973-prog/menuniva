@@ -32,7 +32,7 @@ export default async function UpsellPage({ params }: { params: Promise<{ org: st
           <InlineAction action={upsellEnabledAction} fields={{ org: ctx.org.slug, enabled: String(!enabled) }} label={enabled ? 'Turn suggestions off' : 'Turn suggestions on'} variant={enabled ? 'secondary' : 'primary'} testId="upsell-toggle-all" />
         }
       />
-      <p className="mb-4 text-sm"><Link className="underline" href={`/dashboard/${ctx.org.slug}/menu`}>← Menu</Link></p>
+      <p className="mb-4 text-sm"><Link className="inline-flex min-h-9 items-center underline underline-offset-2 pointer-coarse:min-h-10" href={`/dashboard/${ctx.org.slug}/menu`}>← Menu</Link></p>
       {!enabled && <div className="mb-4"><Alert tone="warning">Suggestions are switched off. Guests see none.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
         <Card>

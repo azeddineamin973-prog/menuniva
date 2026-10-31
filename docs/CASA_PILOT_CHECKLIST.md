@@ -30,8 +30,11 @@ without your approval.
 
 ## 3. Real menu entry
 - [ ] **[YOU]** The current printed or digital menu (PDF with selectable text, Excel/CSV, or the Glovo/Uber merchant export).
-- [ ] **[MN]** Import Studio: add the source, review every item, **choose the Kitchen or Café station for each category**, publish as drafts first; or enter dishes manually.
+- [ ] **[YOU]** Fastest start if the menu is already on Glovo: Import Studio → **Import from Glovo** → paste `https://glovoapp.com/pt/pt/braga/stores/casa-de-marrocos-brg` → **Read this source**. Brings in sections, names, descriptions, Glovo prices and photos (73 dishes across 14 sections as of 2026-10-31).
+- [ ] **[MN]** Import Studio: add the source, review and correct every item inline, **choose the Kitchen or Café station for each category**, publish as drafts first; or enter dishes manually.
 - [ ] **[MN]** Check Menu: no "dishes not sent to any kitchen screen" warning remains.
+- [ ] **[YOU]** Imported dishes stay **drafts** until you give each one a dine-in price — a Glovo price is never used for in-house orders. Expect to price every imported dish before publishing it to guests.
+- [ ] **[YOU]** Only confirm the photo-rights checkbox for photos you own or are licensed to publish; without it no photo is copied.
 
 ## 4. Verified product prices
 - [ ] **[YOU]** Confirm every dine-in price (and takeaway/delivery prices if they differ).

@@ -3,6 +3,7 @@ import { Alert, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader }
 import { db } from '@/server/db';
 import { requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
+import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { saveChannelSettingsAction } from '../actions';
 import { SettingsTabs } from '../tabs';
 
@@ -21,6 +22,7 @@ export default async function ChannelsPage({ params }: { params: Promise<{ org: 
   );
   return (
     <>
+      <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="channels" locationId={location.id} />
       <PageHeader title="Ordering channels & links" description={`Settings for ${location.name}.`} />
       <SettingsTabs base={base} active="channels" />
       <ActionForm action={saveChannelSettingsAction} testId="channels-form">

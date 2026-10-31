@@ -1,8 +1,8 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Select, Stat } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Select, Stat, statGrid } from '@/components/ui';
 import { cancelPlanChangeAction, planChangeAction } from '../support/actions';
-import { getMessages } from '@/i18n';
+import { getMessages, LANGUAGE_TAG } from '@/i18n';
 import { MODULE_LABELS, MODULES } from '@/lib/modules';
 import { formatCents } from '@/lib/money';
 import { db } from '@/server/db';
@@ -11,13 +11,14 @@ import { LIMIT_KEYS, LIMIT_LABELS, planLimits, planUsage } from '@/server/servic
 import { getPlatformConfig } from '@/server/services/platform-config';
 import { requireTenantPage } from '@/server/tenant';
 
-const fmtDate = (d: Date | null | undefined) => (d ? d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' }) : '—');
 const TONE: Record<string, 'success' | 'info' | 'warning' | 'danger' | 'neutral'> = { ACTIVE: 'success', TRIALING: 'info', PAST_DUE: 'warning', SUSPENDED: 'danger', CANCELLED: 'neutral' };
 
 export default async function SubscriptionPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'billing.view');
   const m = getMessages(ctx.user.preferredLanguage);
+  // Month names follow the staff member's language (they were always Portuguese before).
+  const fmtDate = (d: Date | null | undefined) => (d ? d.toLocaleDateString(LANGUAGE_TAG[ctx.user.preferredLanguage], { day: 'numeric', month: 'long', year: 'numeric' }) : '—');
   const [sub, limits, usage, modules, config, plans] = await Promise.all([
     db.subscription.findUnique({ where: { organizationId: ctx.org.id }, include: { plan: true, billingRecords: { orderBy: { periodStart: 'desc' } } } }),
     planLimits(ctx.org.id),
@@ -34,7 +35,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
       <PageHeader title={m.nav.subscription} description="Billing is handled manually by MenuNiva: no card is stored and nothing is charged automatically." />
       {sub.status === 'PAST_DUE' && <div className="mb-4"><Alert tone="warning">A payment is overdue. Please contact MenuNiva support{config.supportEmail ? ` (${config.supportEmail})` : ''}.</Alert></div>}
       {trialDays !== null && trialDays <= 0 && <div className="mb-4"><Alert tone="warning">Your trial has ended. Only your plan's features remain available.</Alert></div>}
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className={statGrid(3, 'mb-6')}>
         <Stat label="Plan" value={<span data-testid="sub-plan">{sub.plan.name}</span>} hint={sub.plan.monthlyPriceCents !== null ? `${formatCents(sub.plan.monthlyPriceCents)} / month` : 'Price agreed individually'} />
         <Stat label="Status" value={<Badge tone={TONE[sub.status]} data-testid="sub-status">{sub.status.toLowerCase().replace('_', ' ')}</Badge>} hint={sub.billingPeriod === 'YEARLY' ? 'Billed yearly' : 'Billed monthly'} />
         <Stat

@@ -3,6 +3,7 @@ import { env } from '@/server/env';
 import { Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, Select } from '@/components/ui';
 import { db } from '@/server/db';
 import { requireTenantPage } from '@/server/tenant';
+import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { saveBrandingAction } from '../actions';
 import { SettingsTabs } from '../tabs';
 import { BrandingPresetPicker } from './preset-picker';
@@ -14,6 +15,7 @@ export default async function BrandingPage({ params }: { params: Promise<{ org: 
   const base = `/dashboard/${ctx.org.slug}`;
   return (
     <>
+      <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="branding" />
       <PageHeader title="Branding" description="Your customer menu uses your own logo, photos and colours. MenuNiva branding stays discreet." />
       <SettingsTabs base={base} active="branding" />
       <Card>

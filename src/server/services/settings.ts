@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import type { CountryCode } from '@/generated/prisma/enums';
 import { LANGUAGES } from '@/i18n/config';
 import { openingHoursSchema } from '@/lib/opening-hours';
 import { isValidPostalCode, normalizePostalCode } from '@/lib/postal';
@@ -73,19 +74,22 @@ export const locationDetailsSchema = z.object({
   openingHours: z.preprocess((v) => (typeof v === 'string' && v ? JSON.parse(v) : null), openingHoursSchema.nullable()),
 });
 
-export async function updateLocationDetails(ctx: TenantContext, input: unknown) {
+/**
+ * Validates location details and returns the columns to write. Shared with Magic Setup, which
+ * saves details and links together, so both paths apply the same postal-code rules.
+ * Pure: performs no write of its own.
+ */
+export function locationDetailsUpdate(country: CountryCode, input: unknown) {
   const data = locationDetailsSchema.parse(input);
-  await assertLocationAccess(ctx, data.locationId);
-  const location = await db.restaurantLocation.findUniqueOrThrow({ where: { id: data.locationId } });
   let postalCode = data.postalCode ?? null;
   if (postalCode) {
-    if (!isValidPostalCode(location.country, postalCode)) {
-      throw new z.ZodError([{ code: 'custom', path: ['postalCode'], message: location.country === 'PT' ? 'invalid_postal_pt' : 'invalid_postal_es', input: postalCode }]);
+    if (!isValidPostalCode(country, postalCode)) {
+      throw new z.ZodError([{ code: 'custom', path: ['postalCode'], message: country === 'PT' ? 'invalid_postal_pt' : 'invalid_postal_es', input: postalCode }]);
     }
-    postalCode = normalizePostalCode(location.country, postalCode);
+    postalCode = normalizePostalCode(country, postalCode);
   }
-  await db.restaurantLocation.update({
-    where: { id: location.id },
+  return {
+    locationId: data.locationId,
     data: {
       name: data.name,
       addressLine1: data.addressLine1 ?? null,
@@ -98,11 +102,34 @@ export async function updateLocationDetails(ctx: TenantContext, input: unknown) 
       timeZone: data.timeZone,
       openingHours: data.openingHours ?? undefined,
     },
-  });
+  };
+}
+
+export async function updateLocationDetails(ctx: TenantContext, input: unknown) {
+  const parsed = locationDetailsSchema.parse(input);
+  await assertLocationAccess(ctx, parsed.locationId);
+  const location = await db.restaurantLocation.findUniqueOrThrow({ where: { id: parsed.locationId } });
+  const { data } = locationDetailsUpdate(location.country, input);
+  await db.restaurantLocation.update({ where: { id: location.id }, data });
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'settings.location_updated', entityType: 'RestaurantLocation', entityId: location.id });
 }
 
 const bool = z.preprocess((v) => v === 'on' || v === 'true' || v === true, z.boolean());
+
+/**
+ * The website and social/ordering links stored on a location, with the host each one must be on.
+ * Shared so Magic Setup discovery saves links under exactly the same rules as the Channels page.
+ */
+export const locationLinksSchema = z.object({
+  glovoUrl: httpsUrl(/(^|\.)glovoapp\.com$/),
+  uberEatsUrl: httpsUrl(/(^|\.)ubereats\.com$/),
+  websiteUrl: httpsUrl(),
+  instagramUrl: httpsUrl(/(^|\.)instagram\.com$/),
+  facebookUrl: httpsUrl(/(^|\.)(facebook\.com|fb\.com)$/),
+  tiktokUrl: httpsUrl(/(^|\.)tiktok\.com$/),
+});
+
+export const googleReviewUrlSchema = httpsUrl(/(^|\.)(google\.[a-z.]+|g\.page|goo\.gl|maps\.app\.goo\.gl)$/);
 
 export const channelSettingsSchema = z.object({
   locationId: z.string().min(1),
@@ -113,13 +140,8 @@ export const channelSettingsSchema = z.object({
   whatsappOrderingEnabled: bool,
   orderingPaused: bool,
   tableCodeRequired: bool,
-  glovoUrl: httpsUrl(/(^|\.)glovoapp\.com$/),
-  uberEatsUrl: httpsUrl(/(^|\.)ubereats\.com$/),
-  websiteUrl: httpsUrl(),
-  instagramUrl: httpsUrl(/(^|\.)instagram\.com$/),
-  facebookUrl: httpsUrl(/(^|\.)(facebook\.com|fb\.com)$/),
-  tiktokUrl: httpsUrl(/(^|\.)tiktok\.com$/),
-  googleReviewUrl: httpsUrl(/(^|\.)(google\.[a-z.]+|g\.page|goo\.gl|maps\.app\.goo\.gl)$/),
+  ...locationLinksSchema.shape,
+  googleReviewUrl: googleReviewUrlSchema,
 });
 
 export async function updateChannelSettings(ctx: TenantContext, input: unknown) {

@@ -14,8 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const m = getMessages(await getRequestLang());
   return (
     <>
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">{m.auth.signIn}</h1>
-      <p className="mb-8 text-sm text-muted">MenuNiva</p>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">{m.auth.signIn}</h1>
       <LoginForm m={m} next={next ? safeNextPath(next) : undefined} />
     </>
   );

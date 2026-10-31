@@ -18,16 +18,17 @@ export default async function PrintQrPage({ params }: { params: Promise<{ org: s
   const cards = await Promise.all(tables.filter((t) => t.qrTokens[0]).map(async (t) => ({ t, svg: await qrSvg(tableQrUrl(t.qrTokens[0].token), 220) })));
   return (
     <div>
-      <div className="no-print mb-6 flex items-center justify-between">
+      <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">{cards.length} table cards. Use your browser&apos;s print dialog (A4).</p>
         <PrintButton />
       </div>
       <div className="grid grid-cols-2 gap-4 print:gap-0">
         {cards.map(({ t, svg }) => (
-          <div key={t.id} className="flex break-inside-avoid flex-col items-center rounded-2xl border border-line bg-white p-6 text-center text-black print:rounded-none">
-            <p className="font-serif text-lg">{ctx.org.name}</p>
+          <div key={t.id} className="flex min-w-0 break-inside-avoid flex-col items-center rounded-2xl border border-line bg-white p-3 text-center text-black sm:p-6 print:rounded-none print:p-6">
+            <p className="font-serif text-base break-words sm:text-lg print:text-lg">{ctx.org.name}</p>
             <p className="mt-1 text-2xl font-semibold">Mesa {t.label}</p>
-            <div className="my-3 h-[220px] w-[220px]" dangerouslySetInnerHTML={{ __html: svg }} />
+            {/* Scales down on a phone screen; prints at its full 220 px. */}
+            <div className="my-3 aspect-square w-full max-w-[220px] [&_svg]:h-full [&_svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
             <p className="text-xs text-neutral-600">Digitalize para ver o menu e pedir · Scan to see the menu and order</p>
             {t.area && <p className="mt-1 text-xs text-neutral-500">{t.area.name}</p>}
           </div>

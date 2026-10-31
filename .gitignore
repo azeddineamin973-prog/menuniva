@@ -5,6 +5,7 @@ node_modules/
 .next/
 .next-e2e/
 .next-demo/
+.next-ux/
 out/
 build/
 dist/
@@ -39,5 +40,6 @@ coverage/
 /audit/backups/
 /audit/logs/
 /audit/artifacts/
+/audit/ux/out/
 # database CA certificates (downloaded, environment-specific)
 /certs/

@@ -54,8 +54,12 @@ describe('M5 Import Studio', () => {
     const job = await createImportJob(f.ctx);
     const bad = await addImportSource(f.ctx, job.id, { type: 'CSV', fileName: 'x.csv' }, new TextEncoder().encode('foo,bar\n1,2'));
     expect(bad.status).toBe('FAILED');
-    const glovo = await addImportSource(f.ctx, job.id, { type: 'GLOVO', url: 'https://glovoapp.com/pt/en/braga/test/' });
-    expect(glovo.status).toBe('UNSUPPORTED');
+    // A Glovo address that is not a store page is refused before any request leaves the server,
+    // so this test never touches the network. The store-page path is covered by
+    // tests/integration/glovo-url-import.test.ts with an injected fetcher.
+    const glovo = await addImportSource(f.ctx, job.id, { type: 'GLOVO', url: 'https://glovoapp.com/embedded-web-views/not-a-store' });
+    expect(glovo.status).toBe('FAILED');
+    expect(glovo.error).toMatch(/not a store page/i);
     const photo = await addImportSource(f.ctx, job.id, { type: 'IMAGE', fileName: 'm.jpg' }, new Uint8Array([0xff, 0xd8, 0xff, 0xe0]));
     expect(photo.status).toBe('UNSUPPORTED');
     const preview = await getImportPreview(f.ctx, job.id);
@@ -66,7 +70,9 @@ describe('M5 Import Studio', () => {
     const sources = await db.importSource.findMany({ where: { jobId: job.id } });
     expect(sources.map((s) => [s.type, s.status, s.connectionStatus])).toEqual([
       ['CSV', 'FAILED', 'CONNECTED'],
-      ['GLOVO', 'UNSUPPORTED', 'NOT_CONFIGURED'],
+      // Glovo is LIMITED, not CONNECTED: store pages are read on request, but there is no
+      // partner API connection.
+      ['GLOVO', 'FAILED', 'LIMITED'],
       ['IMAGE', 'UNSUPPORTED', 'NOT_CONFIGURED'],
     ]);
   });

@@ -20,7 +20,7 @@ function NamesInput({ names, onChange, languages, source, placeholder }: { names
     <div className="min-w-0 flex-1">
       <Input value={names[source] ?? ''} placeholder={`${placeholder} (${LANGUAGE_NATIVE_NAME[source]})`} onChange={(e) => onChange({ ...names, [source]: e.target.value })} />
       {others.length > 0 && (
-        <button type="button" className="mt-1 text-xs text-muted underline-offset-2 hover:underline" onClick={() => setOpen(!open)}>
+        <button type="button" className="mt-1 inline-flex min-h-8 items-center rounded-lg px-1 text-xs text-muted underline-offset-2 hover:text-ink hover:underline pointer-coarse:min-h-10" onClick={() => setOpen(!open)} aria-expanded={open}>
           {open ? 'Hide translations' : `Translations (${others.filter((l) => names[l]?.trim()).length}/${others.length})`}
         </button>
       )}

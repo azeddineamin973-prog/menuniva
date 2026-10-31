@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { ActionForm } from '@/components/forms/action-form';
-import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Field, Input, PageHeader, Select } from '@/components/ui';
+import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass } from '@/components/ui';
 import { formatCents } from '@/lib/money';
 import { db } from '@/server/db';
 import { UserFacingError } from '@/server/errors';
@@ -47,10 +47,11 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
         description={`${open ? 'Open' : 'Closed'} since ${session.openedAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}${session.verificationCode && open ? ` · table code ${session.verificationCode}` : ''}`}
         actions={<ButtonLink href={`/dashboard/${ctx.org.slug}/bills/${session.id}/receipt`} variant="secondary" target="_blank">Print receipt (not an invoice)</ButtonLink>}
       />
-      <div className="mb-6 grid gap-4 sm:grid-cols-3" data-testid="bill-totals">
-        <Card className="p-5"><p className="text-sm text-muted">Bill total</p><p className="mt-1 text-2xl font-semibold tabular-nums" data-testid="bill-total">{formatCents(billedCents)}</p></Card>
-        <Card className="p-5"><p className="text-sm text-muted">Payments recorded</p><p className="mt-1 text-2xl font-semibold tabular-nums" data-testid="bill-paid">{formatCents(paidCents)}</p></Card>
-        <Card className="p-5"><p className="text-sm text-muted">Still to pay</p><p className={`mt-1 text-2xl font-semibold tabular-nums ${balanceCents > 0 ? 'text-danger' : 'text-success'}`} data-testid="bill-balance">{formatCents(balanceCents)}</p></Card>
+      {/* Three figures side by side even on a phone: the waiter sees total, paid and balance at once. */}
+      <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-4" data-testid="bill-totals">
+        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">Bill total</p><p className="mt-1 text-lg font-semibold tabular-nums sm:text-2xl" data-testid="bill-total">{formatCents(billedCents)}</p></Card>
+        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">Payments recorded</p><p className="mt-1 text-lg font-semibold tabular-nums sm:text-2xl" data-testid="bill-paid">{formatCents(paidCents)}</p></Card>
+        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">Still to pay</p><p className={`mt-1 text-lg font-semibold tabular-nums sm:text-2xl ${balanceCents > 0 ? 'text-danger' : 'text-success'}`} data-testid="bill-balance">{formatCents(balanceCents)}</p></Card>
       </div>
       <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
         <div className="space-y-6">
@@ -75,7 +76,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                       {bi && (bi.fullyPaid ? <Badge tone="success">paid</Badge> : bi.allocatedCents > 0 ? <Badge tone="warning">part paid</Badge> : null)}
                       {canModify && open && !i.voidedAt && o.status !== 'COMPLETED' && o.status !== 'CANCELLED' && (
                         <details className="w-full">
-                          <summary className="cursor-pointer text-xs text-muted">Reduce or remove</summary>
+                          <summary className={disclosureClass}>Reduce or remove</summary>
                           <ActionForm action={changeItemAction} submitLabel="Apply change" submitVariant="danger" className="mt-2 flex flex-wrap items-end gap-2 space-y-0">
                             <Hidden extra={{ itemId: i.id }} />
                             <Field label="New quantity" htmlFor={`q-${i.id}`}><Input id={`q-${i.id}`} name="quantity" type="number" min={0} max={i.quantity - 1} defaultValue={i.quantity - 1} className="w-24" /></Field>
@@ -129,8 +130,8 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                   <fieldset className="space-y-1">
                     <legend className="mb-1 text-sm font-medium">Pay selected items</legend>
                     {items.filter((i) => !i.fullyPaid).map((i) => (
-                      <label key={i.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm hover:bg-surface-2">
-                        <span className="flex items-center gap-2"><input type="checkbox" name="itemIds" value={i.id} />{i.quantity} × {i.nameSnapshot}</span>
+                      <label key={i.id} className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm hover:bg-surface-2">
+                        <span className="flex items-center gap-2"><input type="checkbox" name="itemIds" value={i.id} className="size-4 shrink-0 accent-[#7ac70c] pointer-coarse:size-5" />{i.quantity} × {i.nameSnapshot}</span>
                         <span className="tabular-nums">{formatCents(i.remainingCents)}</span>
                       </label>
                     ))}

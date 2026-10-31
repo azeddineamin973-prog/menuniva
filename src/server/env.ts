@@ -25,12 +25,25 @@ const schema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().default('restaurant-media'),
   /** Folder inside the bucket for every object (empty in production). Test runs use `test-tmp/<run>/`. */
   SUPABASE_STORAGE_PREFIX: z.string().default(''),
-  TRANSLATION_PROVIDER: z.enum(['none', 'deepl', 'libretranslate']).default('none'),
+  TRANSLATION_PROVIDER: z.enum(['none', 'deepl', 'libretranslate', 'openrouter']).default('none'),
   DEEPL_API_KEY: z.string().optional(),
   LIBRETRANSLATE_URL: z.string().optional(),
   LIBRETRANSLATE_API_KEY: z.string().optional(),
+  /**
+   * OpenRouter (AI menu translation). Server-side only: the key is never sent to the browser.
+   * Translation calls are billed by OpenRouter, so they only happen when an owner presses
+   * "Translate with AI" — nothing is translated in the background.
+   */
+  OPENROUTER_API_KEY: z.string().optional(),
+  /** Any model id from https://openrouter.ai/models. Cheap and multilingual by default. */
+  OPENROUTER_MODEL: z.string().default('google/gemini-2.5-flash-lite'),
   SMTP_URL: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  /**
+   * Optional. Google Places API (New) key for Magic Setup discovery. Without it, discovery uses
+   * the restaurant's own website and OpenStreetMap, and says Google Places is not connected.
+   */
+  GOOGLE_PLACES_API_KEY: z.string().optional(),
   GLOVO_PARTNER_API_KEY: z.string().optional(),
   UBER_EATS_CLIENT_ID: z.string().optional(),
   UBER_EATS_CLIENT_SECRET: z.string().optional(),
@@ -41,6 +54,11 @@ const schema = z.object({
    * X-Forwarded-For (0 = none: the header is ignored). See docs/DEPLOYMENT.md → Reverse proxy.
    */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
+  /**
+   * Browser test suite only (APP_ENV=test): JSON manifest of fixture responses that answers every
+   * outbound request (see safe-fetch.ts), so tests never reach the internet. Refused elsewhere.
+   */
+  TEST_FETCH_FIXTURES: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -82,8 +100,9 @@ function legacyJwtRole(key: string): string | null {
   }
 }
 
-export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'> & Partial<Pick<Env, 'TRUST_PROXY_HOPS'>>): string[] {
+export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'> & Partial<Pick<Env, 'TRUST_PROXY_HOPS' | 'TEST_FETCH_FIXTURES'>>): string[] {
   const problems: string[] = [];
+  if (e.TEST_FETCH_FIXTURES && e.APP_ENV !== 'test') problems.push('TEST_FETCH_FIXTURES: only allowed with APP_ENV=test (it replaces real network requests)');
   let dbName = '';
   try {
     dbName = new URL(e.DATABASE_URL).pathname.slice(1).toLowerCase();

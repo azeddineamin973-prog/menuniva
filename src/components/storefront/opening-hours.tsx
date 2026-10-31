@@ -10,12 +10,19 @@ export function StorefrontHours({ hours, timeZone, tag, m }: { hours: OpeningHou
   const dayName = (i: number) => new Intl.DateTimeFormat(tag, { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1 + i)));
   const todayKey = DAY_KEYS[(p.weekday + 6) % 7];
   return (
-    <details className="rounded-2xl bg-white/70 p-3 text-sm" data-testid="storefront-hours">
-      <summary className="flex cursor-pointer items-center justify-between gap-2 font-medium">
+    <details className="group rounded-2xl bg-white/70 px-3 py-1 text-sm" data-testid="storefront-hours">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 font-medium [&::-webkit-details-marker]:hidden">
         <span>{m.openingHours}</span>
-        <span className={open ? 'text-emerald-800' : 'opacity-70'} data-testid="open-now">{open ? m.openNow : m.closedNow}</span>
+        <span className="flex items-center gap-2">
+          <span className={open ? 'text-emerald-800' : 'opacity-70'} data-testid="open-now">
+            {open ? m.openNow : m.closedNow}
+          </span>
+          <svg viewBox="0 0 24 24" className="size-4 opacity-60 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
       </summary>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+      <dl className="mt-1 mb-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
         {DAY_KEYS.map((k, i) => (
           <div key={k} className={`contents ${k === todayKey ? 'font-semibold' : ''}`}>
             <dt className="capitalize">{dayName(i)}</dt>

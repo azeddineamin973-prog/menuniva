@@ -69,12 +69,13 @@ test('dish photo: upload, display to guests, remove', async ({ page }) => {
   const form = input.locator('xpath=ancestor::form');
   await input.setInputFiles({ name: 'dish.png', mimeType: 'image/png', buffer: png('dish-1') });
   await form.getByLabel('I have the right to publish this photo.').check();
-  await form.getByRole('button', { name: 'Upload photo' }).click();
+  // The button reads "Add photo" for a dish without photos, "Upload photo" otherwise.
+  await form.getByRole('button', { name: /^(Add|Upload) photo$/ }).click();
   const photoUrls = async () => (await sql<{ url: string }>(`SELECT url FROM "ProductImage" WHERE "productId" = $1`, [s.dishId])).map((r) => r.url);
   await expect.poll(photoUrls).toHaveLength(1);
   const [url] = await photoUrls();
   expect(url).toMatch(new RegExp(`^/media/${s.orgId}/products/[A-Za-z0-9_-]{22}\\.png$`));
-  const tile = page.locator(`img[src="${url}"]`).locator('xpath=..');
+  const tile = page.getByTestId('managed-photo').filter({ has: page.locator(`img[src="${url}"]`) });
   await expect(tile.locator('img')).toBeVisible(); // shown in the dashboard
 
   const guest = await page.context().browser()!.newPage();
@@ -83,6 +84,7 @@ test('dish photo: upload, display to guests, remove', async ({ page }) => {
   await guest.close();
   expect(Buffer.from(await (await page.request.get(url)).body())).toEqual(png('dish-1'));
 
+  page.once('dialog', (d) => d.accept()); // "Remove this photo?" confirmation
   await tile.getByRole('button', { name: 'Remove' }).click();
   await expect(page.locator(`img[src="${url}"]`)).toHaveCount(0);
   await expect.poll(photoUrls).toHaveLength(0);

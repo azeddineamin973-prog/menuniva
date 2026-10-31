@@ -51,15 +51,16 @@ export function AllergenEditor({
           <input type="hidden" name="payload" value={JSON.stringify({ declarations, verify })} />
           <div className="grid gap-2 sm:grid-cols-2">
             {CODES.map((c) => (
-              <div key={c} className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2">
+              <div key={c} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2">
                 <span className="text-sm">{labels[c]}</span>
-                <div className="flex overflow-hidden rounded-lg border border-line text-xs">
+                <div className="flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label={labels[c]}>
                   {(['NONE', 'CONTAINS', 'MAY_CONTAIN'] as const).map((p) => (
                     <button
                       key={p}
                       type="button"
                       onClick={() => setState({ ...state, [c]: p })}
-                      className={cn('px-2 py-1', state[c] === p ? (p === 'NONE' ? 'bg-surface-2 font-medium' : 'bg-graphite text-white') : 'text-muted')}
+                      aria-pressed={state[c] === p}
+                      className={cn('min-h-8 px-2.5 pointer-coarse:min-h-10', state[c] === p ? (p === 'NONE' ? 'bg-surface-2 font-medium' : 'bg-graphite text-white dark:bg-lime dark:text-graphite') : 'text-muted hover:bg-surface-2')}
                     >
                       {p === 'NONE' ? 'No' : p === 'CONTAINS' ? 'Contains' : 'May contain'}
                     </button>

@@ -1,5 +1,5 @@
 import { ActionForm, FieldError } from '@/components/forms/action-form';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select, disclosureClass } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { centsToInputValue, formatCents } from '@/lib/money';
 import { zonedParts } from '@/lib/time';
@@ -37,8 +37,10 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
   const dt = dtIn(timeZone);
   const langs = [o.sourceLanguage, ...o.enabledLanguages];
 
+  // The type-specific fields (% off, € off, buy X / get Y, combo price) are shown only for the
+  // chosen type, with CSS :has() in globals.css (.promo-fields) — no client JavaScript needed.
   const PromoFields = ({ p }: { p?: Promo }) => (
-    <>
+    <div className="promo-fields space-y-4">
       <input type="hidden" name="org" value={ctx.org.slug} />
       {p && <input type="hidden" name="id" value={p.id} />}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -49,29 +51,30 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
           </Select>
         </Field>
       </div>
-      <div className="grid gap-3 sm:grid-cols-5">
-        <Field label="% off" htmlFor={`pc-${p?.id ?? 'new'}`}><Input id={`pc-${p?.id ?? 'new'}`} name="percent" inputMode="decimal" defaultValue={p?.percentBasisPoints ? p.percentBasisPoints / 100 : ''} /><FieldError name="percent" /></Field>
-        <Field label="€ off" htmlFor={`am-${p?.id ?? 'new'}`}><Input id={`am-${p?.id ?? 'new'}`} name="amount" inputMode="decimal" defaultValue={centsToInputValue(p?.amountCents)} /><FieldError name="amount" /></Field>
-        <Field label="Buy X" htmlFor={`bx-${p?.id ?? 'new'}`}><Input id={`bx-${p?.id ?? 'new'}`} name="buyQuantity" type="number" min={1} defaultValue={p?.buyQuantity ?? ''} /><FieldError name="buyQuantity" /></Field>
-        <Field label="Get Y free" htmlFor={`gy-${p?.id ?? 'new'}`}><Input id={`gy-${p?.id ?? 'new'}`} name="getQuantity" type="number" min={1} defaultValue={p?.getQuantity ?? ''} /></Field>
-        <Field label="Combo €" htmlFor={`cp-${p?.id ?? 'new'}`}><Input id={`cp-${p?.id ?? 'new'}`} name="comboPrice" inputMode="decimal" defaultValue={centsToInputValue(p?.comboPriceCents)} /></Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div data-promo-field="PERCENTAGE"><Field label="% off" htmlFor={`pc-${p?.id ?? 'new'}`}><Input id={`pc-${p?.id ?? 'new'}`} name="percent" inputMode="decimal" defaultValue={p?.percentBasisPoints ? p.percentBasisPoints / 100 : ''} /><FieldError name="percent" /></Field></div>
+        <div data-promo-field="FIXED_AMOUNT"><Field label="€ off" htmlFor={`am-${p?.id ?? 'new'}`}><Input id={`am-${p?.id ?? 'new'}`} name="amount" inputMode="decimal" defaultValue={centsToInputValue(p?.amountCents)} /><FieldError name="amount" /></Field></div>
+        <div data-promo-field="BUY_X_GET_Y"><Field label="Buy X" htmlFor={`bx-${p?.id ?? 'new'}`}><Input id={`bx-${p?.id ?? 'new'}`} name="buyQuantity" type="number" min={1} defaultValue={p?.buyQuantity ?? ''} /><FieldError name="buyQuantity" /></Field></div>
+        <div data-promo-field="BUY_X_GET_Y"><Field label="Get Y free" htmlFor={`gy-${p?.id ?? 'new'}`}><Input id={`gy-${p?.id ?? 'new'}`} name="getQuantity" type="number" min={1} defaultValue={p?.getQuantity ?? ''} /></Field></div>
+        <div data-promo-field="COMBO"><Field label="Combo €" htmlFor={`cp-${p?.id ?? 'new'}`}><Input id={`cp-${p?.id ?? 'new'}`} name="comboPrice" inputMode="decimal" defaultValue={centsToInputValue(p?.comboPriceCents)} /></Field></div>
       </div>
+      <p className="text-xs text-muted pointer-coarse:hidden">To choose several dishes or categories, hold Ctrl (⌘ on a Mac) while clicking.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Dishes (empty = all; combo = the dishes in the combo)" htmlFor={`pr-${p?.id ?? 'new'}`}>
-          <Select id={`pr-${p?.id ?? 'new'}`} name="productIds" multiple className="h-28" defaultValue={p?.productIds ?? []}>
+          <Select id={`pr-${p?.id ?? 'new'}`} name="productIds" multiple className="h-32 py-1 sm:h-40" defaultValue={p?.productIds ?? []}>
             {products.map((x) => <option key={x.id} value={x.id}>{pickName(x.translations, langs)}</option>)}
           </Select>
           <FieldError name="productIds" />
         </Field>
         <Field label="Categories (empty = all)" htmlFor={`ca-${p?.id ?? 'new'}`}>
-          <Select id={`ca-${p?.id ?? 'new'}`} name="categoryIds" multiple className="h-28" defaultValue={p?.categoryIds ?? []}>
+          <Select id={`ca-${p?.id ?? 'new'}`} name="categoryIds" multiple className="h-32 py-1 sm:h-40" defaultValue={p?.categoryIds ?? []}>
             {categories.map((x) => <option key={x.id} value={x.id}>{pickName(x.translations, langs)}</option>)}
           </Select>
         </Field>
       </div>
       <div>
         <Label>Channels</Label>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
           {(Object.keys(CH) as (keyof typeof CH)[]).map((c) => <Checkbox key={c} name="channels" value={c} label={CH[c]} defaultChecked={p ? p.channels.includes(c) : true} />)}
         </div>
         <FieldError name="channels" />
@@ -91,7 +94,7 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
         <Checkbox name="combinable" label="Can be combined with other combinable promotions" defaultChecked={p?.combinable ?? false} />
         <Checkbox name="isActive" label="Active" defaultChecked={p?.isActive ?? true} />
       </div>
-    </>
+    </div>
   );
 
   const summary = (p: Promo) =>
@@ -120,7 +123,7 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
                     </span>
                   </div>
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-muted">Edit</summary>
+                    <summary className={disclosureClass}>Edit</summary>
                     <ActionForm action={savePromotionAction} submitLabel="Save promotion" submitVariant="secondary" className="mt-3">
                       <PromoFields p={p} />
                     </ActionForm>

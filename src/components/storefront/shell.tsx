@@ -44,16 +44,30 @@ export function StorefrontShell({
   } as CSSProperties;
   const serif = (branding?.headingFont ?? 'serif') === 'serif';
   return (
-    <div lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)} style={style} className={cn('min-h-dvh bg-sf-bg text-sf-text', branding?.themePreset === 'moroccan' && 'sf-pattern')} data-testid="storefront">
+    <div
+      lang={LANGUAGE_TAG[lang]}
+      dir={dirOf(lang)}
+      // Guest pages are always light, whatever theme a staff member chose for the dashboard.
+      style={{ ...style, colorScheme: 'light' }}
+      className={cn('min-h-dvh bg-sf-bg text-sf-text [&_option]:bg-white [&_option]:text-[#171a1d]', branding?.themePreset === 'moroccan' && 'sf-pattern')}
+      data-testid="storefront"
+    >
       <header className="relative overflow-hidden bg-sf-primary text-white">
         {branding?.coverUrl && !compactHeader && <img src={branding.coverUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />}
         <div className={cn('relative mx-auto flex max-w-3xl items-center gap-3 px-4', compactHeader ? 'py-3' : 'pt-6 pb-5')}>
-          {branding?.logoUrl && <img src={branding.logoUrl} alt="" className={cn('rounded-2xl bg-white object-contain p-1', compactHeader ? 'h-10 w-10' : 'h-14 w-14')} />}
+          {branding?.logoUrl && <img src={branding.logoUrl} alt="" className={cn('shrink-0 rounded-2xl bg-white object-contain p-1', compactHeader ? 'h-10 w-10' : 'h-14 w-14')} />}
           <div className="min-w-0 flex-1">
-            <h1 className={cn('truncate leading-tight', serif ? 'font-serif' : 'font-semibold', compactHeader ? 'text-lg' : 'text-2xl')}>{restaurantName}</h1>
-            {subtitle && <p className="truncate text-sm text-white/80">{subtitle}</p>}
+            {/* dir="auto": a Latin restaurant name inside an Arabic page is cut at its end, not its start. */}
+            <h1 dir="auto" className={cn('truncate leading-tight rtl:text-right', serif ? 'font-serif' : 'font-semibold', compactHeader ? 'text-lg' : 'text-2xl')} title={restaurantName}>
+              {restaurantName}
+            </h1>
+            {subtitle && (
+              <p dir="auto" className="truncate text-sm text-white/80 rtl:text-right">
+                {subtitle}
+              </p>
+            )}
           </div>
-          {languages.length > 1 && <LanguageCookieSwitcher current={lang} available={languages} className="[&_select]:border-white/30 [&_select]:bg-white/10 [&_select]:text-white" />}
+          {languages.length > 1 && <LanguageCookieSwitcher current={lang} available={languages} className="shrink-0 [&_select]:border-white/30 [&_select]:bg-white/10 [&_select]:text-white" />}
         </div>
         <div aria-hidden className="h-1 bg-sf-accent" />
       </header>

@@ -40,8 +40,8 @@ export function BrandingPresetPicker({ initial, restaurantName }: { initial: Col
       <input type="hidden" name="themePreset" value={c.themePreset} />
       <div className="grid grid-cols-2 gap-3">
         {(['primaryColor', 'accentColor', 'backgroundColor', 'textColor'] as const).map((k) => (
-          <label key={k} className="flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm">
-            <input type="color" name={k} value={c[k]} onChange={(e) => setC({ ...c, [k]: e.target.value.toUpperCase() })} className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent" />
+          <label key={k} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm">
+            <input type="color" name={k} value={c[k]} onChange={(e) => setC({ ...c, [k]: e.target.value.toUpperCase() })} className="h-8 w-10 shrink-0 cursor-pointer rounded border-0 bg-transparent" />
             {k === 'primaryColor' ? 'Main colour' : k === 'accentColor' ? 'Accent' : k === 'backgroundColor' ? 'Background' : 'Text'}
           </label>
         ))}

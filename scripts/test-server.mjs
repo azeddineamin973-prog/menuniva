@@ -23,6 +23,11 @@ const env = {
   STORAGE_DRIVER: mode === 'test' && process.env.E2E_STORAGE_DRIVER === 'supabase' ? 'supabase' : 'local',
   // Disposable bucket folder for Supabase browser runs (env.ts refuses anything else in test).
   SUPABASE_STORAGE_PREFIX: process.env.E2E_STORAGE_PREFIX || `test-tmp/e2e-${Date.now()}/`,
+  // Browser tests answer outbound requests (Glovo pages, photos) from local fixtures: no internet.
+  ...(mode === 'test' ? { TEST_FETCH_FIXTURES: process.env.E2E_FETCH_FIXTURES || './storage/e2e-net/manifest.json' } : {}),
+  // AI translation is exercised against a local stand-in model, never the real paid API. The
+  // key is a placeholder: with TEST_FETCH_FIXTURES set, no request leaves the machine.
+  ...(mode === 'test' ? { TRANSLATION_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'test-key-not-real', OPENROUTER_MODEL: 'test/echo-translator' } : {}),
 };
 if (env.STORAGE_DRIVER === 'supabase') console.log(`[test-server] Supabase Storage folder: ${env.SUPABASE_STORAGE_PREFIX}`);
 const build = spawnSync('npx', ['next', 'build'], { env, stdio: 'inherit' });

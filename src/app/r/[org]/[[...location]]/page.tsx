@@ -17,6 +17,7 @@ import type { OpeningHours } from '@/lib/opening-hours';
 export const dynamic = 'force-dynamic';
 
 const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: true };
+const CHIP = 'inline-flex min-h-10 items-center rounded-full bg-white/70 px-3.5 font-medium ring-1 ring-black/10 transition hover:bg-white';
 
 type Params = { org: string; location?: string[] };
 
@@ -92,16 +93,23 @@ export default async function StorefrontPage({ params, searchParams }: { params:
       {isPreview && <div className="bg-amber-200 px-4 py-2 text-center text-sm font-medium text-amber-900" data-testid="preview-banner">PREVIEW — not published. Only your staff can see this page.</div>}
       <div className="mx-auto max-w-3xl space-y-3 px-4 pt-5">
         {org.branding?.tagline && <p className="font-serif text-lg">{org.branding.tagline}</p>}
-        {location.tableOrderingEnabled && <p className="rounded-2xl bg-white/70 p-3 text-sm">📱 {m.customer.orderAtTable}: QR</p>}
         {actions.length > 0 && (
           <div className="grid gap-2 sm:grid-cols-2">
             {actions.map((a) =>
               a.external ? (
-                <a key={a.label} href={a.href} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-white/85 px-4 py-3 text-center font-medium ring-1 ring-black/10">
+                <a key={a.label} href={a.href} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-white/85 px-4 py-3.5 text-center font-medium shadow-sm ring-1 ring-black/10 transition hover:shadow-md">
                   {a.label} ↗
                 </a>
               ) : (
-                <Link key={a.label} href={a.href} className={a.primary ? 'rounded-2xl bg-sf-primary px-4 py-3 text-center font-medium text-white' : 'rounded-2xl bg-white/85 px-4 py-3 text-center font-medium ring-1 ring-black/10'}>
+                <Link
+                  key={a.label}
+                  href={a.href}
+                  className={
+                    a.primary
+                      ? 'rounded-2xl bg-sf-primary px-4 py-3.5 text-center font-medium text-white shadow-sm transition hover:shadow-md'
+                      : 'rounded-2xl bg-white/85 px-4 py-3.5 text-center font-medium shadow-sm ring-1 ring-black/10 transition hover:shadow-md'
+                  }
+                >
                   {a.label}
                 </Link>
               ),
@@ -110,14 +118,15 @@ export default async function StorefrontPage({ params, searchParams }: { params:
         )}
         {wa && <p className="text-xs opacity-60">{m.customer.whatsappOpenNote}</p>}
         <StorefrontHours hours={(location.openingHours as OpeningHours | null) ?? null} timeZone={location.timeZone} tag={LANGUAGE_TAG[lang]} m={m.customer} />
-        <div className="flex flex-wrap gap-3 text-sm">
-          {location.phone && <a href={`tel:${location.phone.replace(/\s/g, '')}`} className="underline">{location.phone}</a>}
-          {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className="underline">Website</a>}
-          {location.instagramUrl && <a href={location.instagramUrl} target="_blank" rel="noopener noreferrer" className="underline">Instagram</a>}
-          {location.facebookUrl && <a href={location.facebookUrl} target="_blank" rel="noopener noreferrer" className="underline">Facebook</a>}
-          {location.tiktokUrl && <a href={location.tiktokUrl} target="_blank" rel="noopener noreferrer" className="underline">TikTok</a>}
-          {modules.has('feedback') && <Link href={`/r/${org.slug}/feedback?l=${location.slug}`} className="underline">{m.customer.leaveFeedback}</Link>}
-          {review?.googleReviewUrl && <a href={review.googleReviewUrl} target="_blank" rel="noopener noreferrer" className="underline">Google</a>}
+        {/* Contact and review links as chips: easy to hit with a thumb, unlike underlined words. */}
+        <div className="flex flex-wrap gap-2 text-sm">
+          {location.phone && <a href={`tel:${location.phone.replace(/\s/g, '')}`} className={CHIP} dir="ltr">☎ {location.phone}</a>}
+          {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Website ↗</a>}
+          {location.instagramUrl && <a href={location.instagramUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Instagram</a>}
+          {location.facebookUrl && <a href={location.facebookUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Facebook</a>}
+          {location.tiktokUrl && <a href={location.tiktokUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>TikTok</a>}
+          {modules.has('feedback') && <Link href={`/r/${org.slug}/feedback?l=${location.slug}`} className={CHIP}>{m.customer.leaveFeedback}</Link>}
+          {review?.googleReviewUrl && <a href={review.googleReviewUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Google ↗</a>}
         </div>
       </div>
       <div id="menu">
@@ -128,10 +137,19 @@ export default async function StorefrontPage({ params, searchParams }: { params:
           tag={LANGUAGE_TAG[lang]}
           menu={menu}
           canOrder={false}
-          orderingMessage={location.tableOrderingEnabled ? `${m.customer.orderAtTable}: QR` : undefined}
+          // This page is for browsing: ordering happens at a table (QR), or through one of the
+          // channels above. The notice says which, once — it used to be printed twice.
+          orderingMessage={
+            location.tableOrderingEnabled
+              ? `📱 ${m.customer.orderAtTable} — ${m.customer.scanQrAtTable}`
+              : actions.length > 0
+                ? m.customer.howToOrder
+                : undefined
+          }
           m={{ customer: m.customer, common: m.common, allergens: m.allergens, validation: m.validation }}
           allergyNotice={allergyNoticeFor(org.settings, lang, m.customer.allergyNoticeDefault)}
           pricesIncludeVat={org.settings?.pricesIncludeTax ?? true}
+          orderActions={actions.filter((a) => !a.external).map((a) => ({ label: a.label, href: a.href }))}
         />
       </div>
     </StorefrontShell>

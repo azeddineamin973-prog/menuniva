@@ -22,26 +22,32 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-dvh" lang="en" dir="ltr">
       <header className="border-b border-line bg-graphite text-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-4 px-6 py-3">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <Link href="/admin" className="flex items-center gap-2">
             <Logo compact />
             <span className="font-semibold">MenuNiva</span>
-            <Badge tone="lime">Super Admin</Badge>
+            {/* Solid lime: the translucent lime badge was unreadable on the graphite header. */}
+            <Badge tone="brand">Super Admin</Badge>
           </Link>
-          <nav className="flex flex-1 flex-wrap gap-1">
+          <div className="ms-auto flex items-center gap-2 lg:order-last">
+            <span className="hidden max-w-48 truncate text-xs text-white/60 sm:inline" title={admin.email}>
+              {admin.email}
+            </span>
+            <form action={logoutAction}>
+              <button className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm text-white/80 hover:bg-white/10 pointer-coarse:min-h-10">Sign out</button>
+            </form>
+          </div>
+          {/* One scrollable row on phones instead of four wrapped rows of links. */}
+          <nav className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 gap-1 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:w-full sm:px-0 lg:w-auto lg:flex-1" aria-label="Super Admin">
             {LINKS.map(([href, label]) => (
-              <Link key={href} href={href} className="rounded-lg px-3 py-1.5 text-sm text-white/80 hover:bg-white/10 hover:text-white">
+              <Link key={href} href={href} className="inline-flex min-h-9 shrink-0 items-center rounded-lg px-3 text-sm whitespace-nowrap text-white/80 hover:bg-white/10 hover:text-white pointer-coarse:min-h-10">
                 {label}
               </Link>
             ))}
           </nav>
-          <span className="text-xs text-white/60">{admin.email}</span>
-          <form action={logoutAction}>
-            <button className="rounded-lg px-3 py-1.5 text-sm text-white/80 hover:bg-white/10">Sign out</button>
-          </form>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
     </div>
   );
 }

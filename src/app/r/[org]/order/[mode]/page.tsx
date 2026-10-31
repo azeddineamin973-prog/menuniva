@@ -45,7 +45,15 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   if (mode === 'pickup') {
     const opts = pickupOptions(location, location.takeawaySettings);
     const fmtTime = new Intl.DateTimeFormat(tag, { timeZone: location.timeZone, hour: '2-digit', minute: '2-digit' });
-    checkout.pickup = { asapAllowed: opts.asap.allowed, asapMinutes: opts.asap.minutes, slots: opts.slots.map((s) => ({ value: s.value, label: fmtTime.format(new Date(s.value)) })), minOrderCents: location.takeawaySettings?.minOrderCents ?? 0, pickupPoint: location.takeawaySettings?.pickupPoint ?? null };
+    // A slot for another day must say which day, or 11:00 tomorrow looks like 11:00 today.
+    const fmtDayTime = new Intl.DateTimeFormat(tag, { timeZone: location.timeZone, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    checkout.pickup = {
+      asapAllowed: opts.asap.allowed,
+      asapMinutes: opts.asap.minutes,
+      slots: opts.slots.map((s) => ({ value: s.value, label: (s.dayOffset === 0 ? fmtTime : fmtDayTime).format(new Date(s.value)) })),
+      minOrderCents: location.takeawaySettings?.minOrderCents ?? 0,
+      pickupPoint: location.takeawaySettings?.pickupPoint ?? null,
+    };
     if (!location.takeawayEnabled) notFound();
     if (location.takeawaySettings?.paused) canOrder = false;
     if (!opts.asap.allowed && opts.slots.length === 0) {
@@ -63,6 +71,14 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   } else {
     if (!wa) notFound();
     checkout.whatsapp = { number: wa, restaurant: org.name, only: true };
+    // WhatsApp is not a MenuNiva order, so it is not gated by the takeaway module or the
+    // takeaway switch. It does respect opening hours: a prepared message is still useful when
+    // the kitchen is closed, but the guest must be told nobody is reading it right now.
+    const hours = (location.openingHours ?? null) as OpeningHours | null;
+    if (hours) {
+      const p = zonedParts(new Date(), location.timeZone);
+      if (!isOpenAt(hours, p.weekday, p.hour * 60 + p.minute)) message = m.customer.closedNow;
+    }
   }
   if (!canOrder && !message) message = m.customer.orderingPaused;
 
@@ -73,7 +89,7 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   return (
     <StorefrontShell branding={branding} restaurantName={org.name} subtitle={title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
       <div className="mx-auto max-w-3xl px-4 pt-3 text-sm">
-        <Link href={`${base}${sp.l ? `/${sp.l}` : ''}`} className="underline opacity-70">← {m.customer.menu}</Link>
+        <Link href={`${base}${sp.l ? `/${sp.l}` : ''}`} className="inline-flex min-h-10 items-center gap-1 rounded-full pe-2 underline underline-offset-2 opacity-75">← {m.customer.menu}</Link>
         <p className="mt-1 opacity-70" data-testid="order-mode">{m.customer.viewOnly}{mode === 'pickup' && checkout.pickup!.minOrderCents > 0 ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(checkout.pickup!.minOrderCents / 100))}` : ''}{mode === 'delivery' && minDelivery ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(minDelivery / 100))}` : ''}</p>
       </div>
       <MenuApp

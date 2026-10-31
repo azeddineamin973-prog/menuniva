@@ -28,7 +28,7 @@ export function LanguageCookieSwitcher({
           document.cookie = `${LANG_COOKIE}=${e.target.value}; path=/; max-age=31536000; samesite=lax`;
           start(() => router.refresh());
         }}
-        className="h-9 rounded-xl border border-line bg-surface px-2 text-sm text-ink"
+        className="h-10 max-w-[9.5rem] rounded-xl border border-line bg-surface px-2 text-sm text-ink pointer-coarse:text-base"
       >
         {available.map((l) => (
           <option key={l} value={l}>
