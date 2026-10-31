@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
-import { Alert, Button, Input } from '@/components/ui';
+import { Alert, Button, Icon, Input } from '@/components/ui';
 import { initialActionState } from '@/lib/action-result';
 import { startImportAction } from './actions';
 
@@ -24,10 +24,10 @@ export function GlovoImportForm({ org, defaultUrl }: { org: string; defaultUrl?:
   const error = !state.ok && state.error ? (state.error === 'validation' ? 'Check the link and try again.' : friendlyError(state.error)) : null;
 
   return (
-    <section className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]" aria-labelledby="glovo-import-title">
-      <div className="p-5 sm:p-8">
+    <section className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-sm" aria-labelledby="glovo-import-title">
+      <div className="p-5 sm:p-7">
         <div className="flex items-start gap-4">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#ffc244] text-lg font-black text-[#1d1d1b]" aria-hidden>
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#ffc244] text-lg font-black text-[#1d1d1b]" aria-hidden>
             G
           </span>
           <div className="min-w-0">
@@ -86,12 +86,10 @@ export function GlovoImportForm({ org, defaultUrl }: { org: string; defaultUrl?:
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line bg-surface-2/60 px-5 py-3 text-xs text-muted sm:px-8">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line bg-surface-2/50 px-5 py-3 text-xs text-muted sm:px-7">
         {FOUND.map((f) => (
           <span key={f} className="inline-flex items-center gap-1.5">
-            <svg viewBox="0 0 16 16" className="size-3.5 text-success" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-              <path d="m3.5 8.5 3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Icon name="check" className="size-3.5 text-success" />
             {f}
           </span>
         ))}

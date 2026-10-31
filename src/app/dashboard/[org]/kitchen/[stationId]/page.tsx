@@ -17,7 +17,7 @@ export default async function StationDisplayPage({ params }: { params: Promise<{
     notFound();
   }
   return (
-    <div className="-mx-4 -my-6 sm:-mx-6 lg:-mx-8 lg:-my-8">
+    <div className="-mx-4 -mt-5 -mb-24 sm:-mx-6 lg:-mx-8 lg:-mt-7 lg:-mb-10">
       <KdsBoard org={ctx.org.slug} stationId={station.id} stationName={station.name} canUpdate={ctx.can('kds.update')} t={getMessages(ctx.user.preferredLanguage).staff} />
     </div>
   );

@@ -1,25 +1,12 @@
-import Link from 'next/link';
-import { cn } from '@/lib/cn';
+import { Tabs } from '@/components/ui';
 
 export function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' | 'tax' | 'privacy' }) {
   const tabs = [
-    ['details', 'Details & languages', `${base}/settings`],
-    ['branding', 'Branding', `${base}/settings/branding`],
-    ['channels', 'Ordering channels & links', `${base}/settings/channels`],
-    ['tax', 'Tax (IVA)', `${base}/settings/tax`],
-    ['privacy', 'Privacy (GDPR)', `${base}/settings/privacy`],
+    { key: 'details', label: 'Details & languages', href: `${base}/settings`, icon: 'building' },
+    { key: 'branding', label: 'Branding', href: `${base}/settings/branding`, icon: 'sparkles' },
+    { key: 'channels', label: 'Ordering channels & links', href: `${base}/settings/channels`, icon: 'bag' },
+    { key: 'tax', label: 'Tax (IVA)', href: `${base}/settings/tax`, icon: 'bill' },
+    { key: 'privacy', label: 'Privacy (GDPR)', href: `${base}/settings/privacy`, icon: 'shield' },
   ] as const;
-  return (
-    <div className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-line bg-surface p-1">
-      {tabs.map(([key, label, href]) => (
-        <Link
-          key={key}
-          href={href}
-          className={cn('rounded-xl px-4 py-2 text-sm whitespace-nowrap', active === key ? 'bg-graphite text-white dark:bg-lime dark:text-graphite' : 'text-muted hover:text-ink')}
-        >
-          {label}
-        </Link>
-      ))}
-    </div>
-  );
+  return <Tabs label="Settings" className="mb-6" items={tabs.map((t) => ({ href: t.href, label: t.label, icon: t.icon, active: t.key === active }))} />;
 }

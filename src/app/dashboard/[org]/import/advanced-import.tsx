@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ActionForm } from '@/components/forms/action-form';
-import { Badge, Button, Field, Input, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Icon, Input, Textarea } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { GLOVO_CAPTURE_SNIPPET, GLOVO_CAPTURE_STEPS } from '@/lib/glovo-capture';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@/lib/upload-messages';
@@ -108,15 +108,20 @@ export function AdvancedImport({
   const photo = status.get('IMAGE');
 
   return (
-    <details className="group rounded-[var(--radius-card)] border border-line bg-surface" open={defaultOpen} data-testid="advanced-import">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
-        <span>
+    <details className="group rounded-[var(--radius-card)] border border-line bg-surface shadow-xs" open={defaultOpen} data-testid="advanced-import">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-[var(--radius-card)] px-4 py-3.5 hover:bg-surface-2/40 sm:px-5 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-ink-2" aria-hidden>
+            <Icon name="import" />
+          </span>
+          <span className="min-w-0">
           <span className="block text-sm font-semibold text-ink">{title}</span>
           <span className="block text-xs text-muted">CSV, Excel, PDF, pasted text, Uber Eats or Glovo export files</span>
+          </span>
         </span>
         <Chevron />
       </summary>
-      <div className="border-t border-line p-5">
+      <div className="border-t border-line p-4 sm:p-5">
         <ActionForm
           action={jobId ? addSourceAction : startImportAction}
           submitLabel={jobId ? 'Add source' : 'Import'}
@@ -142,7 +147,7 @@ export function AdvancedImport({
                     title={a?.note}
                     data-testid={`adapter-${o.v}`}
                   >
-                    <input type="radio" name="type" value={o.v} checked={type === o.v} onChange={() => setType(o.v)} className="mt-1 accent-[#7ac70c]" />
+                    <input type="radio" name="type" value={o.v} checked={type === o.v} onChange={() => setType(o.v)} className="mt-1 accent-[#6cb30a]" />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2">
                         <span className="font-medium text-ink">{o.label}</span>

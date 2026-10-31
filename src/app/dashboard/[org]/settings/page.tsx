@@ -1,6 +1,7 @@
 import { ActionForm, FieldError } from '@/components/forms/action-form';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select } from '@/components/ui';
+import { Card, CardBody, Checkbox, Field, Icon, Input, Label, PageHeader, Section, Select } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { LANGUAGE_NATIVE_NAME, LANGUAGES } from '@/i18n/config';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { db } from '@/server/db';
@@ -24,9 +25,9 @@ export default async function SettingsPage({ params, searchParams }: { params: P
       <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="details" locationId={location?.id} />
       <PageHeader title="Restaurant settings" description="Information entered here is shown to your guests. Nothing is filled in automatically." />
       <SettingsTabs base={base} active="details" />
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="max-w-5xl">
+        <Section title="Restaurant & languages" description="Your restaurant's name and tax details, and the languages guests can read the menu in.">
         <Card>
-          <CardHeader title="Restaurant & languages" description="Customer menus are available in the languages you enable." />
           <CardBody>
             <ActionForm action={saveOrganizationSettingsAction} testId="org-settings-form">
               <input type="hidden" name="org" value={ctx.org.slug} />
@@ -78,18 +79,28 @@ export default async function SettingsPage({ params, searchParams }: { params: P
             </ActionForm>
           </CardBody>
         </Card>
+        </Section>
 
         {location && (
+          <Section
+            title={`Location: ${location.name}`}
+            description={locations.length > 1 ? 'Address, contact and opening hours shown to guests. Choose the location to edit above the form.' : 'Address, contact and opening hours shown to guests.'}
+          >
           <Card>
-            <CardHeader
-              title={`Location: ${location.name}`}
-              description={locations.length > 1 ? 'Choose another location in the list below.' : 'Address, contact and opening hours shown to guests.'}
-            />
             <CardBody>
               {locations.length > 1 && (
-                <div className="mb-4 flex flex-wrap gap-2">
+                <div className="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Location">
                   {locations.map((l) => (
-                    <a key={l.id} href={`?location=${l.id}`} className={`rounded-full border px-3 py-1 text-sm ${l.id === location.id ? 'border-graphite bg-graphite text-white' : 'border-line'}`}>
+                    <a
+                      key={l.id}
+                      href={`?location=${l.id}`}
+                      aria-current={l.id === location.id ? 'true' : undefined}
+                      className={cn(
+                        'inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium pointer-coarse:min-h-10',
+                        l.id === location.id ? 'border-ink bg-ink text-bg' : 'border-line bg-surface text-ink-2 hover:border-line-strong',
+                      )}
+                    >
+                      <Icon name="map" className="size-3.5" />
                       {l.name}
                     </a>
                   ))}
@@ -149,11 +160,11 @@ export default async function SettingsPage({ params, searchParams }: { params: P
               </ActionForm>
             </CardBody>
           </Card>
+          </Section>
         )}
-      </div>
       {ctx.role === 'RESTAURANT_OWNER' && (
-        <Card className="mt-6">
-          <CardHeader title="Locations" description={`${locations.length} location${locations.length > 1 ? 's' : ''}. Each location has its own address, hours, tables, stations and publishing. Your plan sets how many you can add.`} />
+        <Section title="Locations" description={`${locations.length} location${locations.length > 1 ? 's' : ''}. Each location has its own address, hours, tables, stations and publishing. Your plan sets how many you can add.`}>
+        <Card>
           <CardBody>
             <ActionForm action={createLocationAction} submitLabel="Add location" resetOnSuccess className="grid items-end gap-3 space-y-0 sm:grid-cols-[1fr_1fr_auto]" testId="add-location-form">
               <input type="hidden" name="org" value={ctx.org.slug} />
@@ -162,7 +173,9 @@ export default async function SettingsPage({ params, searchParams }: { params: P
             </ActionForm>
           </CardBody>
         </Card>
+        </Section>
       )}
+      </div>
     </>
   );
 }

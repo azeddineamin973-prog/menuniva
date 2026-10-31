@@ -22,7 +22,9 @@ test('M2-05: generic error for bad credentials, login, logout, disabled users bl
 
   await login(page, s.owner, s.password);
   await expect(page).toHaveURL(new RegExp(`/dashboard/${s.orgSlug}`));
-  await page.getByRole('button', { name: 'Sign out' }).first().click();
+  // Sign out lives in the account menu at the bottom of the sidebar.
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.goto(`/dashboard/${s.orgSlug}`);
   await expect(page).toHaveURL(/\/login\?next=/);

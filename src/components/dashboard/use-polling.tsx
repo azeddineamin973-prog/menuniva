@@ -53,11 +53,11 @@ export function usePolling<T>(url: string, intervalMs: number) {
 export function ConnectionBadge({ online, lastOk, intervalMs, labels }: { online: boolean; lastOk: Date | null; intervalMs: number; labels?: { live: string; lost: string } }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${online ? 'border-success/30 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger'}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium ${online ? 'border-success/25 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger'}`}
       role="status"
       data-testid="connection-status"
     >
-      <span className={`h-2 w-2 rounded-full ${online ? 'bg-success' : 'animate-pulse bg-danger'}`} />
+      <span className={`h-2 w-2 rounded-full ${online ? 'bg-success' : 'animate-pulse bg-danger'}`} aria-hidden />
       {online ? (labels?.live ?? 'Live · refreshes every {s} s').replace('{s}', String(Math.round(intervalMs / 1000))) : (labels?.lost ?? 'Connection lost — retrying. Orders are safe on the server.')}
       {lastOk && <span className="opacity-70">· {lastOk.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
     </span>

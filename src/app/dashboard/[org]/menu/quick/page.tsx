@@ -8,6 +8,7 @@ import { centsToInputValue, formatCents } from '@/lib/money';
 import { getMenuAdmin, pickName } from '@/server/services/menu';
 import { externalPriceReview } from '@/server/services/price-bulk';
 import { requireTenantPage } from '@/server/tenant';
+import { MenuTabs } from '../menu-tabs';
 import { applyExternalPricesAction, setPriceAction, setPricesInBulkAction, toggleSoldOutAction } from '../actions';
 
 const PROVIDER_LABEL = { GLOVO: 'Glovo', UBER_EATS: 'Uber Eats', CSV: 'CSV', XLSX: 'Excel', PDF: 'PDF', IMAGE: 'Image', TEXT: 'Text', MANUAL: 'Manual' } as const;
@@ -35,8 +36,8 @@ export default async function PricesPage({ params, searchParams }: { params: Pro
       <PageHeader
         title="Prices & availability"
         description="Changes apply to new orders immediately. Orders already placed keep the price they were charged."
-        actions={<ButtonLink href={`${base}/menu`} variant="secondary">Back to menu</ButtonLink>}
       />
+      <MenuTabs base={base} active="quick" ctx={ctx} />
 
       <div className={statGrid(3, 'mb-6')}>
         <Stat label="Dishes" value={products.length} />

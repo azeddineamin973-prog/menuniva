@@ -7,6 +7,7 @@ import { LANGUAGE_NATIVE_NAME, dirOf } from '@/i18n/config';
 import { translationPlan } from '@/server/services/ai-translate';
 import { getTranslationGrid } from '@/server/services/translations';
 import { requireTenantPage } from '@/server/tenant';
+import { MenuTabs } from '../menu-tabs';
 import { approveAllTranslationsAction, approveTranslationAction, markTranslationsReviewedAction, saveTranslationAction } from '../actions';
 import { AiTranslatePanel, RowTranslateButton } from './ai-panel';
 
@@ -47,6 +48,7 @@ export default async function TranslationsPage({ params, searchParams }: { param
           </ActionForm>
         }
       />
+      <MenuTabs base={base} active="translations" ctx={ctx} />
 
       <div className={statGrid(3, 'mb-6')}>
         <Stat label="Not translated" value={<span data-testid="missing-count">{grid.missing}</span>} hint={`${targets.length} languages besides ${LANGUAGE_NATIVE_NAME[o.sourceLanguage]}`} />

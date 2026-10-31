@@ -1,32 +1,37 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { Icon, type IconName } from './icons';
+
+export { Icon, type IconName } from './icons';
 
 // ---------------------------------------------------------------------------
-// MenuNiva dashboard UI primitives (server-component friendly, no client JS).
+// MenuNiva design system — dashboard primitives (server-component friendly).
+// Sizes: compact for mouse users, larger on touch screens (`pointer-coarse:`).
 // ---------------------------------------------------------------------------
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'dangerGhost' | 'dark';
-type ButtonSize = 'sm' | 'md' | 'lg';
+type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const buttonBase =
-  'inline-flex max-w-full items-center justify-center gap-2 rounded-xl font-medium transition-[color,background-color,border-color,filter,transform] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap';
+  'inline-flex max-w-full shrink-0 select-none items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4';
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: 'bg-lime text-graphite hover:brightness-95 shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]',
-  dark: 'bg-graphite text-white hover:bg-black dark:bg-white dark:text-graphite dark:hover:bg-white/90',
-  secondary: 'border border-line bg-surface text-ink hover:bg-surface-2',
-  ghost: 'text-ink hover:bg-surface-2',
+  primary: 'border border-black/5 bg-lime text-lime-ink shadow-xs hover:bg-lime-hover',
+  dark: 'bg-graphite text-white shadow-xs hover:bg-black dark:bg-white dark:text-graphite dark:hover:bg-white/90',
+  secondary: 'border border-line bg-surface text-ink shadow-xs hover:border-line-strong hover:bg-surface-2',
+  ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
   // Dark mode uses a lighter red, so the label switches to graphite to stay readable.
-  danger: 'bg-danger text-white hover:brightness-110 dark:text-graphite',
+  danger: 'bg-danger text-white shadow-xs hover:brightness-110 dark:text-graphite',
   // Destructive but secondary (cancel an order, delete a member): red text, no loud fill.
   dangerGhost: 'text-danger hover:bg-danger/10',
 };
 // Touch screens (phones, the restaurant's tablet) get taller controls: 40 px for small buttons,
 // 44 px for regular ones — mouse users keep the compact sizes.
 const buttonSizes: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-sm pointer-coarse:h-10',
-  md: 'h-10 px-4 text-sm pointer-coarse:h-11',
-  lg: 'h-12 px-5 text-base',
+  xs: 'h-7 px-2 text-xs pointer-coarse:h-9',
+  sm: 'h-8 px-2.5 text-[13px] pointer-coarse:h-10 pointer-coarse:px-3',
+  md: 'h-9 px-3.5 text-sm pointer-coarse:h-11',
+  lg: 'h-11 px-5 text-[15px] pointer-coarse:h-12',
 };
 
 /**
@@ -34,48 +39,78 @@ const buttonSizes: Record<ButtonSize, string> = {
  * (long labels such as a restaurant name or "Unpublish (hide menu and stop orders)").
  * Same height as a regular button while the label fits on one line.
  */
-export const wrapButtonClass = 'h-auto! min-h-10 py-2 text-center whitespace-normal! pointer-coarse:min-h-11';
+export const wrapButtonClass = 'h-auto! min-h-9 py-1.5 text-center whitespace-normal! pointer-coarse:min-h-11';
 
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', extra?: string) {
   return cn(buttonBase, buttonVariants[variant], buttonSizes[size], extra);
 }
 
-export function Button({
-  variant = 'primary',
-  size = 'md',
-  className,
-  ...props
-}: ComponentProps<'button'> & { variant?: ButtonVariant; size?: ButtonSize }) {
-  return <button className={buttonClass(variant, size, className)} {...props} />;
+function Spinner({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn('size-4 animate-spin', className)} fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+export { Spinner };
+
+type ButtonExtras = { variant?: ButtonVariant; size?: ButtonSize; icon?: IconName; iconEnd?: IconName; loading?: boolean };
+
+export function Button({ variant = 'primary', size = 'md', className, icon, iconEnd, loading, children, disabled, ...props }: ComponentProps<'button'> & ButtonExtras) {
+  return (
+    <button className={buttonClass(variant, size, className)} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>
+      {loading ? <Spinner /> : icon && <Icon name={icon} />}
+      {children}
+      {iconEnd && <Icon name={iconEnd} />}
+    </button>
+  );
 }
 
-export function ButtonLink({
-  variant = 'primary',
-  size = 'md',
-  className,
-  ...props
-}: ComponentProps<typeof Link> & { variant?: ButtonVariant; size?: ButtonSize }) {
-  return <Link className={buttonClass(variant, size, className)} {...props} />;
+export function ButtonLink({ variant = 'primary', size = 'md', className, icon, iconEnd, children, ...props }: ComponentProps<typeof Link> & Omit<ButtonExtras, 'loading'>) {
+  return (
+    <Link className={buttonClass(variant, size, className)} {...props}>
+      {icon && <Icon name={icon} />}
+      {children}
+      {iconEnd && <Icon name={iconEnd} />}
+    </Link>
+  );
 }
 
-/** Class for <summary> disclosure toggles ("Edit", "Reduce or remove"): a real tap target. */
-export const disclosureClass =
-  '-mx-2 inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink pointer-coarse:min-h-10';
+/** Square icon-only button; `label` becomes the accessible name and tooltip. */
+export function IconButton({ icon, label, variant = 'ghost', size = 'md', className, ...props }: Omit<ComponentProps<'button'>, 'children'> & { icon: IconName; label: string; variant?: ButtonVariant; size?: 'sm' | 'md' }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={cn(buttonBase, buttonVariants[variant], size === 'sm' ? 'size-8 pointer-coarse:size-10' : 'size-9 pointer-coarse:size-11', 'px-0', className)}
+      {...props}
+    >
+      <Icon name={icon} />
+    </button>
+  );
+}
 
-/** Small text-styled action (filters, "Search", "Apply") that is still at least 32/40 px tall. */
-export const textButtonClass =
-  'inline-flex min-h-8 items-center rounded-lg px-2 text-sm font-medium text-ink underline underline-offset-2 hover:bg-surface-2 pointer-coarse:min-h-10';
+// ------------------------------------------------------------------- surfaces
 
 export function Card({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('rounded-[var(--radius-card)] border border-line bg-surface', className)} {...props} />;
+  return <div className={cn('rounded-[var(--radius-card)] border border-line bg-surface shadow-xs', className)} {...props} />;
 }
 
-export function CardHeader({ title, description, action }: { title: ReactNode; description?: ReactNode; action?: ReactNode }) {
+export function CardHeader({ title, description, action, icon }: { title: ReactNode; description?: ReactNode; action?: ReactNode; icon?: IconName }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
-      <div>
-        <h2 className="text-base font-semibold text-ink">{title}</h2>
-        {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
+    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-3.5 sm:px-5">
+      <div className="flex min-w-0 items-start gap-2.5">
+        {icon && (
+          <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-ink-2">
+            <Icon name={icon} />
+          </span>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-[15px] leading-6 font-semibold text-ink">{title}</h2>
+          {description && <p className="mt-0.5 text-[13px] leading-5 text-muted">{description}</p>}
+        </div>
       </div>
       {action}
     </div>
@@ -83,27 +118,49 @@ export function CardHeader({ title, description, action }: { title: ReactNode; d
 }
 
 export function CardBody({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('p-5', className)} {...props} />;
+  return <div className={cn('p-4 sm:p-5', className)} {...props} />;
 }
+
+export function CardFooter({ className, ...props }: ComponentProps<'div'>) {
+  return <div className={cn('flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-2/50 px-4 py-3 sm:px-5', className)} {...props} />;
+}
+
+/**
+ * Settings-style section: what it is and why on the left, the fields on the right (stacked on
+ * phones). Keeps long forms scannable without a card per field.
+ */
+export function Section({ title, description, children, className, id }: { title: ReactNode; description?: ReactNode; children: ReactNode; className?: string; id?: string }) {
+  return (
+    <section id={id} className={cn('grid gap-4 border-b border-line py-6 first:pt-0 last:border-0 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:gap-8', className)}>
+      <div>
+        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        {description && <p className="mt-1 text-[13px] leading-5 text-muted">{description}</p>}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------- forms
 
 // 16 px text on touch screens: iOS Safari zooms the whole page into any field smaller than that.
 const fieldBase =
-  'w-full min-w-0 rounded-xl border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted/70 focus:border-[var(--mn-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--mn-focus)]/25 disabled:opacity-60 pointer-coarse:text-base';
+  'w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink shadow-xs transition-[border-color,box-shadow] placeholder:text-muted/70 hover:border-line-strong focus:border-[var(--mn-focus)] focus:ring-3 focus:ring-[var(--mn-focus)]/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-danger pointer-coarse:text-base';
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn(fieldBase, 'h-10 pointer-coarse:h-11', className)} {...props} />;
+  return <input className={cn(fieldBase, 'h-9 pointer-coarse:h-11', className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<'textarea'>) {
-  return <textarea className={cn(fieldBase, 'min-h-[88px] py-2', className)} {...props} />;
+  return <textarea className={cn(fieldBase, 'min-h-[88px] py-2 leading-6', className)} {...props} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<'select'>) {
-  return <select className={cn(fieldBase, 'h-10 pe-8 pointer-coarse:h-11', className)} {...props} />;
+  return <select className={cn(fieldBase, 'h-9 pe-8 pointer-coarse:h-11', className)} {...props} />;
 }
 
 export function Label({ className, ...props }: ComponentProps<'label'>) {
-  return <label className={cn('mb-1.5 block text-sm font-medium text-ink', className)} {...props} />;
+  return <label className={cn('mb-1.5 block text-[13px] font-medium text-ink', className)} {...props} />;
 }
 
 export function Field({
@@ -122,15 +179,15 @@ export function Field({
   optionalLabel?: string;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <Label htmlFor={htmlFor}>
         {label}
         {optionalLabel && <span className="ms-1 font-normal text-muted">({optionalLabel})</span>}
       </Label>
       {children}
-      {hint && !error && <p className="mt-1 text-xs text-muted">{hint}</p>}
+      {hint && !error && <p className="mt-1.5 text-xs leading-4 text-muted">{hint}</p>}
       {error && (
-        <p className="mt-1 text-xs font-medium text-danger" role="alert">
+        <p className="mt-1.5 text-xs font-medium text-danger" role="alert">
           {error}
         </p>
       )}
@@ -141,90 +198,189 @@ export function Field({
 export function Checkbox({ label, description, className, ...props }: ComponentProps<'input'> & { label: ReactNode; description?: ReactNode }) {
   // The whole label is the tap target; on touch screens it is at least 32 px tall.
   return (
-    <label className={cn('flex cursor-pointer items-start gap-3 py-0.5 pointer-coarse:py-1.5', className)}>
-      <input type="checkbox" className="mt-0.5 size-4 shrink-0 rounded border-line accent-[#7ac70c] pointer-coarse:size-5" {...props} />
-      <span>
+    <label className={cn('flex cursor-pointer items-start gap-2.5 py-0.5 pointer-coarse:py-1.5', className)}>
+      <input type="checkbox" className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-line accent-[#6cb30a] pointer-coarse:size-5" {...props} />
+      <span className="min-w-0">
         <span className="block text-sm font-medium text-ink">{label}</span>
-        {description && <span className="block text-xs text-muted">{description}</span>}
+        {description && <span className="mt-0.5 block text-xs leading-4 text-muted">{description}</span>}
       </span>
     </label>
   );
 }
 
-type Tone = 'neutral' | 'lime' | 'success' | 'warning' | 'danger' | 'info' | 'dark' | 'brand';
+// ------------------------------------------------------------- status & text
+
+type Tone = 'neutral' | 'lime' | 'success' | 'warning' | 'danger' | 'info' | 'violet' | 'dark' | 'brand';
 const tones: Record<Tone, string> = {
-  neutral: 'bg-surface-2 text-muted border-line',
-  lime: 'bg-lime/25 text-[#3d5c00] border-lime/50 dark:text-lime',
-  success: 'bg-success/10 text-success border-success/25',
-  warning: 'bg-warning/10 text-warning border-warning/25',
-  danger: 'bg-danger/10 text-danger border-danger/25',
-  info: 'bg-info/10 text-info border-info/25',
+  neutral: 'bg-surface-2 text-ink-2 border-line',
+  lime: 'bg-accent-soft text-accent border-lime/40',
+  success: 'bg-success/10 text-success border-success/20',
+  warning: 'bg-warning/10 text-warning border-warning/20',
+  danger: 'bg-danger/10 text-danger border-danger/20',
+  info: 'bg-info/10 text-info border-info/20',
+  violet: 'bg-violet/10 text-violet border-violet/20',
   // Graphite on a graphite dark-mode surface was invisible (role and "source" badges): invert it.
   dark: 'bg-graphite text-white border-graphite dark:bg-white dark:text-graphite dark:border-white',
   // Solid lime, for badges on dark headers where the translucent lime tone cannot be read.
-  brand: 'bg-lime text-graphite border-lime',
+  brand: 'bg-lime text-lime-ink border-lime',
+};
+const dotTones: Record<Tone, string> = {
+  neutral: 'bg-muted',
+  lime: 'bg-lime',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  info: 'bg-info',
+  violet: 'bg-violet',
+  dark: 'bg-current',
+  brand: 'bg-lime-ink',
 };
 
-export function Badge({ tone = 'neutral', className, ...props }: ComponentProps<'span'> & { tone?: Tone }) {
+export function Badge({ tone = 'neutral', dot = false, className, children, ...props }: ComponentProps<'span'> & { tone?: Tone; dot?: boolean }) {
   return (
-    <span
-      className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap', tones[tone], className)}
-      {...props}
-    />
+    <span className={cn('inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-px text-[11px] leading-[18px] font-medium whitespace-nowrap', tones[tone], className)} {...props}>
+      {dot && <span className={cn('size-1.5 shrink-0 rounded-full', dotTones[tone])} aria-hidden />}
+      {children}
+    </span>
   );
 }
 
-export function Alert({ tone = 'info', title, children }: { tone?: Exclude<Tone, 'neutral' | 'dark' | 'lime'>; title?: ReactNode; children?: ReactNode }) {
+/** Small coloured status dot, e.g. before "Live" or "Occupied". */
+export function Dot({ tone = 'neutral', pulse = false, className }: { tone?: Tone; pulse?: boolean; className?: string }) {
   return (
-    <div className={cn('rounded-xl border px-4 py-3 text-sm', tones[tone])} role={tone === 'danger' ? 'alert' : 'status'}>
-      {title && <p className="font-semibold">{title}</p>}
-      {children && <div className={cn(!!title && 'mt-0.5', 'text-ink/80')}>{children}</div>}
-    </div>
+    <span className={cn('relative inline-flex size-2 shrink-0', className)} aria-hidden>
+      {pulse && <span className={cn('absolute inset-0 animate-ping rounded-full opacity-60', dotTones[tone])} />}
+      <span className={cn('relative size-2 rounded-full', dotTones[tone])} />
+    </span>
   );
 }
 
-export function PageHeader({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
+const ALERT_ICON: Record<'success' | 'warning' | 'danger' | 'info', IconName> = { success: 'checkCircle', warning: 'alert', danger: 'alert', info: 'info' };
+
+export function Alert({ tone = 'info', title, children, action }: { tone?: 'success' | 'warning' | 'danger' | 'info'; title?: ReactNode; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1>
-        {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}
+    <div className={cn('flex gap-3 rounded-lg border px-3.5 py-3 text-sm', tones[tone])} role={tone === 'danger' ? 'alert' : 'status'}>
+      <Icon name={ALERT_ICON[tone]} className="mt-0.5" />
+      <div className="min-w-0 flex-1">
+        {title && <p className="font-semibold">{title}</p>}
+        {children && <div className={cn(!!title && 'mt-0.5', 'text-ink-2')}>{children}</div>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {action && <div className="shrink-0 self-center">{action}</div>}
     </div>
   );
 }
 
-export function EmptyState({ title, description, action, icon }: { title: ReactNode; description?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
+export function PageHeader({
+  title,
+  description,
+  actions,
+  back,
+  meta,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  /** Link to the parent screen, shown above the title. */
+  back?: { href: string; label: string };
+  /** Small badges/status next to the title. */
+  meta?: ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center rounded-[var(--radius-card)] border border-dashed border-line bg-surface px-6 py-12 text-center">
-      {icon && <div className="mb-3 text-muted">{icon}</div>}
-      <p className="text-base font-semibold text-ink">{title}</p>
-      {description && <p className="mt-1 max-w-md text-sm text-muted">{description}</p>}
-      {action && <div className="mt-5">{action}</div>}
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 sm:mb-6">
+      <div className="min-w-0">
+        {back && (
+          <Link href={back.href} className="mb-1.5 inline-flex min-h-7 items-center gap-1 text-[13px] text-muted hover:text-ink pointer-coarse:min-h-10">
+            <Icon name="arrowLeft" className="size-3.5" /> {back.label}
+          </Link>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl leading-tight font-semibold tracking-tight text-ink sm:text-[22px]">{title}</h1>
+          {meta}
+        </div>
+        {description && <p className="mt-1 max-w-2xl text-[13px] leading-5 text-muted sm:text-sm">{description}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+export function EmptyState({ title, description, action, icon }: { title: ReactNode; description?: ReactNode; action?: ReactNode; icon?: ReactNode | IconName }) {
+  return (
+    <div className="flex flex-col items-center rounded-[var(--radius-card)] border border-dashed border-line-strong/70 bg-surface px-6 py-10 text-center">
+      <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-surface-2 text-muted">
+        {typeof icon === 'string' ? <Icon name={icon as IconName} className="size-5" /> : (icon ?? <Icon name="inbox" className="size-5" />)}
+      </div>
+      <p className="text-[15px] font-semibold text-ink">{title}</p>
+      {description && <p className="mt-1 max-w-md text-[13px] leading-5 text-muted">{description}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
 /** Key figure. Compact on phones, where stats sit two per row (see `statGrid`). */
-export function Stat({ label, value, hint, href }: { label: ReactNode; value: ReactNode; hint?: ReactNode; href?: string }) {
+export function Stat({ label, value, hint, href, icon, tone }: { label: ReactNode; value: ReactNode; hint?: ReactNode; href?: string; icon?: IconName; tone?: 'lime' | 'warning' | 'danger' | 'info' | 'success' }) {
   const body = (
     <>
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1.5 text-xl font-semibold tracking-tight text-ink tabular-nums sm:mt-2 sm:text-2xl">{value}</p>
-      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+      <p className="flex items-center gap-1.5 text-[13px] text-muted">
+        {icon && <Icon name={icon} className={cn('size-3.5', tone === 'warning' && 'text-warning', tone === 'danger' && 'text-danger', tone === 'info' && 'text-info', tone === 'success' && 'text-success', tone === 'lime' && 'text-accent')} />}
+        <span className="min-w-0 leading-4">{label}</span>
+      </p>
+      <p className="mt-1.5 text-xl font-semibold tracking-tight text-ink tabular-nums sm:text-2xl">{value}</p>
+      {hint && <p className="mt-1 text-xs leading-4 text-muted">{hint}</p>}
     </>
   );
   if (href)
     return (
-      <Link href={href} className="block rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors hover:border-ink/25 hover:bg-surface-2 sm:p-5">
+      <Link href={href} className="group block rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-xs transition-colors hover:border-line-strong hover:bg-surface-2/60">
         {body}
       </Link>
     );
-  return <Card className="p-4 sm:p-5">{body}</Card>;
+  return <Card className="p-4">{body}</Card>;
 }
 
 /** Grid for a row of <Stat>: two per row on phones, `cols` from small screens up. */
 export function statGrid(cols: 2 | 3 | 4 = 3, extra?: string) {
-  return cn('grid grid-cols-2 gap-3 sm:gap-4', cols === 3 && 'sm:grid-cols-3', cols === 4 && 'lg:grid-cols-4', extra);
+  return cn('grid grid-cols-2 gap-3', cols === 3 && 'sm:grid-cols-3', cols === 4 && 'lg:grid-cols-4', extra);
+}
+
+/** Class for <summary> disclosure toggles ("Edit", "Reduce or remove"): a real tap target. */
+export const disclosureClass =
+  '-mx-2 inline-flex min-h-8 cursor-pointer list-none items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-muted hover:bg-surface-2 hover:text-ink pointer-coarse:min-h-10 [&::-webkit-details-marker]:hidden';
+
+/** Small text-styled action (filters, "Search", "Apply") that is still at least 32/40 px tall. */
+export const textButtonClass =
+  'inline-flex min-h-8 items-center rounded-lg px-2 text-sm font-medium text-ink underline underline-offset-2 hover:bg-surface-2 pointer-coarse:min-h-10';
+
+/**
+ * Navigation tabs (links). Underlined on wide screens, horizontally scrollable on phones.
+ * Use for sub-pages of one area (settings, menu tools).
+ */
+export function Tabs({ items, className, label }: { items: { href: string; label: ReactNode; active?: boolean; count?: number; icon?: IconName }[]; className?: string; label?: string }) {
+  return (
+    <nav aria-label={label} className={cn('mn-scroll -mx-4 mb-5 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0', className)}>
+      <ul className="flex gap-1">
+        {items.map((t) => (
+          <li key={t.href}>
+            <Link
+              href={t.href}
+              aria-current={t.active ? 'page' : undefined}
+              className={cn(
+                '-mb-px flex min-h-10 items-center gap-1.5 border-b-2 px-2.5 text-sm whitespace-nowrap transition-colors pointer-coarse:min-h-11',
+                t.active ? 'border-ink font-medium text-ink dark:border-lime' : 'border-transparent text-muted hover:text-ink',
+              )}
+            >
+              {t.icon && <Icon name={t.icon} />}
+              {t.label}
+              {t.count !== undefined && <span className="rounded-md bg-surface-2 px-1.5 text-[11px] tabular-nums">{t.count}</span>}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+/** Keyboard shortcut hint. */
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return <kbd className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded border border-line bg-surface-2 px-1 font-sans text-[11px] text-muted', className)}>{children}</kbd>;
 }

@@ -189,7 +189,8 @@ test('G7 password and session security', async ({ browser }) => {
     weakPasswordSignup: '',
   };
   await p.goto(`/dashboard/${r.slug}`);
-  await p.getByRole('button', { name: /Sign out|Terminar sessão/ }).first().click();
+  await p.getByRole('button', { name: 'Account menu' }).click();
+  await p.getByRole('menuitem', { name: /Sign out|Terminar sessão/ }).click();
   await expect(p).toHaveURL(/\/login/);
   const replay = await browser.newContext();
   await replay.addCookies([{ ...cookie }]);

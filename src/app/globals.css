@@ -2,22 +2,43 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ---------- MenuNiva dashboard tokens (light) ---------- */
+/*
+ * MenuNiva design tokens (2026-10 design system).
+ * Neutral, slightly warm greys; graphite for text and dark surfaces; lime as the brand accent,
+ * used sparingly (primary actions, active states, live indicators). Every colour used by the
+ * dashboard comes from here, so light and dark mode stay consistent.
+ */
 :root {
-  --mn-graphite: #171a1d;
+  color-scheme: light;
+  --mn-graphite: #16181b;
   --mn-lime: #b9ff36;
-  --mn-lime-ink: #1d2a00;
-  --mn-bg: #f6f7f5;
+  --mn-lime-hover: #aaf21e;
+  --mn-lime-ink: #1a2600;
+  /* Lime is too light for text on white: readable green for links, active labels and icons. */
+  --mn-accent-text: #3f6a00;
+  --mn-accent-soft: #eefbd4;
+
+  --mn-bg: #f7f7f5;
   --mn-surface: #ffffff;
-  --mn-surface-2: #f1f2ef;
-  --mn-border: #e3e5e0;
-  --mn-text: #171a1d;
-  --mn-muted: #61676d;
-  --mn-focus: #7ac70c;
-  --mn-danger: #c2341d;
-  --mn-warning: #b36b00;
-  --mn-success: #237a3b;
-  --mn-info: #1d5fa8;
+  --mn-surface-2: #f3f3f0;
+  --mn-surface-3: #ebebe7;
+  --mn-border: #e7e7e3;
+  --mn-border-strong: #d4d4cf;
+  --mn-text: #16181b;
+  --mn-text-2: #3b3f44;
+  --mn-muted: #6b7075;
+  --mn-focus: #6cb30a;
+
+  --mn-danger: #c33623;
+  --mn-warning: #a86300;
+  --mn-success: #1f7a3a;
+  --mn-info: #1d61ae;
+  --mn-violet: #6b46c1;
+
+  --mn-shadow-xs: 0 1px 1px rgb(16 18 20 / 0.04);
+  --mn-shadow-sm: 0 1px 2px rgb(16 18 20 / 0.06), 0 1px 1px rgb(16 18 20 / 0.03);
+  --mn-shadow-md: 0 4px 12px -2px rgb(16 18 20 / 0.08), 0 2px 4px -2px rgb(16 18 20 / 0.05);
+  --mn-shadow-lg: 0 16px 40px -8px rgb(16 18 20 / 0.18), 0 4px 12px -4px rgb(16 18 20 / 0.08);
 
   /* Storefront defaults; overridden inline per restaurant */
   --sf-primary: #1f5c4a;
@@ -26,52 +47,95 @@
   --sf-text: #1e2420;
 }
 
-:root {
-  color-scheme: light;
-}
-
 .dark {
   /* Native controls (date/time pickers, select menus, scrollbars) follow the dashboard theme. */
   color-scheme: dark;
-  --mn-bg: #0f1113;
-  --mn-surface: #171a1d;
-  --mn-surface-2: #1f2327;
-  --mn-border: #2b3035;
-  --mn-text: #eef0ec;
-  --mn-muted: #9aa1a7;
+  --mn-accent-text: #c4ff5c;
+  --mn-accent-soft: rgb(185 255 54 / 0.1);
+  --mn-bg: #0c0d0f;
+  --mn-surface: #131518;
+  --mn-surface-2: #1a1d21;
+  --mn-surface-3: #22262b;
+  --mn-border: #24282d;
+  --mn-border-strong: #33383e;
+  --mn-text: #eceeeb;
+  --mn-text-2: #c5c9cc;
+  --mn-muted: #959ba1;
   --mn-focus: #b9ff36;
   /* Status colours lightened for dark surfaces: the light-theme shades fall to ~3:1 contrast. */
   --mn-danger: #ff7a66;
   --mn-warning: #f2b03d;
   --mn-success: #52c983;
   --mn-info: #6aa9ff;
+  --mn-violet: #a98bff;
+  --mn-shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
+  --mn-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --mn-shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
+  --mn-shadow-lg: 0 20px 48px -10px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
 }
 
 @theme inline {
   --color-graphite: var(--mn-graphite);
   --color-lime: var(--mn-lime);
+  --color-lime-hover: var(--mn-lime-hover);
   --color-lime-ink: var(--mn-lime-ink);
+  --color-accent: var(--mn-accent-text);
+  --color-accent-soft: var(--mn-accent-soft);
   --color-bg: var(--mn-bg);
   --color-surface: var(--mn-surface);
   --color-surface-2: var(--mn-surface-2);
+  --color-surface-3: var(--mn-surface-3);
   --color-line: var(--mn-border);
+  --color-line-strong: var(--mn-border-strong);
   --color-ink: var(--mn-text);
+  --color-ink-2: var(--mn-text-2);
   --color-muted: var(--mn-muted);
   --color-danger: var(--mn-danger);
   --color-warning: var(--mn-warning);
   --color-success: var(--mn-success);
   --color-info: var(--mn-info);
+  --color-violet: var(--mn-violet);
 
   --color-sf-primary: var(--sf-primary);
   --color-sf-accent: var(--sf-accent);
   --color-sf-bg: var(--sf-bg);
   --color-sf-text: var(--sf-text);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', 'Noto Sans Arabic', 'Geeza Pro', sans-serif;
+  --shadow-xs: var(--mn-shadow-xs);
+  --shadow-sm: var(--mn-shadow-sm);
+  --shadow-md: var(--mn-shadow-md);
+  --shadow-lg: var(--mn-shadow-lg);
+
+  --font-sans: 'Inter var', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', 'Noto Sans Arabic', 'Geeza Pro', sans-serif;
   --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Noto Naskh Arabic', 'Geeza Pro', serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --radius-card: 1.25rem;
+  /* Refined, smaller radii (cards 12 px, controls 8 px). */
+  --radius-card: 0.75rem;
+
+  --animate-fade-in: mn-fade-in 160ms ease-out;
+  --animate-pop-in: mn-pop-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --animate-slide-up: mn-slide-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-slide-in: mn-slide-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes mn-fade-in {
+  from { opacity: 0; }
+}
+@keyframes mn-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+@keyframes mn-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+}
+@keyframes mn-slide-in {
+  from { transform: translateX(-100%); }
+}
+[dir='rtl'] .animate-slide-in {
+  animation-name: mn-slide-in-rtl;
+}
+@keyframes mn-slide-in-rtl {
+  from { transform: translateX(100%); }
 }
 
 html {
@@ -98,18 +162,31 @@ html {
     color: var(--mn-text);
     background-color: var(--mn-surface);
   }
+  ::selection {
+    background: rgb(185 255 54 / 0.45);
+    color: #16181b;
+  }
 }
 
 body {
   background: var(--mn-bg);
   color: var(--mn-text);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 :focus-visible {
   outline: 2px solid var(--mn-focus);
   outline-offset: 2px;
+}
+
+/* Thin, quiet scrollbars inside panels (sidebar, tables, dialogs). */
+.mn-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mn-border-strong) transparent;
 }
 
 /*
@@ -140,5 +217,5 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

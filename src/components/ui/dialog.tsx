@@ -64,13 +64,13 @@ export function Dialog({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid={testId}>
-      <button type="button" aria-hidden tabIndex={-1} className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <button type="button" aria-hidden tabIndex={-1} className="animate-fade-in absolute inset-0 bg-black/50" onClick={onClose} />
       <div
         ref={panel}
         tabIndex={-1}
-        className={cn('relative max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl border border-line bg-surface p-5 shadow-xl outline-none sm:max-w-md sm:rounded-3xl', className)}
+        className={cn('animate-slide-up relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-lg outline-none sm:max-w-md sm:rounded-2xl sm:pb-5', className)}
       >
-        <h2 id={titleId} className="text-lg font-semibold text-ink">
+        <h2 id={titleId} className="text-base font-semibold text-ink">
           {title}
         </h2>
         {description && <div className="mt-1 text-sm text-muted">{description}</div>}

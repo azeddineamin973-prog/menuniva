@@ -1,107 +1,96 @@
 import Link from 'next/link';
-import { logoutAction } from '@/app/(auth)/actions';
-import { Sidebar, type SidebarLink } from '@/components/dashboard/sidebar';
-import { ThemeToggle } from '@/components/dashboard/theme-toggle';
+import { cookies } from 'next/headers';
+import { AppShell, type ShellAlert, type SidebarLink } from '@/components/dashboard/sidebar';
 import { Badge } from '@/components/ui';
+import { ToastProvider } from '@/components/ui/toast';
 import { dirOf, getMessages, LANGUAGE_TAG } from '@/i18n';
 import { NAV_ITEMS } from '@/lib/nav';
 import { db } from '@/server/db';
 import { listUserOrganizations } from '@/server/services/organizations';
+import { getSetupProgress } from '@/server/services/setup-progress';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
 import { orgModules } from '@/server/modules';
-import { LocationSwitcher } from '@/components/dashboard/location-switcher';
 
 export default async function DashboardLayout({ children, params }: { children: React.ReactNode; params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org);
   const m = getMessages(ctx.user.preferredLanguage);
   const base = `/dashboard/${ctx.org.slug}`;
+  const jar = await cookies();
 
   const [locations, current, modules] = await Promise.all([accessibleLocations(ctx), currentLocation(ctx), orgModules(ctx.org.id)]);
-  const [newOrders, openTasks, lowRatings, orgs] = await Promise.all([
-    ctx.can('orders.view')
-      ? db.order.count({ where: { organizationId: ctx.org.id, status: 'NEW', acknowledgedAt: null, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
-      : 0,
-    ctx.can('tasks.manage')
-      ? db.staffTask.count({ where: { organizationId: ctx.org.id, status: 'OPEN', ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
-      : 0,
-    ctx.can('reviews.view')
-      ? db.notification.count({ where: { organizationId: ctx.org.id, type: 'LOW_RATING', readAt: null, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) } })
-      : 0,
+  const scoped = ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {};
+  const [newOrders, openTasks, lowRatings, orgs, setup] = await Promise.all([
+    ctx.can('orders.view') ? db.order.count({ where: { organizationId: ctx.org.id, status: 'NEW', acknowledgedAt: null, ...scoped } }) : 0,
+    ctx.can('tasks.manage') ? db.staffTask.count({ where: { organizationId: ctx.org.id, status: 'OPEN', ...scoped } }) : 0,
+    ctx.can('reviews.view') ? db.notification.count({ where: { organizationId: ctx.org.id, type: 'LOW_RATING', readAt: null, ...scoped } }) : 0,
     listUserOrganizations(ctx.userId),
+    ctx.can('settings.manage') ? getSetupProgress(ctx.org.id, current?.id) : null,
   ]);
 
-  const links: SidebarLink[] = NAV_ITEMS.filter((i) => ctx.can(i.permission) && (!i.module || modules.has(i.module))).map((i) => ({
+  const visible = NAV_ITEMS.filter((i) => ctx.can(i.permission) && (!i.module || modules.has(i.module)));
+  const toLink = (i: (typeof NAV_ITEMS)[number]): SidebarLink => ({
     href: `${base}${i.path}`,
     key: i.key,
+    icon: i.icon,
     label: m.nav[i.key],
     group: i.group,
     badge: i.key === 'liveOrders' ? newOrders : i.key === 'tasks' ? openTasks : i.key === 'reviews' ? lowRatings : undefined,
-  }));
+  });
+  const setupDone = !setup || setup.completed === setup.steps.length;
+  // The setup wizard shows as a progress card while unfinished; afterwards it is reached from the account menu.
+  const links = visible.filter((i) => !i.placement || i.placement === 'sidebar').map(toLink);
+  const accountLinks = visible.filter((i) => i.placement === 'account' || (i.placement === 'setup' && setupDone)).map(toLink);
+  const alerts: ShellAlert[] = [
+    { key: 'orders', label: `New order${newOrders === 1 ? '' : 's'} waiting`, count: newOrders, href: `${base}/orders`, icon: 'orders' },
+    { key: 'tasks', label: 'Table requests', count: openTasks, href: `${base}/tasks`, icon: 'bell' },
+    { key: 'reviews', label: 'Low ratings to follow up', count: lowRatings, href: `${base}/reviews`, icon: 'star' },
+  ];
 
   const lang = ctx.user.preferredLanguage;
   const role = ctx.role.replace('RESTAURANT_', '').replace('_', ' ').toLowerCase();
+  const banners = (
+    <>
+      {ctx.org.isDemo && <div className="bg-warning/15 px-4 py-1.5 text-center text-xs font-medium text-warning">DEMO restaurant — all data here is fictitious and for testing only.</div>}
+      {ctx.org.status === 'ONBOARDING' && ctx.can('settings.manage') && (
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-line bg-accent-soft/60 px-4 py-2 text-[13px]">
+          <Badge tone="lime">Setup</Badge>
+          <span className="text-ink-2">Your restaurant is not published yet.</span>
+          <Link href={`${base}/setup`} className="inline-flex min-h-8 items-center font-medium text-ink underline-offset-4 hover:underline">
+            Continue setup →
+          </Link>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)} className="min-h-dvh lg:flex">
-      <a
-        href="#main"
-        className="sr-only z-[60] rounded-xl bg-lime px-4 py-2 text-sm font-semibold text-graphite focus:not-sr-only focus:fixed focus:start-3 focus:top-3"
-      >
+    <div lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)}>
+      <a href="#main" className="sr-only z-[60] rounded-lg bg-lime px-4 py-2 text-sm font-semibold text-lime-ink focus:not-sr-only focus:fixed focus:start-3 focus:top-3">
         {m.shell.skipToContent}
       </a>
-      <Sidebar
-        links={links}
-        groupLabels={{ operate: m.staff.groupOperate, menu: m.staff.groupMenu, grow: m.staff.groupGrow, manage: m.staff.groupManage }}
-        orgName={ctx.org.name}
-        labels={{ more: m.shell.more, openMenu: m.shell.openMenu, closeMenu: m.shell.closeMenu, restaurant: m.shell.restaurant, navigation: m.shell.navigation, quickNav: m.shell.quickNav, short: m.shell.short }}
-        orgSwitcher={
-          <>
-            {locations.length > 1 && current && <LocationSwitcher orgSlug={ctx.org.slug} current={current.id} locations={locations.map((l) => ({ id: l.id, name: l.name }))} />}
-            {orgs.length > 1 && (
-              <Link href="/dashboard?choose=1" className="mt-1 inline-flex min-h-8 items-center text-xs text-muted underline-offset-2 hover:underline">
-                {m.shell.switchRestaurant}
-              </Link>
-            )}
-          </>
-        }
-        footer={
-          <div className="flex items-center gap-1">
-            <Link href="/account" className="min-w-0 flex-1 rounded-xl px-2.5 py-1.5 hover:bg-surface-2" data-testid="my-account-link" title={ctx.user.email}>
-              <span className="block truncate text-sm font-medium text-ink">{ctx.user.name}</span>
-              <span className="block truncate text-xs text-muted capitalize">{role}</span>
-            </Link>
-            <ThemeToggle />
-            <form action={logoutAction}>
-              <button className="flex size-10 items-center justify-center rounded-xl text-ink/80 hover:bg-surface-2 hover:text-ink" aria-label={m.auth.signOut} title={m.auth.signOut}>
-                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M14 4.5h3.5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H14M10 16l4-4-4-4M14 12H4" />
-                </svg>
-              </button>
-            </form>
-          </div>
-        }
-      />
-      <div className="min-w-0 flex-1">
-        {ctx.org.isDemo && (
-          <div className="bg-warning/15 px-4 py-1.5 text-center text-xs font-medium text-warning">
-            DEMO restaurant — all data here is fictitious and for testing only.
-          </div>
-        )}
-        {ctx.org.status === 'ONBOARDING' && ctx.can('settings.manage') && (
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-2 text-sm">
-            <Badge tone="lime">Setup</Badge>
-            <span className="text-muted">Your restaurant is not published yet.</span>
-            <Link href={`${base}/setup`} className="inline-flex min-h-8 items-center font-medium underline-offset-4 hover:underline">
-              Continue setup →
-            </Link>
-          </div>
-        )}
-        {/* Bottom padding on phones keeps the last controls clear of the bottom navigation bar. */}
-        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-4 pt-6 pb-24 outline-none sm:px-6 lg:px-8 lg:py-8">
+      <ToastProvider>
+        <AppShell
+          links={links}
+          accountLinks={accountLinks}
+          groupLabels={{ operate: m.staff.groupOperate, menu: m.staff.groupMenu, grow: m.staff.groupGrow, manage: m.staff.groupManage }}
+          labels={{ more: m.shell.more, openMenu: m.shell.openMenu, closeMenu: m.shell.closeMenu, restaurant: m.shell.restaurant, navigation: m.shell.navigation, quickNav: m.shell.quickNav, switchRestaurant: m.shell.switchRestaurant, short: m.shell.short }}
+          org={{ name: ctx.org.name, slug: ctx.org.slug }}
+          orgs={orgs.map((o) => ({ slug: o.organization.slug, name: o.organization.name }))}
+          locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+          currentLocationId={current?.id}
+          user={{ name: ctx.user.name, email: ctx.user.email, role }}
+          setup={setupDone || !setup ? null : { href: `${base}/setup`, completed: setup.completed, total: setup.steps.length }}
+          alerts={alerts}
+          initialCollapsed={jar.get('mn_sidebar')?.value === 'collapsed'}
+          signOutLabel={m.auth.signOut}
+          themeLabels={{ dark: 'Dark mode', light: 'Light mode' }}
+          banners={banners}
+        >
           {children}
-        </main>
-      </div>
+        </AppShell>
+      </ToastProvider>
     </div>
   );
 }

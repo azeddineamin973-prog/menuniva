@@ -97,6 +97,57 @@ export async function setProductStatusAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'menu.edit', (ctx) => setProductStatus(ctx, String(form.get('productId')), status as 'ACTIVE'), REVALIDATE);
 }
 
+/** Product ids from a bulk form (`productIds`, repeated), de-duplicated and capped. */
+function bulkIds(form: FormData): string[] {
+  const ids = [...new Set(form.getAll('productIds').map(String).filter(Boolean))];
+  if (ids.length === 0) throw new UserFacingError('Select at least one dish.');
+  if (ids.length > 200) throw new UserFacingError('Select at most 200 dishes at a time.');
+  return ids;
+}
+
+/** Bulk "sold out" / "available" for the menu list. Same service as the single toggle. */
+export async function bulkAvailabilityAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'menu.availability',
+    async (ctx) => {
+      const soldOut = form.get('soldOut') === 'true';
+      const ids = bulkIds(form);
+      for (const id of ids) await setSoldOut(ctx, id, soldOut);
+      return { updated: ids.length };
+    },
+    REVALIDATE,
+  );
+}
+
+/**
+ * Bulk show / hide (visible ↔ draft). Dishes that cannot be shown (no dine-in price) are skipped
+ * and reported, the others are changed.
+ */
+export async function bulkVisibilityAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'menu.edit',
+    async (ctx) => {
+      const status = form.get('status') === 'ACTIVE' ? 'ACTIVE' : 'DRAFT';
+      const ids = bulkIds(form);
+      let updated = 0;
+      const skipped: string[] = [];
+      for (const id of ids) {
+        try {
+          await setProductStatus(ctx, id, status);
+          updated++;
+        } catch (e) {
+          if (e instanceof UserFacingError) skipped.push(id);
+          else throw e;
+        }
+      }
+      return { updated, skipped: skipped.length };
+    },
+    REVALIDATE,
+  );
+}
+
 export async function moveProductAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'menu.edit', (ctx) => moveProduct(ctx, String(form.get('productId')), form.get('dir') === 'up' ? 'up' : 'down'), REVALIDATE);
 }

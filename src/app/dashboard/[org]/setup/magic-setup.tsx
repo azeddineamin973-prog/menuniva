@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, Button, Field, Input } from '@/components/ui';
+import { Alert, Badge, Button, Field, Icon, Input } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { SOURCE_LABEL, type DiscoveryResult, type ProfileKey, type RestaurantProfile } from '@/server/discovery/types';
@@ -128,11 +128,11 @@ export function MagicSetup({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface px-5 py-4 text-start transition-colors hover:bg-surface-2"
+        className="flex w-full items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3.5 text-start shadow-xs transition-colors hover:border-line-strong hover:bg-surface-2/50 sm:px-5"
         data-testid="magic-setup-collapsed"
       >
         <span>
-          <span className="block text-sm font-semibold text-ink">✨ Find my restaurant again</span>
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-ink"><Icon name="sparkles" className="size-4 text-accent" /> Find my restaurant again</span>
           <span className="block text-xs text-muted">Look your details up from Google Maps, your website or OpenStreetMap and compare them with what you have.</span>
         </span>
         <svg viewBox="0 0 20 20" className="size-5 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
@@ -147,8 +147,8 @@ export function MagicSetup({
       <section className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface" aria-labelledby="magic-title">
         <div className="p-5 sm:p-7">
           <div className="flex items-start gap-4">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-lime text-xl" aria-hidden>
-              ✨
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-lime text-lime-ink" aria-hidden>
+              <Icon name="sparkles" className="size-5" />
             </span>
             <div className="min-w-0">
               <h2 id="magic-title" className="text-lg font-semibold tracking-tight text-ink">

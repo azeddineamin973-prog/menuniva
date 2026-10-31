@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ActionForm } from '@/components/forms/action-form';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Select, Textarea } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Icon, Input, Select, Textarea } from '@/components/ui';
 import type { LanguageCode } from '@/generated/prisma/enums';
 import { LANGUAGE_NATIVE_NAME } from '@/i18n/config';
 import { cn } from '@/lib/cn';
@@ -74,8 +74,8 @@ export function ProductEditor({
       <input type="hidden" name="payload" value={payload} />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
-          <CardHeader title="Name & description" description="Write in your source language first. Other languages show “Translation required” until you fill them." />
-          <div className="flex gap-1 overflow-x-auto border-b border-line px-3 pt-2 [scrollbar-width:thin]" role="tablist" aria-label="Languages">
+          <CardHeader icon="edit" title="Name & description" description="Write in your source language first. Other languages show “Translation required” until you fill them." />
+          <div className="mn-scroll flex gap-1 overflow-x-auto border-b border-line px-3 pt-1" role="tablist" aria-label="Languages">
             {ordered.map((l) => {
               const filled = !!tr(l).name.trim();
               return (
@@ -85,10 +85,10 @@ export function ProductEditor({
                   onClick={() => setTab(l)}
                   role="tab"
                   aria-selected={tab === l}
-                  className={cn('inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-t-xl border-b-2 px-3 text-sm whitespace-nowrap', tab === l ? 'border-graphite font-medium dark:border-lime' : 'border-transparent text-muted hover:text-ink')}
+                  className={cn('-mb-px inline-flex min-h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-sm whitespace-nowrap transition-colors pointer-coarse:min-h-11', tab === l ? 'border-ink font-medium text-ink dark:border-lime' : 'border-transparent text-muted hover:text-ink')}
                   data-testid={`lang-tab-${l}`}
                 >
-                  {LANGUAGE_NATIVE_NAME[l]} {l === sourceLanguage ? <Badge tone="dark">source</Badge> : !filled && <span className="text-warning">•</span>}
+                  {LANGUAGE_NATIVE_NAME[l]} {l === sourceLanguage ? <Badge tone="dark">source</Badge> : filled ? <Icon name="check" className="size-3.5 text-success" /> : <span className="size-1.5 rounded-full bg-warning" title="Translation required" />}
                 </button>
               );
             })}
@@ -109,7 +109,7 @@ export function ProductEditor({
 
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Prices (EUR, VAT included)" description="Set by you. Imported Glovo/Uber prices never change these." />
+            <CardHeader icon="tag" title="Prices (EUR, VAT included)" description="Set by you. Imported Glovo/Uber prices never change these." />
             <CardBody className="space-y-3">
               {(
                 [
@@ -119,21 +119,27 @@ export function ProductEditor({
                 ] as const
               ).map(([ch, label]) => (
                 <Field key={ch} label={label} htmlFor={`price-${ch}`} optionalLabel={ch === 'DINE_IN' ? undefined : 'optional'}>
-                  <Input
-                    id={`price-${ch}`}
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    value={v.prices[ch]}
-                    onChange={(e) => setV({ ...v, prices: { ...v.prices, [ch]: e.target.value } })}
-                    data-testid={`price-${ch}`}
-                  />
+                  <div className="relative">
+                    <Input
+                      id={`price-${ch}`}
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={v.prices[ch]}
+                      onChange={(e) => setV({ ...v, prices: { ...v.prices, [ch]: e.target.value } })}
+                      className="pe-9 tabular-nums"
+                      data-testid={`price-${ch}`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-sm text-muted" aria-hidden>
+                      €
+                    </span>
+                  </div>
                 </Field>
               ))}
               <p className="text-xs text-muted">Leave takeaway or delivery empty to not offer the dish on that channel.</p>
             </CardBody>
           </Card>
           <Card>
-            <CardHeader title="Placement" />
+            <CardHeader icon="layers" title="Placement & visibility" />
             <CardBody className="space-y-4">
               <Field label="Category" htmlFor="categoryId">
                 <Select id="categoryId" value={v.categoryId} onChange={(e) => setV({ ...v, categoryId: e.target.value })}>

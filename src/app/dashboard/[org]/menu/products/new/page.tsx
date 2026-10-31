@@ -14,7 +14,7 @@ export default async function NewProductPage({ params, searchParams }: { params:
   const langs = [o.sourceLanguage, ...o.enabledLanguages];
   return (
     <>
-      <PageHeader title="New dish" description="The dish stays a draft (invisible to guests) until you choose “Visible on the menu”." />
+      <PageHeader back={{ href: `${base}/menu`, label: 'Menu' }} title="New dish" description="The dish stays a draft (invisible to guests) until you choose “Visible on the menu”." />
       <ProductEditor
         org={ctx.org.slug}
         base={base}

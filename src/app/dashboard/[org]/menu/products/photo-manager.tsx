@@ -17,7 +17,7 @@ export function PhotoManager({ org, productId, photos, maxPhotos, maxBytes }: { 
   const f = (imageId: string, extra: Record<string, string> = {}) => ({ org, imageId, ...extra });
 
   return (
-    <Card id="photos" className="scroll-mt-6" data-testid="photo-manager">
+    <Card id="photos" className="scroll-mt-20" data-testid="photo-manager">
       <CardHeader title="Photos" description="The main photo is shown on your menu and to guests. Only use photos you own or have permission to use." />
       <CardBody className="space-y-5">
         {photos.length === 0 ? (

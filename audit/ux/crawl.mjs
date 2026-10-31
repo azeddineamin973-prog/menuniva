@@ -110,7 +110,7 @@ const ROUTES = [
   ['admin', '/admin/support'],
   ['admin', '/admin/audit'],
   ['admin', '/admin/health'],
-].filter(([, p]) => !ONLY || p.startsWith(ONLY) || p.includes(ONLY));
+].filter(([role, p]) => !ONLY || ONLY.split('|').some((o) => (o.startsWith('@') ? role === o.slice(1) : o.endsWith('$') ? p === o.slice(0, -1) : p.startsWith(o) || p.includes(o))));
 
 const LOGIN = { owner: seed.owner, newowner: seed.newOwner, admin: seed.admin, kitchen: seed.staff.KITCHEN_STAFF, driver: seed.staff.DELIVERY_STAFF, waiter: seed.staff.WAITER };
 

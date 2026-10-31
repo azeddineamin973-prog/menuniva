@@ -39,19 +39,46 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
   return (
     <>
       <PageHeader
+        back={{ href: `${base}/menu`, label: 'Menu' }}
         title={pickName(product.translations, langs) ?? 'Dish'}
+        meta={
+          product.status === 'ACTIVE' ? (
+            <Badge tone="success" dot>Visible</Badge>
+          ) : product.status === 'DRAFT' ? (
+            <Badge tone="warning" dot>Draft</Badge>
+          ) : (
+            <Badge>Archived</Badge>
+          )
+        }
         description={product.status === 'ACTIVE' ? 'Visible to guests (when your location is published).' : product.status === 'DRAFT' ? 'Draft — not visible to guests.' : 'Archived.'}
         actions={
           <>
             {product.status !== 'ARCHIVED' ? (
-              <InlineAction action={setProductStatusAction} fields={{ org: ctx.org.slug, productId: product.id, status: 'ARCHIVED' }} label="Archive" confirm="Archive this dish? It will be hidden everywhere. Past orders keep their details." />
+              <InlineAction action={setProductStatusAction} fields={{ org: ctx.org.slug, productId: product.id, status: 'ARCHIVED' }} label="Archive" variant="ghost" confirm="Archive this dish? It will be hidden everywhere. Past orders keep their details." />
             ) : (
               <InlineAction action={setProductStatusAction} fields={{ org: ctx.org.slug, productId: product.id, status: 'DRAFT' }} label="Restore as draft" />
             )}
           </>
         }
       />
+      {/* Jump links: the dish page is long, and each part saves on its own. */}
+      <nav aria-label="Dish sections" className="mn-scroll -mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        {(
+          [
+            ['details', 'Details & prices'],
+            ['options', 'Sizes & extras'],
+            ['allergens', 'Allergens'],
+            ['photos', 'Photos'],
+            ['availability', 'Availability'],
+          ] as const
+        ).map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="inline-flex min-h-8 shrink-0 items-center rounded-lg border border-line bg-surface px-2.5 text-[13px] font-medium text-ink-2 shadow-xs hover:border-line-strong hover:text-ink pointer-coarse:min-h-10">
+            {label}
+          </a>
+        ))}
+      </nav>
       <div className="space-y-6">
+        <div id="details" className="scroll-mt-20">
         <ProductEditor
           org={ctx.org.slug}
           base={base}
@@ -73,7 +100,9 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
             prices: { DINE_IN: price('DINE_IN'), TAKEAWAY: price('TAKEAWAY'), DELIVERY: price('DELIVERY') },
           }}
         />
+        </div>
 
+        <div id="options" className="scroll-mt-20">
         <OptionsEditor
           org={ctx.org.slug}
           productId={product.id}
@@ -89,8 +118,10 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
             })),
           }}
         />
+        </div>
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <div id="allergens" className="scroll-mt-20">
           <AllergenEditor
             org={ctx.org.slug}
             productId={product.id}
@@ -99,6 +130,7 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
             verifiedAt={product.allergensVerifiedAt?.toISOString() ?? null}
             hasUnverifiedSuggestions={product.allergens.some((a) => a.origin !== 'MANUAL' && !a.verifiedAt)}
           />
+          </div>
           <PhotoManager
             org={ctx.org.slug}
             productId={product.id}
@@ -108,7 +140,7 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
           />
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div id="availability" className="grid scroll-mt-20 items-start gap-6 xl:grid-cols-2">
           <ScheduleEditor org={ctx.org.slug} target="product" id={product.id} initial={groupSchedules(product.schedules)} />
           <Card>
             <CardHeader title="Per-location availability & prices" description="Leave a price empty to use the base price above." />
