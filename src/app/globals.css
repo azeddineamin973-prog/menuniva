@@ -45,6 +45,9 @@
   --sf-accent: #b8975a;
   --sf-bg: #fbf7ee;
   --sf-text: #1e2420;
+  --sf-on-primary: #ffffff;
+  --sf-primary-ink: #1f5c4a;
+  --sf-card: #ffffff;
 }
 
 .dark {
@@ -100,6 +103,9 @@
   --color-sf-accent: var(--sf-accent);
   --color-sf-bg: var(--sf-bg);
   --color-sf-text: var(--sf-text);
+  --color-sf-on-primary: var(--sf-on-primary);
+  --color-sf-primary-ink: var(--sf-primary-ink);
+  --color-sf-card: var(--sf-card);
 
   --shadow-xs: var(--mn-shadow-xs);
   --shadow-sm: var(--mn-shadow-sm);

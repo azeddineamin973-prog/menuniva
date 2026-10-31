@@ -14,6 +14,7 @@ import { UserFacingError } from '../errors';
 import { asIdentity, type ClientIdentity } from '../client-identity';
 import { limitPublic, rateLimit } from '../rate-limit';
 import { syncLoyaltyForOrder } from './loyalty';
+import { canPreviewOrg } from './storefront';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { createOrderRecord, OrderRejectedError, trackingTokenFor } from './orders';
 import { cartSchema, quoteCart } from './pricing';
@@ -45,6 +46,23 @@ async function publicLocation(orgSlug: string, locationSlug?: string | null) {
   return location ? { org, location } : null;
 }
 export type PublicLocation = NonNullable<Awaited<ReturnType<typeof publicLocation>>>;
+/**
+ * Same as publicLocation, but also finds an unpublished location when a member of the restaurant
+ * asked for a draft preview. Callers must switch ordering off for previews.
+ */
+async function previewOrPublicLocation(orgSlug: string, locationSlug: string | null | undefined, preview: boolean) {
+  const pub = await publicLocation(orgSlug, locationSlug);
+  if (pub || !preview) return pub ? { ...pub, isPreview: false } : null;
+  const org = await db.restaurantOrganization.findUnique({ where: { slug: orgSlug } });
+  if (!org || org.status === 'SUSPENDED' || org.status === 'ARCHIVED' || !(await canPreviewOrg(org.id, true))) return null;
+  const location = await db.restaurantLocation.findFirst({
+    where: { organizationId: org.id, ...(locationSlug ? { slug: locationSlug } : {}) },
+    orderBy: { createdAt: 'asc' },
+    include: { takeawaySettings: true, deliverySettings: true, deliveryZones: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } } },
+  });
+  return location ? { org, location, isPreview: !location.isPublished } : null;
+}
+export { previewOrPublicLocation };
 export { publicLocation };
 
 function isOpenNow(hours: OpeningHours | null, timeZone: string, now: Date) {

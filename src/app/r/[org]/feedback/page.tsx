@@ -37,9 +37,9 @@ export default async function FeedbackPage({ params, searchParams }: { params: P
           </>
         )}
         {google && (
-          <div className="rounded-2xl bg-white/80 p-4 text-center ring-1 ring-black/5" data-testid="google-review">
+          <div className="rounded-2xl bg-sf-card/80 p-4 text-center ring-1 ring-sf-text/5" data-testid="google-review">
             <p className="text-sm">{m.feedback.googleCta}</p>
-            <a href={google} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block rounded-xl px-4 py-2 font-medium ring-1 ring-black/10" data-testid="google-review-link">
+            <a href={google} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block rounded-xl px-4 py-2 font-medium ring-1 ring-sf-text/10" data-testid="google-review-link">
               {m.feedback.googleButton} ↗
             </a>
           </div>

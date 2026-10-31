@@ -29,6 +29,11 @@ export default async function SetupWizardPage({ params }: { params: Promise<{ or
         title="Set up your restaurant"
         meta={<Badge tone={allDone ? 'success' : 'neutral'}>{completed} of {steps.length} done</Badge>}
         description="Start by finding your restaurant: we fill in your address, phone, hours and links for you to check. Then add your menu and tables."
+        actions={
+          <ButtonLink href={`${base}/preview`} variant="secondary" icon="phone" data-testid="preview-restaurant-button">
+            Preview my restaurant
+          </ButtonLink>
+        }
       />
 
       {allDone ? (

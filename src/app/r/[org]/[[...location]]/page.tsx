@@ -3,42 +3,43 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MenuApp } from '@/components/storefront/menu-app';
 import { StorefrontShell } from '@/components/storefront/shell';
+import { PreviewBanner } from '@/components/storefront/preview-banner';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
-import { getCurrentUser } from '@/server/auth/session';
 import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
 import { env } from '@/server/env';
 import { getPublicMenu } from '@/server/services/public-menu';
-import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storefront';
+import { allergyNoticeFor, canPreviewOrg, guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
+import { Icon, type IconName } from '@/components/ui/icons';
+import { cn } from '@/lib/cn';
 import { StorefrontHours } from '@/components/storefront/opening-hours';
 import type { OpeningHours } from '@/lib/opening-hours';
 
 export const dynamic = 'force-dynamic';
 
 const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: true };
-const CHIP = 'inline-flex min-h-10 items-center rounded-full bg-white/70 px-3.5 font-medium ring-1 ring-black/10 transition hover:bg-white';
+const CHIP = 'inline-flex min-h-10 items-center gap-1.5 rounded-full bg-sf-card/70 px-3.5 font-medium ring-1 ring-sf-text/10 transition hover:bg-sf-card';
 
 type Params = { org: string; location?: string[] };
 
 async function load(params: Params, preview: boolean) {
   const org = await db.restaurantOrganization.findUnique({ where: { slug: params.org }, include: { branding: true, settings: true, locations: { orderBy: { createdAt: 'asc' } } } });
   if (!org || org.status === 'ARCHIVED' || org.status === 'SUSPENDED') return null;
-  let canPreview = false;
-  if (preview) {
-    const user = await getCurrentUser();
-    canPreview = !!user && !!(await db.restaurantMembership.findFirst({ where: { userId: user.id, organizationId: org.id, status: 'ACTIVE' } }));
-  }
+  const canPreview = await canPreviewOrg(org.id, preview);
   const visible = org.locations.filter((l) => l.isPublished || canPreview);
-  const location = params.location?.[0] ? visible.find((l) => l.slug === params.location![0]) : visible[0];
-  if (!location) return null;
+  const requested = params.location?.[0];
+  const location = requested ? visible.find((l) => l.slug === requested) : visible[0];
+  // The restaurant exists but has nothing public at this address (yet): a friendly notice,
+  // never the menu. A location slug that does not exist at all stays a 404.
+  if (!location) return requested && !org.locations.some((l) => l.slug === requested) ? null : { org, location: null, isPreview: false };
   return { org, location, isPreview: canPreview && !location.isPublished };
 }
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const p = await params;
   const data = await load(p, false);
-  if (!data) return { robots: { index: false } };
+  if (!data?.location) return { robots: { index: false } };
   const { org, location } = data;
   const title = `${org.name}${location.city ? ` — ${location.city}` : ''}`;
   const description = org.branding?.tagline ?? `Menu, ordering and contact for ${org.name}${location.city ? ` in ${location.city}` : ''}.`;
@@ -57,13 +58,29 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   const sp = await searchParams;
   const data = await load(p, sp.preview === '1');
   if (!data) notFound();
-  const { org, location, isPreview } = data;
+  const { org, isPreview } = data;
   const lang = await resolveGuestLanguage(org, sp.lang);
   const m = getMessages(lang);
+  if (!data.location) {
+    return (
+      <StorefrontShell branding={org.branding} restaurantName={org.name} lang={lang} languages={org.enabledLanguages} poweredBy={m.common.poweredBy}>
+        <div className="mx-auto max-w-md px-4 py-16 text-center" data-testid="not-published">
+          <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-sf-card text-sf-primary-ink shadow-sm ring-1 ring-sf-text/10" aria-hidden>
+            <Icon name="clock" className="size-6" />
+          </span>
+          <h2 className="mt-4 font-serif text-2xl">{m.customer.notPublishedTitle}</h2>
+          <p className="mt-2 text-sm opacity-75">{m.customer.notPublishedBody}</p>
+        </div>
+      </StorefrontShell>
+    );
+  }
+  const location = data.location;
+  // In preview the owner stays in preview (and in the chosen language) on every guest page.
+  const keep = { preview: isPreview, lang: sp.lang === lang ? lang : null };
   const menu = await getPublicMenu(location.id, lang, 'TABLE');
   const [review, modules] = await Promise.all([db.reviewSettings.findUnique({ where: { locationId: location.id } }), orgModules(org.id)]);
   const base = `/r/${org.slug}${org.locations.length > 1 ? `/${location.slug}` : ''}`;
-  const lq = org.locations.length > 1 ? `?l=${location.slug}` : '';
+  const lq = guestQuery({ l: org.locations.length > 1 ? location.slug : null }, keep);
   const wa = location.whatsappOrderingEnabled && location.whatsappNumber ? location.whatsappNumber.replace(/[^\d]/g, '') : null;
 
   const jsonLd = {
@@ -79,40 +96,60 @@ export default async function StorefrontPage({ params, searchParams }: { params:
     hasMenu: `${env.APP_BASE_URL}${base}#menu`,
   };
 
-  const actions: { label: string; href: string; external?: boolean; primary?: boolean }[] = [];
-  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled && modules.has('takeaway')) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, primary: true });
-  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled && modules.has('delivery')) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, primary: true });
-  if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled && modules.has('reservations')) actions.push({ label: m.customer.reserveTable, href: `/r/${org.slug}/reserve${lq}` });
-  if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}` });
-  if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, external: true });
-  if (location.uberEatsUrl) actions.push({ label: m.customer.orderOnUberEats, href: location.uberEatsUrl, external: true });
+  const actions: { label: string; href: string; icon: IconName; external?: boolean; primary?: boolean }[] = [];
+  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled && modules.has('takeaway')) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, icon: 'bag', primary: true });
+  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled && modules.has('delivery')) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, icon: 'truck', primary: true });
+  if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled && modules.has('reservations')) actions.push({ label: m.customer.reserveTable, href: `/r/${org.slug}/reserve${lq}`, icon: 'calendar' });
+  if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}`, icon: 'phone' });
+  if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, icon: 'external', external: true });
+  if (location.uberEatsUrl) actions.push({ label: m.customer.orderOnUberEats, href: location.uberEatsUrl, icon: 'external', external: true });
+  const mapsHref = location.addressLine1 ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([org.name, location.addressLine1, location.postalCode, location.city].filter(Boolean).join(', '))}` : null;
 
   return (
     <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={[location.addressLine1, location.city].filter(Boolean).join(', ') || undefined} lang={lang} languages={org.enabledLanguages} poweredBy={m.common.poweredBy}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
-      {isPreview && <div className="bg-amber-200 px-4 py-2 text-center text-sm font-medium text-amber-900" data-testid="preview-banner">PREVIEW — not published. Only your staff can see this page.</div>}
+      {isPreview && <PreviewBanner />}
       <div className="mx-auto max-w-3xl space-y-3 px-4 pt-5">
-        {org.branding?.tagline && <p className="font-serif text-lg">{org.branding.tagline}</p>}
+        {org.branding?.tagline && <p className="font-serif text-lg leading-snug">{org.branding.tagline}</p>}
         {actions.length > 0 && (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {actions.map((a) =>
-              a.external ? (
-                <a key={a.label} href={a.href} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-white/85 px-4 py-3.5 text-center font-medium shadow-sm ring-1 ring-black/10 transition hover:shadow-md">
-                  {a.label} ↗
-                </a>
-              ) : (
-                <Link
-                  key={a.label}
-                  href={a.href}
-                  className={
-                    a.primary
-                      ? 'rounded-2xl bg-sf-primary px-4 py-3.5 text-center font-medium text-white shadow-sm transition hover:shadow-md'
-                      : 'rounded-2xl bg-white/85 px-4 py-3.5 text-center font-medium shadow-sm ring-1 ring-black/10 transition hover:shadow-md'
-                  }
-                >
-                  {a.label}
-                </Link>
-              ),
+          // Ways to order first (large, brand-coloured), the rest as a compact two-column row so
+          // the menu itself starts higher on a phone.
+          <div className="space-y-2">
+            {actions.some((a) => a.primary) && (
+              <div className={cn('grid gap-2', actions.filter((a) => a.primary).length > 1 && 'grid-cols-2')}>
+                {actions
+                  .filter((a) => a.primary)
+                  .map((a) => (
+                    <Link
+                      key={a.label}
+                      href={a.href}
+                      className="flex min-h-13 items-center justify-center gap-2 rounded-2xl bg-sf-primary px-3 py-2.5 text-center text-[15px] leading-tight font-medium text-sf-on-primary shadow-sm transition hover:shadow-md active:scale-[0.99] motion-reduce:transition-none"
+                    >
+                      <Icon name={a.icon} className="size-[18px] shrink-0" />
+                      {a.label}
+                    </Link>
+                  ))}
+              </div>
+            )}
+            {actions.some((a) => !a.primary) && (
+              <div className="grid grid-cols-2 gap-2">
+                {actions
+                  .filter((a) => !a.primary)
+                  .map((a) => {
+                    const cls = 'flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-sf-card/85 px-3 py-2 text-center text-sm leading-tight font-medium shadow-sm ring-1 ring-sf-text/10 transition hover:bg-sf-card motion-reduce:transition-none';
+                    return a.external ? (
+                      <a key={a.label} href={a.href} target="_blank" rel="noopener noreferrer" className={cls}>
+                        {a.label}
+                        <Icon name="external" className="size-3.5 shrink-0 opacity-70" />
+                      </a>
+                    ) : (
+                      <Link key={a.label} href={a.href} className={cls}>
+                        <Icon name={a.icon} className="size-4 shrink-0" />
+                        {a.label}
+                      </Link>
+                    );
+                  })}
+              </div>
             )}
           </div>
         )}
@@ -120,7 +157,18 @@ export default async function StorefrontPage({ params, searchParams }: { params:
         <StorefrontHours hours={(location.openingHours as OpeningHours | null) ?? null} timeZone={location.timeZone} tag={LANGUAGE_TAG[lang]} m={m.customer} />
         {/* Contact and review links as chips: easy to hit with a thumb, unlike underlined words. */}
         <div className="flex flex-wrap gap-2 text-sm">
-          {location.phone && <a href={`tel:${location.phone.replace(/\s/g, '')}`} className={CHIP} dir="ltr">☎ {location.phone}</a>}
+          {location.phone && (
+            <a href={`tel:${location.phone.replace(/\s/g, '')}`} className={CHIP} aria-label={`${m.customer.call} ${location.phone}`}>
+              <Icon name="phone" className="size-4" />
+              <span dir="ltr">{location.phone}</span>
+            </a>
+          )}
+          {mapsHref && (
+            <a href={mapsHref} target="_blank" rel="noopener noreferrer" className={CHIP}>
+              <Icon name="map" className="size-4" />
+              {m.customer.directions}
+            </a>
+          )}
           {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Website ↗</a>}
           {location.instagramUrl && <a href={location.instagramUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Instagram</a>}
           {location.facebookUrl && <a href={location.facebookUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Facebook</a>}
@@ -141,7 +189,7 @@ export default async function StorefrontPage({ params, searchParams }: { params:
           // channels above. The notice says which, once — it used to be printed twice.
           orderingMessage={
             location.tableOrderingEnabled
-              ? `📱 ${m.customer.orderAtTable} — ${m.customer.scanQrAtTable}`
+              ? `${m.customer.orderAtTable} — ${m.customer.scanQrAtTable}`
               : actions.length > 0
                 ? m.customer.howToOrder
                 : undefined

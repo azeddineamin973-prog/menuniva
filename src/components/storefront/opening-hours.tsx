@@ -10,7 +10,7 @@ export function StorefrontHours({ hours, timeZone, tag, m }: { hours: OpeningHou
   const dayName = (i: number) => new Intl.DateTimeFormat(tag, { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1 + i)));
   const todayKey = DAY_KEYS[(p.weekday + 6) % 7];
   return (
-    <details className="group rounded-2xl bg-white/70 px-3 py-1 text-sm" data-testid="storefront-hours">
+    <details className="group rounded-2xl bg-sf-card/70 px-3 py-1 text-sm" data-testid="storefront-hours">
       <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 font-medium [&::-webkit-details-marker]:hidden">
         <span>{m.openingHours}</span>
         <span className="flex items-center gap-2">

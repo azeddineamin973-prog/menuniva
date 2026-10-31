@@ -68,10 +68,10 @@ export function LoyaltyCard({ token, restaurant, view, m }: { token: string; res
   if (view.joined) {
     const pct = Math.min(100, Math.round((Math.max(0, view.balance) / view.target) * 100));
     return (
-      <section className="rounded-3xl bg-white/85 p-5 ring-1 ring-black/5" data-testid="loyalty-card" data-joined="true">
+      <section className="rounded-3xl bg-sf-card/85 p-5 ring-1 ring-sf-text/5" data-testid="loyalty-card" data-joined="true">
         {header}
         <p className="mt-3 text-sm font-medium" role="status">{l.joined}</p>
-        <div className="mt-2 h-2 rounded-full bg-black/10" aria-hidden><div className="h-2 rounded-full bg-sf-primary" style={{ width: `${pct}%` }} /></div>
+        <div className="mt-2 h-2 rounded-full bg-sf-text/10" aria-hidden><div className="h-2 rounded-full bg-sf-primary" style={{ width: `${pct}%` }} /></div>
         <p className="mt-1 text-sm tabular-nums" data-testid="loyalty-progress">{fmt(l.progress, { balance: view.balance, target: view.target, unit })}</p>
         {view.balance >= view.target && <p className="mt-2 text-sm font-semibold">{l.rewardReady}</p>}
         <p className="mt-2 text-xs opacity-70">{view.earnedForThisOrder ? fmt(l.earned, { n: view.pendingEarn, unit }) : fmt(l.pending, { n: view.pendingEarn, unit })}</p>
@@ -80,11 +80,11 @@ export function LoyaltyCard({ token, restaurant, view, m }: { token: string; res
     );
   }
 
-  const input = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-base';
+  const input = 'h-11 w-full rounded-xl border border-sf-text/10 bg-sf-card/80 px-3 text-base';
   const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
   return (
-    <section className="rounded-3xl bg-white/85 p-5 ring-1 ring-black/5" data-testid="loyalty-card" data-joined="false">
+    <section className="rounded-3xl bg-sf-card/85 p-5 ring-1 ring-sf-text/5" data-testid="loyalty-card" data-joined="false">
       {header}
       <form onSubmit={join} className="mt-4 space-y-3">
         <input value={phone} onChange={(e) => setPhone(e.target.value)} required type="tel" inputMode="tel" autoComplete="tel" placeholder={l.phone} aria-label={l.phone} className={input} maxLength={30} data-testid="loyalty-phone" />
@@ -115,7 +115,7 @@ export function LoyaltyCard({ token, restaurant, view, m }: { token: string; res
           </fieldset>
         )}
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
-        <button type="submit" disabled={sending} className="h-11 w-full rounded-2xl bg-sf-primary font-medium text-white disabled:opacity-50" data-testid="loyalty-join">{l.join}</button>
+        <button type="submit" disabled={sending} className="h-11 w-full rounded-2xl bg-sf-primary font-medium text-sf-on-primary disabled:opacity-50" data-testid="loyalty-join">{l.join}</button>
         {view.expiryDays && <p className="text-xs opacity-60">{fmt(l.expiry, { unit, days: view.expiryDays })}</p>}
       </form>
     </section>

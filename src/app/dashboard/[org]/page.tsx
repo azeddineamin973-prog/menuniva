@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { SetupChecklist } from '@/components/dashboard/setup-checklist';
+import { RestaurantLinkCard } from '@/components/dashboard/restaurant-link-card';
+import { getRestaurantLink } from '@/server/services/restaurant-link';
 import { Badge, ButtonLink, Card, CardHeader, EmptyState, Icon, PageHeader, Stat, statGrid, type IconName } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
@@ -42,6 +44,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
   const scope = { organizationId: ctx.org.id, ...(ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {}) };
   const ACTIVE = ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'] as const;
   const canMenu = ctx.can('menu.edit');
+  const canPreview = ctx.can('menu.view');
 
   const [setup, todayOrders, activeOrders, openTasks, todayValue, live, waiting, lowRatings, noPrice, soldOut, unrouted] = await Promise.all([
     ctx.can('settings.manage') ? getSetupProgress(ctx.org.id, location?.id) : null,
@@ -58,6 +61,8 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
     ctx.can('menu.availability') ? db.menuProduct.count({ where: { organizationId: ctx.org.id, status: 'ACTIVE', soldOut: true } }) : 0,
     canMenu ? unroutedDishes(ctx.org.id).then((u) => u.length) : 0,
   ]);
+  // Publish blockers are already listed by the setup checklist; the card only needs them when it is done.
+  const link = canPreview && location ? await getRestaurantLink(ctx, location.id, { checks: ctx.can('settings.manage') }) : null;
 
   const attention: { icon: IconName; text: string; href: string; tone: 'lime' | 'warning' | 'danger' | 'info' }[] = [];
   if (waiting) attention.push({ icon: 'orders', text: `${waiting} new order${waiting === 1 ? '' : 's'} waiting to be accepted`, href: `${base}/orders`, tone: 'lime' });
@@ -84,7 +89,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
                   canMenu && { href: `${base}/menu/products/new`, icon: 'plus' as IconName, label: 'Add a dish' },
                   ctx.can('menu.availability') && { href: `${base}/menu/quick`, icon: 'tag' as IconName, label: 'Prices & sold out' },
                   ctx.can('payments.record') && { href: `${base}/bills`, icon: 'bill' as IconName, label: m.nav.bills },
-                  location?.isPublished && { href: `/r/${ctx.org.slug}`, icon: 'external' as IconName, label: 'Guest menu' },
+                  link?.location.isPublished && { href: link.path, icon: 'external' as IconName, label: 'Guest menu' },
                 ]
                   .filter((x): x is { href: string; icon: IconName; label: string } => !!x)
                   .map((s) => (
@@ -107,7 +112,16 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
       <PageHeader
         title={m.nav.overview}
         description={`${location?.name ?? ctx.org.name} · ${today}`}
-        actions={ctx.can('orders.view') && <ButtonLink href={`${base}/orders`} icon="orders">{m.nav.liveOrders}</ButtonLink>}
+        actions={
+          <>
+            {canPreview && (
+              <ButtonLink href={`${base}/preview`} variant="secondary" icon="phone" data-testid="preview-restaurant-button">
+                Preview my restaurant
+              </ButtonLink>
+            )}
+            {ctx.can('orders.view') && <ButtonLink href={`${base}/orders`} icon="orders">{m.nav.liveOrders}</ButtonLink>}
+          </>
+        }
       />
 
       <div className={statGrid(4)}>
@@ -159,6 +173,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
             </Card>
           )}
           {setup && setup.completed < setup.steps.length && <SetupChecklist steps={setup.steps} base={base} onlyRemaining />}
+          {link && <RestaurantLinkCard link={link} orgSlug={ctx.org.slug} canPublish={ctx.can('settings.manage')} />}
         </div>
 
         {/* Phones: what needs a decision comes first, shortcuts last. */}

@@ -45,14 +45,14 @@ export function CancelReservationButton({
 
   if (message) {
     return (
-      <p className="rounded-2xl bg-white/80 p-3 text-sm" role="status" data-testid="reservation-cancel-message">
+      <p className="rounded-2xl bg-sf-card/80 p-3 text-sm" role="status" data-testid="reservation-cancel-message">
         {message}
       </p>
     );
   }
   if (!cancellable) return null;
   return (
-    <button type="button" onClick={cancel} disabled={busy} className="w-full rounded-2xl py-3 text-sm font-medium ring-1 ring-black/15 disabled:opacity-50" data-testid="reservation-cancel">
+    <button type="button" onClick={cancel} disabled={busy} className="w-full rounded-2xl py-3 text-sm font-medium ring-1 ring-sf-text/15 disabled:opacity-50" data-testid="reservation-cancel">
       {labels.cancel}
     </button>
   );

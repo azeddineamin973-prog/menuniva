@@ -10,10 +10,11 @@ import { isOpenAt } from '@/lib/opening-hours';
 import { zonedParts } from '@/lib/time';
 import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
-import { pickupOptions, publicLocation } from '@/server/services/fulfilment';
+import { pickupOptions, previewOrPublicLocation } from '@/server/services/fulfilment';
+import { PreviewBanner } from '@/components/storefront/preview-banner';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { upsellRulesFor } from '@/server/services/upsell';
-import { allergyNoticeFor, resolveGuestLanguage } from '@/server/services/storefront';
+import { allergyNoticeFor, guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { robots: { index: false } };
@@ -21,14 +22,14 @@ export const metadata: Metadata = { robots: { index: false } };
 const MODES = { pickup: 'TAKEAWAY', delivery: 'DELIVERY', whatsapp: 'TAKEAWAY' } as const;
 
 /** Guest ordering for pickup, restaurant delivery, or a prepared WhatsApp message. */
-export default async function OrderModePage({ params, searchParams }: { params: Promise<{ org: string; mode: string }>; searchParams: Promise<{ l?: string; lang?: string }> }) {
+export default async function OrderModePage({ params, searchParams }: { params: Promise<{ org: string; mode: string }>; searchParams: Promise<{ l?: string; lang?: string; preview?: string }> }) {
   const { org: orgSlug, mode } = await params;
   const sp = await searchParams;
   if (!(mode in MODES)) notFound();
   const channel = MODES[mode as keyof typeof MODES];
-  const pl = await publicLocation(orgSlug, sp.l);
+  const pl = await previewOrPublicLocation(orgSlug, sp.l, sp.preview === '1');
   if (!pl) notFound();
-  const { org, location } = pl;
+  const { org, location, isPreview } = pl;
   const modules = await orgModules(org.id);
   if ((mode === 'pickup' && !modules.has('takeaway')) || (mode === 'delivery' && !modules.has('delivery'))) notFound();
   const [branding, settings] = await Promise.all([db.restaurantBranding.findUnique({ where: { organizationId: org.id } }), db.restaurantSettings.findUnique({ where: { organizationId: org.id } })]);
@@ -36,7 +37,8 @@ export default async function OrderModePage({ params, searchParams }: { params: 
   const m = getMessages(lang);
   const tag = LANGUAGE_TAG[lang];
   const base = `/r/${org.slug}`;
-  const q = sp.l ? `?l=${encodeURIComponent(sp.l)}` : '';
+  const keep = { preview: isPreview, lang: sp.lang === lang ? lang : null };
+  const q = guestQuery({ l: sp.l }, keep);
   const wa = location.whatsappOrderingEnabled && location.whatsappNumber ? location.whatsappNumber.replace(/\D/g, '') : null;
 
   let canOrder = !location.orderingPaused;
@@ -80,6 +82,11 @@ export default async function OrderModePage({ params, searchParams }: { params: 
       if (!isOpenAt(hours, p.weekday, p.hour * 60 + p.minute)) message = m.customer.closedNow;
     }
   }
+  // A draft preview shows the real menu, prices and checkout options, but never takes orders.
+  if (isPreview) {
+    canOrder = false;
+    message = m.customer.previewOrdering;
+  }
   if (!canOrder && !message) message = m.customer.orderingPaused;
 
   const [menu, upsellRules] = await Promise.all([getPublicMenu(location.id, lang, channel), upsellRulesFor(org.id)]);
@@ -88,8 +95,9 @@ export default async function OrderModePage({ params, searchParams }: { params: 
 
   return (
     <StorefrontShell branding={branding} restaurantName={org.name} subtitle={title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
+      {isPreview && <PreviewBanner />}
       <div className="mx-auto max-w-3xl px-4 pt-3 text-sm">
-        <Link href={`${base}${sp.l ? `/${sp.l}` : ''}`} className="inline-flex min-h-10 items-center gap-1 rounded-full pe-2 underline underline-offset-2 opacity-75">← {m.customer.menu}</Link>
+        <Link href={`${base}${sp.l ? `/${sp.l}` : ''}${guestQuery({}, keep)}`} className="inline-flex min-h-10 items-center gap-1 rounded-full pe-2 underline underline-offset-2 opacity-75">← {m.customer.menu}</Link>
         <p className="mt-1 opacity-70" data-testid="order-mode">{m.customer.viewOnly}{mode === 'pickup' && checkout.pickup!.minOrderCents > 0 ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(checkout.pickup!.minOrderCents / 100))}` : ''}{mode === 'delivery' && minDelivery ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(minDelivery / 100))}` : ''}</p>
       </div>
       <MenuApp

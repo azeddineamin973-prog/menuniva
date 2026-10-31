@@ -62,12 +62,12 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
 
   return (
     <div className="mx-auto max-w-lg space-y-5 px-4 py-6">
-      <div className="rounded-3xl bg-white/85 p-5 text-center shadow-sm ring-1 ring-black/5">
+      <div className="rounded-3xl bg-sf-card/85 p-5 text-center shadow-sm ring-1 ring-sf-text/5">
         <p className="text-sm opacity-70">{m.customer.orderSent}</p>
         <p className="mt-1 font-serif text-3xl">{fmt(m.customer.orderNumber, { number: initial.number })}</p>
         {initial.tableLabel && <p className="text-sm opacity-70">{fmt(m.customer.table, { label: initial.tableLabel })}</p>}
         {initial.pickupPoint && <p className="text-sm opacity-80" data-testid="pickup-point">{fmt(m.customer.pickupPoint, { place: initial.pickupPoint })}</p>}
-        <p className={cn('mt-4 inline-block rounded-full px-4 py-1.5 text-sm font-medium', status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-sf-primary text-white')} data-testid="order-status" data-status={status}>
+        <p className={cn('mt-4 inline-block rounded-full px-4 py-1.5 text-sm font-medium', status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-sf-primary text-sf-on-primary')} data-testid="order-status" data-status={status}>
           {label(status)}
         </p>
         {status === 'NEW' && <p className="mt-2 text-sm opacity-70">{m.customer.awaitingAcceptance}</p>}
@@ -79,14 +79,14 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
         <ol className="space-y-2">
           {steps.map((s, i) => (
             <li key={s} className="flex items-center gap-3">
-              <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold', i <= idx ? 'bg-sf-primary text-white' : 'bg-black/10')}>{i < idx || (i === idx && done) ? '✓' : i + 1}</span>
+              <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold', i <= idx ? 'bg-sf-primary text-sf-on-primary' : 'bg-sf-text/10')}>{i < idx || (i === idx && done) ? '✓' : i + 1}</span>
               <span className={cn('text-sm', i === idx ? 'font-semibold' : i < idx ? 'opacity-70' : 'opacity-50')}>{label(s)}</span>
             </li>
           ))}
         </ol>
       )}
 
-      <div className="rounded-3xl bg-white/85 p-5 ring-1 ring-black/5">
+      <div className="rounded-3xl bg-sf-card/85 p-5 ring-1 ring-sf-text/5">
         <ul className="space-y-2 text-sm">
           {initial.items.map((i, k) => (
             <li key={k} className="flex justify-between gap-3">
@@ -98,7 +98,7 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
             </li>
           ))}
         </ul>
-        <div className="mt-3 space-y-1 border-t border-black/5 pt-3 text-sm">
+        <div className="mt-3 space-y-1 border-t border-sf-text/5 pt-3 text-sm">
           {initial.discountCents > 0 && <div className="flex justify-between"><span>{m.customer.discount}</span><span>−{money(initial.discountCents)}</span></div>}
           {initial.deliveryFeeCents > 0 && <div className="flex justify-between"><span>{m.customer.deliveryFee}</span><span>{money(initial.deliveryFeeCents)}</span></div>}
           <div className="flex justify-between text-base font-semibold"><span>{m.customer.total}</span><span className="tabular-nums">{money(initial.totalCents)}</span></div>
@@ -109,8 +109,8 @@ export function OrderTracker({ token, tag, m, initial, orderMoreHref, feedbackHr
       <div className="flex flex-col gap-2">
         {/* Pickup and delivery guests get this too: `orderMoreHref` already falls back to the
             restaurant's storefront, so hiding it only cost them the way back. */}
-        {!done && <Link href={orderMoreHref} className="rounded-2xl bg-sf-primary py-3 text-center font-medium text-white" data-testid="order-more">{m.customer.orderMore}</Link>}
-        {feedbackHref && <Link href={feedbackHref} className="rounded-2xl py-3 text-center font-medium ring-1 ring-black/10">{m.customer.leaveFeedback}</Link>}
+        {!done && <Link href={orderMoreHref} className="rounded-2xl bg-sf-primary py-3 text-center font-medium text-sf-on-primary" data-testid="order-more">{m.customer.orderMore}</Link>}
+        {feedbackHref && <Link href={feedbackHref} className="rounded-2xl py-3 text-center font-medium ring-1 ring-sf-text/10">{m.customer.leaveFeedback}</Link>}
       </div>
       {status !== 'CANCELLED' && loyalty}
     </div>

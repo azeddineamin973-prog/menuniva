@@ -190,13 +190,13 @@ export function MenuApp({
   return (
     <div className="mx-auto max-w-3xl pb-32">
       {tableLabel && (
-        <div ref={bannerRef} className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-1.5 border-b border-black/5 bg-sf-bg/95 px-4 py-2 backdrop-blur" data-testid="table-banner">
-          <span className="shrink-0 rounded-full bg-sf-primary px-3 py-1.5 text-[13px] font-medium whitespace-nowrap text-white">{fmt(c.table, { label: tableLabel })}</span>
+        <div ref={bannerRef} className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-1.5 border-b border-sf-text/5 bg-sf-bg/95 px-4 py-2 backdrop-blur" data-testid="table-banner">
+          <span className="shrink-0 rounded-full bg-sf-primary px-3 py-1.5 text-[13px] font-medium whitespace-nowrap text-sf-on-primary">{fmt(c.table, { label: tableLabel })}</span>
           {scope.qrToken && <TableActions qrToken={scope.qrToken} m={m} />}
         </div>
       )}
       {!canOrder && orderingMessage && (
-        <div className="mx-4 mt-4 rounded-2xl border border-sf-accent/40 bg-white/70 p-3 text-sm" role="status">
+        <div className="mx-4 mt-4 rounded-2xl border border-sf-accent/40 bg-sf-card/70 p-3 text-sm" role="status">
           {orderingMessage}
         </div>
       )}
@@ -218,7 +218,7 @@ export function MenuApp({
               placeholder={c.searchMenu}
               aria-label={c.searchMenu}
               enterKeyHint="search"
-              className="h-11 w-full rounded-full border border-black/10 bg-white/90 ps-10 pe-11 text-base shadow-sm focus:border-sf-primary focus:ring-2 focus:ring-sf-primary/20 focus:outline-none"
+              className="h-11 w-full rounded-full border border-sf-text/10 bg-sf-card/90 ps-10 pe-11 text-base shadow-sm focus:border-sf-primary focus:ring-2 focus:ring-sf-primary/20 focus:outline-none"
               data-testid="menu-search"
             />
             {search && (
@@ -242,7 +242,7 @@ export function MenuApp({
               data-cat={cat.id}
               className={cn(
                 'flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition',
-                activeCat === cat.id ? 'border-sf-primary bg-sf-primary text-white shadow-sm' : 'border-black/10 bg-white/70 hover:bg-white',
+                activeCat === cat.id ? 'border-sf-primary bg-sf-primary text-sf-on-primary shadow-sm' : 'border-sf-text/10 bg-sf-card/70 hover:bg-sf-card',
               )}
             >
               {cat.name}
@@ -263,11 +263,11 @@ export function MenuApp({
           <h2 className="mb-2 font-serif text-xl">{c.featured}</h2>
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
             {featured.map((p) => (
-              <button key={p.id} type="button" onClick={() => setOpen(p)} className="w-56 shrink-0 overflow-hidden rounded-3xl bg-white text-start shadow-sm ring-1 ring-black/5 transition hover:shadow-md">
+              <button key={p.id} type="button" onClick={() => setOpen(p)} className="w-56 shrink-0 overflow-hidden rounded-3xl bg-sf-card text-start shadow-sm ring-1 ring-sf-text/5 transition hover:shadow-md">
                 {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-36 w-full bg-sf-accent/10 object-cover" decoding="async" /> : <NoPhoto className="h-36 w-full" />}
                 <div className="p-3">
                   <p className="line-clamp-1 font-medium">{p.name}</p>
-                  <p className="text-sm font-semibold text-sf-primary">{money(p.priceCents)}</p>
+                  <p className="text-sm font-semibold text-sf-primary-ink">{money(p.priceCents)}</p>
                 </div>
               </button>
             ))}
@@ -289,19 +289,19 @@ export function MenuApp({
                     type="button"
                     disabled={blocked}
                     onClick={() => setOpen(p)}
-                    className="group flex h-full w-full gap-3 rounded-3xl bg-white/90 p-3 text-start shadow-sm ring-1 ring-black/5 transition hover:shadow-md disabled:opacity-55"
+                    className="group flex h-full w-full gap-3 rounded-3xl bg-sf-card/90 p-3 text-start shadow-sm ring-1 ring-sf-text/5 transition hover:shadow-md disabled:opacity-55"
                     data-testid="customer-product"
                   >
                     <div className="flex min-w-0 flex-1 flex-col">
                       <p className="font-medium leading-snug">{p.name}</p>
                       {p.description && <p className="mt-1 line-clamp-2 text-sm opacity-70">{p.description}</p>}
                       <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-                        <span className="rounded-full bg-sf-primary/10 px-2.5 py-1 text-sm font-semibold text-sf-primary tabular-nums">
+                        <span className="rounded-full bg-sf-primary/10 px-2.5 py-1 text-sm font-semibold text-sf-primary-ink tabular-nums">
                           {p.variants.length > 1 && <span className="text-xs font-normal opacity-70">{c.from} </span>}
                           {money(from)}
                         </span>
                         {p.soldOut && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">{c.soldOut}</span>}
-                        {!p.soldOut && !p.available && <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs">{c.unavailable}</span>}
+                        {!p.soldOut && !p.available && <span className="rounded-full bg-sf-text/5 px-2 py-0.5 text-xs">{c.unavailable}</span>}
                         {p.isPopular && <span className="rounded-full bg-sf-accent/20 px-2 py-0.5 text-xs">{c.popular}</span>}
                       </div>
                     </div>
@@ -322,7 +322,7 @@ export function MenuApp({
 
       {count > 0 && !cartOpen && (
         <div className="fixed inset-x-0 bottom-0 z-30 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={() => setCartOpen(true)} className="mx-auto flex w-full max-w-3xl items-center justify-between rounded-2xl bg-sf-primary px-5 py-4 text-white shadow-lg active:scale-[0.99]" data-testid="view-cart">
+          <button type="button" onClick={() => setCartOpen(true)} className="mx-auto flex w-full max-w-3xl items-center justify-between rounded-2xl bg-sf-primary px-5 py-4 text-sf-on-primary shadow-lg active:scale-[0.99]" data-testid="view-cart">
             <span className="font-medium">{fmt(c.viewCart, { count })}</span>
             <span className="font-semibold tabular-nums">{money(estimate)}</span>
           </button>
@@ -389,7 +389,7 @@ function UpsellBox({ suggestions, m, money, onAdd, onDismiss }: { suggestions: {
     }
   }, [suggestions]);
   return (
-    <section className="rounded-2xl bg-white/70 p-3 ring-1 ring-black/5" aria-label={m.customer.youMightAlsoLike} data-testid="upsell">
+    <section className="rounded-2xl bg-sf-card/70 p-3 ring-1 ring-sf-text/5" aria-label={m.customer.youMightAlsoLike} data-testid="upsell">
       <p className="mb-2 text-sm font-medium">{m.customer.youMightAlsoLike}</p>
       <ul className="space-y-2">
         {suggestions.map((s) => (
@@ -399,7 +399,7 @@ function UpsellBox({ suggestions, m, money, onAdd, onDismiss }: { suggestions: {
               <span className="block truncate text-sm font-medium">{s.product.name}</span>
               <span className="block text-xs tabular-nums opacity-70">{money(s.product.priceCents)}</span>
             </span>
-            <button type="button" onClick={() => onAdd(s.ruleId, s.product)} className="h-9 rounded-xl bg-sf-primary px-3 text-sm font-medium text-white" data-testid="upsell-add">{m.customer.addSuggestion}</button>
+            <button type="button" onClick={() => onAdd(s.ruleId, s.product)} className="h-9 rounded-xl bg-sf-primary px-3 text-sm font-medium text-sf-on-primary" data-testid="upsell-add">{m.customer.addSuggestion}</button>
             <button type="button" onClick={() => onDismiss(s.ruleId)} className="h-9 rounded-xl px-2 text-xs underline opacity-70" data-testid="upsell-dismiss">{m.customer.noThanks}</button>
           </li>
         ))}
@@ -455,7 +455,7 @@ function Sheet({ children, onClose, label, closeLabel }: { children: React.React
 
 function CloseButton({ onClick, label, className }: { onClick: () => void; label: string; className?: string }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} className={cn('flex size-10 items-center justify-center rounded-full bg-white/90 text-xl leading-none shadow-sm ring-1 ring-black/10', className)} data-testid="sheet-close">
+    <button type="button" onClick={onClick} aria-label={label} className={cn('flex size-10 items-center justify-center rounded-full bg-sf-card/90 text-xl leading-none shadow-sm ring-1 ring-sf-text/10', className)} data-testid="sheet-close">
       <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
         <path d="M6 6l12 12M18 6 6 18" />
       </svg>
@@ -544,7 +544,7 @@ function ProductSheet({
           {p.description && <p className="mt-1 opacity-80">{p.description}</p>}
           {p.ingredients && <p className="mt-2 text-sm opacity-70">{p.ingredients}</p>}
         </div>
-        <div className="rounded-2xl bg-white/70 p-3 text-sm">
+        <div className="rounded-2xl bg-sf-card/70 p-3 text-sm">
           <p className="font-medium">{c.allergens}</p>
           {p.allergens ? (
             <>
@@ -561,7 +561,7 @@ function ProductSheet({
             <legend className="mb-2 font-medium">{c.chooseOne} <span className="text-xs opacity-60">· {c.requiredChoice}</span></legend>
             <div className="space-y-2">
               {p.variants.map((v) => (
-                <label key={v.id} className={cn('flex cursor-pointer items-center justify-between rounded-xl border bg-white/70 px-3 py-2.5', variantId === v.id ? 'border-sf-primary' : 'border-black/10')}>
+                <label key={v.id} className={cn('flex cursor-pointer items-center justify-between rounded-xl border bg-sf-card/70 px-3 py-2.5', variantId === v.id ? 'border-sf-primary' : 'border-sf-text/10')}>
                   <span className="flex items-center gap-2">
                     <input type="radio" name="variant" checked={variantId === v.id} onChange={() => setVariantId(v.id)} className="size-5 shrink-0 accent-[var(--sf-primary)]" />
                     {v.name}
@@ -583,7 +583,7 @@ function ProductSheet({
             </legend>
             <div className="space-y-2">
               {g.options.map((o) => (
-                <label key={o.id} className={cn('flex cursor-pointer items-center justify-between rounded-xl border bg-white/70 px-3 py-2.5', sel[o.id] ? 'border-sf-primary' : 'border-black/10')}>
+                <label key={o.id} className={cn('flex cursor-pointer items-center justify-between rounded-xl border bg-sf-card/70 px-3 py-2.5', sel[o.id] ? 'border-sf-primary' : 'border-sf-text/10')}>
                   <span className="flex items-center gap-2">
                     <input type={g.maxSelect === 1 ? 'radio' : 'checkbox'} name={`g-${g.id}`} checked={!!sel[o.id]} onChange={() => toggle(g.id, o.id)} className="size-5 shrink-0 accent-[var(--sf-primary)]" />
                     {o.name}
@@ -596,30 +596,30 @@ function ProductSheet({
         ))}
         <label className="block">
           <span className="mb-1 block font-medium">{c.notesForKitchen} <span className="text-xs opacity-60">({m.common.optional})</span></span>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 200))} placeholder={c.notesPlaceholder} className="min-h-[70px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-base" />
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 200))} placeholder={c.notesPlaceholder} className="min-h-[70px] w-full rounded-xl border border-sf-text/10 bg-sf-card/80 p-3 text-base" />
         </label>
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
         {/* On a browse-only page (the public storefront) there is nothing to add to, so the
             quantity stepper and a permanently greyed-out "Add" button are replaced by the ways
             the guest can actually order. */}
         {canOrder ? (
-          <div className="sticky bottom-0 -mx-5 -mb-5 flex items-center gap-3 border-t border-black/5 bg-sf-bg p-4">
-            <div className="flex items-center rounded-xl border border-black/10 bg-white">
+          <div className="sticky bottom-0 -mx-5 -mb-5 flex items-center gap-3 border-t border-sf-text/5 bg-sf-bg p-4">
+            <div className="flex items-center rounded-xl border border-sf-text/10 bg-sf-card">
               <button type="button" className="h-11 w-11 text-xl" onClick={() => setQty(Math.max(1, qty - 1))} aria-label="−">−</button>
               <span className="w-8 text-center tabular-nums" aria-label={c.quantity}>{qty}</span>
               <button type="button" className="h-11 w-11 text-xl" onClick={() => setQty(Math.min(50, qty + 1))} aria-label="+">+</button>
             </div>
-            <button type="button" disabled={p.soldOut} onClick={add} className="h-12 flex-1 rounded-xl bg-sf-primary font-medium text-white disabled:opacity-50" data-testid="add-to-cart">
+            <button type="button" disabled={p.soldOut} onClick={add} className="h-12 flex-1 rounded-xl bg-sf-primary font-medium text-sf-on-primary disabled:opacity-50" data-testid="add-to-cart">
               {fmt(c.addToCartPrice, { price: money(unit * qty) })}
             </button>
           </div>
         ) : (
           orderActions.length > 0 && (
-            <div className="sticky bottom-0 -mx-5 -mb-5 space-y-2 border-t border-black/5 bg-sf-bg p-4" data-testid="sheet-order-actions">
+            <div className="sticky bottom-0 -mx-5 -mb-5 space-y-2 border-t border-sf-text/5 bg-sf-bg p-4" data-testid="sheet-order-actions">
               <p className="text-sm font-medium">{c.howToOrder}</p>
               <div className="grid gap-2">
                 {orderActions.map((a) => (
-                  <a key={a.href} href={a.href} className="flex h-12 items-center justify-center rounded-xl bg-sf-primary font-medium text-white">
+                  <a key={a.href} href={a.href} className="flex h-12 items-center justify-center rounded-xl bg-sf-primary font-medium text-sf-on-primary">
                     {a.label}
                   </a>
                 ))}
@@ -699,7 +699,7 @@ function CartSheet({
   }, [draftKey, couponInput, coupon, notes, tableCode, contact, pickup, payMethod]);
   const [dq, setDq] = useState<DeliveryQuote | null>(null);
   const field = (k: keyof typeof contact) => ({ value: contact[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setContact({ ...contact, [k]: e.target.value }) });
-  const inputCls = 'h-11 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-base';
+  const inputCls = 'h-11 w-full rounded-xl border border-sf-text/10 bg-sf-card/80 px-3 text-base';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const idemStorageKey = `mn_idem:${scopeKey}`;
@@ -848,14 +848,14 @@ function CartSheet({
       <div className="space-y-4 p-5" data-testid="cart-sheet">
         <div className="flex items-center justify-between">
           <h3 className="font-serif text-2xl">{c.cart}</h3>
-          <button type="button" onClick={onClose} className="h-10 rounded-full bg-white/80 px-4 text-sm font-medium ring-1 ring-black/10" data-testid="cart-close">{m.common.close}</button>
+          <button type="button" onClick={onClose} className="h-10 rounded-full bg-sf-card/80 px-4 text-sm font-medium ring-1 ring-sf-text/10" data-testid="cart-close">{m.common.close}</button>
         </div>
         {lines.length === 0 && <p className="opacity-70">{c.cartEmpty}</p>}
         <ul className="space-y-2">
           {lines.map((l, i) => {
             const issue = quote?.issues.find((x) => x.index === i);
             return (
-              <li key={l.lineId} className={cn('rounded-2xl bg-white/80 p-3 ring-1', issue ? 'ring-red-300' : 'ring-black/5')} data-testid="cart-line">
+              <li key={l.lineId} className={cn('rounded-2xl bg-sf-card/80 p-3 ring-1', issue ? 'ring-red-300' : 'ring-sf-text/5')} data-testid="cart-line">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium">{l.name}</p>
@@ -865,10 +865,10 @@ function CartSheet({
                   <p className="text-sm font-semibold tabular-nums">{money(l.unitCents * l.quantity)}</p>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
-                  <button type="button" disabled={!!pending} className="size-10 rounded-xl bg-white text-lg ring-1 ring-black/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">−</button>
+                  <button type="button" disabled={!!pending} className="size-10 rounded-xl bg-sf-card text-lg ring-1 ring-sf-text/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">−</button>
                   <span className="w-8 text-center font-medium tabular-nums" aria-live="polite">{l.quantity}</span>
-                  <button type="button" disabled={!!pending} className="size-10 rounded-xl bg-white text-lg ring-1 ring-black/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">+</button>
-                  <button type="button" disabled={!!pending} className="ms-auto h-10 rounded-xl px-3 text-sm underline underline-offset-2 opacity-75 hover:bg-black/5 disabled:opacity-30" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
+                  <button type="button" disabled={!!pending} className="size-10 rounded-xl bg-sf-card text-lg ring-1 ring-sf-text/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">+</button>
+                  <button type="button" disabled={!!pending} className="ms-auto h-10 rounded-xl px-3 text-sm underline underline-offset-2 opacity-75 hover:bg-sf-text/5 disabled:opacity-30" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
                 </div>
                 {issue && <p className="mt-2 text-sm text-red-700" role="alert">{issueText(issue)}</p>}
               </li>
@@ -880,17 +880,17 @@ function CartSheet({
           <>
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{c.notesForKitchen} <span className="text-xs opacity-60">({m.common.optional})</span></span>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 300))} className="min-h-[60px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-base" placeholder={c.notesPlaceholder} />
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 300))} className="min-h-[60px] w-full rounded-xl border border-sf-text/10 bg-sf-card/80 p-3 text-base" placeholder={c.notesPlaceholder} />
             </label>
             {tableCodeRequired && (
               <label className="block">
                 <span className="mb-1 block text-sm font-medium">{c.tableCode}</span>
-                <input value={tableCode} onChange={(e) => setTableCode(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" autoComplete="off" className="h-12 w-full rounded-xl border border-black/10 bg-white/80 px-3 text-center text-xl tracking-[0.5em]" data-testid="table-code-input" />
+                <input value={tableCode} onChange={(e) => setTableCode(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" autoComplete="off" className="h-12 w-full rounded-xl border border-sf-text/10 bg-sf-card/80 px-3 text-center text-xl tracking-[0.5em]" data-testid="table-code-input" />
                 <span className="mt-1 block text-xs opacity-70">{c.tableCodeHint}</span>
               </label>
             )}
             {channel !== 'TABLE' && (
-              <fieldset className="space-y-2 rounded-2xl bg-white/60 p-3" data-testid="checkout-fields">
+              <fieldset className="space-y-2 rounded-2xl bg-sf-card/60 p-3" data-testid="checkout-fields">
                 <legend className="px-1 text-sm font-medium">{channel === 'TAKEAWAY' ? c.checkoutPickup : c.checkoutDelivery}</legend>
                 <input {...field('name')} placeholder={channel === 'DELIVERY' ? c.recipientName : c.yourName} aria-label={channel === 'DELIVERY' ? c.recipientName : c.yourName} autoComplete="name" className={inputCls} required maxLength={80} />
                 <input {...field('phone')} placeholder={c.phone} aria-label={c.phone} type="tel" autoComplete="tel" className={inputCls} required maxLength={20} />
@@ -915,7 +915,7 @@ function CartSheet({
                       <input {...field('postalCode')} placeholder={checkout?.country === 'ES' ? '00000' : '0000-000'} aria-label={c.postalCode} autoComplete="postal-code" inputMode="numeric" className={inputCls} maxLength={10} data-testid="postal-input" />
                       <input {...field('city')} placeholder={c.city} aria-label={c.city} autoComplete="address-level2" className={inputCls} maxLength={80} />
                     </div>
-                    <textarea {...field('deliveryNotes')} placeholder={c.deliveryNotes} aria-label={c.deliveryNotes} className="min-h-[50px] w-full rounded-xl border border-black/10 bg-white/80 p-3 text-base" maxLength={300} />
+                    <textarea {...field('deliveryNotes')} placeholder={c.deliveryNotes} aria-label={c.deliveryNotes} className="min-h-[50px] w-full rounded-xl border border-sf-text/10 bg-sf-card/80 p-3 text-base" maxLength={300} />
                     {dq && !dq.valid && <p className="text-sm text-red-700" role="alert">{checkout?.country === 'ES' ? m.validation.invalidPostalCodeES : m.validation.invalidPostalCodePT}</p>}
                     {dq && dq.valid && !dq.covered && (
                       <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900" role="alert" data-testid="outside-zone">
@@ -939,21 +939,21 @@ function CartSheet({
                 )}
               </fieldset>
             )}
-            <div className="rounded-2xl border border-sf-accent/40 bg-white/60 p-3 text-sm">
+            <div className="rounded-2xl border border-sf-accent/40 bg-sf-card/60 p-3 text-sm">
               <p className="font-medium">{c.allergyNoticeTitle}</p>
               <p className="opacity-80">{allergyNotice}</p>
             </div>
             {!checkout?.whatsapp?.only && (
               <div className="flex gap-2">
-                <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase().slice(0, 30))} placeholder={c.promoCode} aria-label={c.promoCode} className="h-11 min-w-0 flex-1 rounded-xl border border-black/10 bg-white/80 px-3 text-base uppercase" data-testid="coupon-input" />
-                <button type="button" onClick={() => setCoupon(couponInput.trim())} className="h-11 shrink-0 rounded-xl bg-white/80 px-4 text-sm font-medium ring-1 ring-black/10" data-testid="coupon-apply">{c.apply}</button>
+                <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase().slice(0, 30))} placeholder={c.promoCode} aria-label={c.promoCode} className="h-11 min-w-0 flex-1 rounded-xl border border-sf-text/10 bg-sf-card/80 px-3 text-base uppercase" data-testid="coupon-input" />
+                <button type="button" onClick={() => setCoupon(couponInput.trim())} className="h-11 shrink-0 rounded-xl bg-sf-card/80 px-4 text-sm font-medium ring-1 ring-sf-text/10" data-testid="coupon-apply">{c.apply}</button>
               </div>
             )}
             {coupon && quote?.forCoupon !== coupon && <p className="text-sm opacity-70" role="status" data-testid="coupon-checking">{c.checkingCode}</p>}
             {coupon && quote?.forCoupon === coupon && quote.couponStatus && quote.couponStatus !== 'valid' && (
               <p className="text-sm text-red-700" role="alert" data-testid="coupon-error">{quote.couponStatus === 'not_applicable' ? c.promoNotApplicable : c.promoInvalid}</p>
             )}
-            <div className={cn('space-y-1 rounded-2xl bg-white/80 p-4 transition-opacity', quoting && 'opacity-50')} aria-busy={quoting} data-testid="cart-totals">
+            <div className={cn('space-y-1 rounded-2xl bg-sf-card/80 p-4 transition-opacity', quoting && 'opacity-50')} aria-busy={quoting} data-testid="cart-totals">
               <div className="flex justify-between text-sm"><span>{c.subtotal}</span><span className="tabular-nums">{quote ? money(quote.subtotalCents) : '…'}</span></div>
               {quote?.discounts?.map((d, i) => (
                 <div key={i} className="flex justify-between text-sm text-emerald-800" data-testid="discount-line"><span>{c.discount}: {d.description}</span><span className="tabular-nums">−{money(d.amountCents)}</span></div>
@@ -980,7 +980,7 @@ function CartSheet({
                   (channel === 'TAKEAWAY' && !pickup)))
                 }
                 onClick={submit}
-                className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-medium text-white disabled:opacity-50"
+                className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-medium text-sf-on-primary disabled:opacity-50"
                 data-testid="submit-order"
               >
                 {submitting ? c.submitting : pending ? c.retrySubmit : c.submitOrder}
@@ -1033,10 +1033,10 @@ function TableActions({ qrToken, m }: { qrToken: string; m: Msg }) {
   return (
     // Sized so table, "call waiter" and "bill" share one row on a 375 px phone; smaller phones wrap.
     <div className="ms-auto flex flex-wrap items-center justify-end gap-1">
-      <button type="button" disabled={busy} onClick={() => send('CALL_WAITER')} className="h-10 rounded-full bg-white px-2.5 text-[13px] font-medium whitespace-nowrap ring-1 ring-black/10 active:scale-[0.98] disabled:opacity-60" data-testid="call-waiter">{m.customer.callWaiter}</button>
-      <button type="button" disabled={busy} onClick={() => send('REQUEST_BILL')} className="h-10 rounded-full bg-white px-2.5 text-[13px] font-medium whitespace-nowrap ring-1 ring-black/10 active:scale-[0.98] disabled:opacity-60" data-testid="request-bill">{m.customer.requestBill}</button>
+      <button type="button" disabled={busy} onClick={() => send('CALL_WAITER')} className="h-10 rounded-full bg-sf-card px-2.5 text-[13px] font-medium whitespace-nowrap ring-1 ring-sf-text/10 active:scale-[0.98] disabled:opacity-60" data-testid="call-waiter">{m.customer.callWaiter}</button>
+      <button type="button" disabled={busy} onClick={() => send('REQUEST_BILL')} className="h-10 rounded-full bg-sf-card px-2.5 text-[13px] font-medium whitespace-nowrap ring-1 ring-sf-text/10 active:scale-[0.98] disabled:opacity-60" data-testid="request-bill">{m.customer.requestBill}</button>
       {msg && (
-        <p role="status" className="fixed inset-x-4 top-16 z-50 mx-auto max-w-md rounded-2xl bg-sf-primary p-3 text-center text-sm text-white shadow-lg">{msg}</p>
+        <p role="status" className="fixed inset-x-4 top-16 z-50 mx-auto max-w-md rounded-2xl bg-sf-primary p-3 text-center text-sm text-sf-on-primary shadow-lg">{msg}</p>
       )}
     </div>
   );

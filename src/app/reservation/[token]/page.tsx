@@ -25,7 +25,7 @@ export default async function ReservationStatusPage({ params }: { params: Promis
       <div className="mx-auto max-w-md space-y-4 px-4 py-8 text-center">
         <p className="font-serif text-2xl">{when}</p>
         <p>{fmt(m.reservation.guests, { n: r.partySize })}</p>
-        <p className="inline-block rounded-full bg-sf-primary px-4 py-1.5 text-sm font-medium text-white" data-testid="reservation-status" data-status={r.status}>
+        <p className="inline-block rounded-full bg-sf-primary px-4 py-1.5 text-sm font-medium text-sf-on-primary" data-testid="reservation-status" data-status={r.status}>
           {m.reservation.status[r.status]}
         </p>
         <p className="text-sm opacity-70">{m.reservation.keepPage}</p>

@@ -35,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'bills', path: '/bills', permission: 'payments.record', group: 'operate', icon: 'bill' },
   { key: 'reservations', path: '/reservations', permission: 'reservations.manage', group: 'operate', module: 'reservations', icon: 'calendar' },
   { key: 'menu', path: '/menu', permission: 'menu.view', group: 'menu', icon: 'book' },
+  { key: 'preview', path: '/preview', permission: 'menu.view', group: 'menu', icon: 'phone' },
   { key: 'importStudio', path: '/import', permission: 'import.manage', group: 'menu', module: 'import', icon: 'import' },
   { key: 'stations', path: '/stations', permission: 'stations.manage', group: 'menu', icon: 'station' },
   { key: 'promotions', path: '/promotions', permission: 'promotions.manage', group: 'grow', module: 'promotions', icon: 'tag' },
