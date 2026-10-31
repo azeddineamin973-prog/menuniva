@@ -5,7 +5,7 @@ import { friendlyError } from '@/components/forms/action-form';
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
 import { Alert, Badge, Button, Field, Icon, Input } from '@/components/ui';
-import { initialActionState, type ActionResult } from '@/lib/action-result';
+import { initialActionState } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { SOURCE_LABEL, type DiscoveryResult, type ProfileKey, type RestaurantProfile } from '@/server/discovery/types';
 import { applyDiscoveryAction, discoverRestaurantAction } from './discovery-actions';

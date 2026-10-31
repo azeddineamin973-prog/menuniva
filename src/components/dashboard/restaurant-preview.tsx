@@ -211,8 +211,10 @@ export function RestaurantPreview({
       </div>
 
       {/* Stage */}
-      <div ref={boxRef} className="flex justify-center rounded-[var(--radius-card)] border border-line bg-[radial-gradient(circle_at_50%_0%,var(--mn-surface-3),var(--mn-surface-2)_60%)] px-3 py-6 sm:px-6 sm:py-8">
-        <div className="relative shrink-0 motion-safe:transition-[width,height] motion-safe:duration-300" style={{ width: outerW * scale, height: outerH * scale }}>
+      {/* overflow-hidden + max-w-full: before the script has measured the screen (first paint on a
+          slow phone), the full-size device must not make the page wider than the screen. */}
+      <div ref={boxRef} className="flex justify-center overflow-hidden rounded-[var(--radius-card)] border border-line bg-[radial-gradient(circle_at_50%_0%,var(--mn-surface-3),var(--mn-surface-2)_60%)] px-3 py-6 sm:px-6 sm:py-8">
+        <div className="relative max-w-full shrink-0 motion-safe:transition-[width,height] motion-safe:duration-300" style={{ width: outerW * scale, height: outerH * scale }}>
           <div
             className={cn(
               'absolute start-0 top-0 origin-top-left overflow-hidden rtl:origin-top-right',

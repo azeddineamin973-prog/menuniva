@@ -1,6 +1,7 @@
 import 'server-only';
 // next/navigation is loaded lazily inside the page guards so CLI scripts can use the services.
 import type { MembershipRole, OrganizationStatus } from '@/generated/prisma/enums';
+import { cache } from 'react';
 import { can, type Permission } from '@/lib/permissions';
 import { db } from './db';
 import { getCurrentUser, type CurrentUser } from './auth/session';
@@ -29,10 +30,7 @@ export async function resolveTenantAccess(
   orgSlug: string,
   permission?: Permission,
 ): Promise<TenantContext> {
-  const membership = await db.restaurantMembership.findFirst({
-    where: { userId, status: 'ACTIVE', organization: { slug: orgSlug } },
-    include: { organization: true, user: { select: { disabledAt: true } } },
-  });
+  const membership = await membershipFor(userId, orgSlug);
   if (!membership || membership.user.disabledAt) throw new AccessDeniedError('not_member');
   const org = membership.organization;
   if (org.status === 'SUSPENDED' || org.status === 'ARCHIVED') throw new AccessDeniedError('suspended');
@@ -48,6 +46,18 @@ export async function resolveTenantAccess(
   };
 }
 
+/**
+ * The ACTIVE membership of a user in an organization. Memoized for the duration of one page
+ * render (React cache), so a layout and its page do not look it up twice; server actions and
+ * route handlers run outside a render and always read it fresh.
+ */
+const membershipFor = cache((userId: string, orgSlug: string) =>
+  db.restaurantMembership.findFirst({
+    where: { userId, status: 'ACTIVE', organization: { slug: orgSlug } },
+    include: { organization: true, user: { select: { disabledAt: true } } },
+  }),
+);
+
 /** Throws unless the location belongs to the tenant and the member may access it. */
 export async function assertLocationAccess(ctx: TenantContext, locationId: string) {
   const location = await db.restaurantLocation.findFirst({
@@ -58,16 +68,16 @@ export async function assertLocationAccess(ctx: TenantContext, locationId: strin
   if (ctx.locationIds.length > 0 && !ctx.locationIds.includes(locationId)) throw new AccessDeniedError('location');
 }
 
-/** Locations the member may access (always tenant-scoped). */
+/** Locations the member may access (always tenant-scoped). Memoized per render, like the membership. */
 export async function accessibleLocations(ctx: TenantContext) {
-  return db.restaurantLocation.findMany({
-    where: {
-      organizationId: ctx.org.id,
-      ...(ctx.locationIds.length ? { id: { in: ctx.locationIds } } : {}),
-    },
-    orderBy: { createdAt: 'asc' },
-  });
+  return locationsFor(ctx.org.id, ctx.locationIds.join(','));
 }
+const locationsFor = cache((organizationId: string, ids: string) =>
+  db.restaurantLocation.findMany({
+    where: { organizationId, ...(ids ? { id: { in: ids.split(',') } } : {}) },
+    orderBy: { createdAt: 'asc' },
+  }),
+);
 
 /** For server components/pages: redirects to login, 404s for non-members, 403 page for missing permission. */
 export async function requireTenantPage(orgSlug: string, permission?: Permission): Promise<TenantContext & { user: CurrentUser }> {

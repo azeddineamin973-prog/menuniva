@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { effectiveModules, type ModuleKey } from '@/lib/modules';
 import { db, type Tx } from './db';
 import { UserFacingError } from './errors';
@@ -23,12 +24,17 @@ export async function orgModuleState(organizationId: string, now = new Date(), t
   };
 }
 
-export async function orgModules(organizationId: string, now = new Date(), tx: Tx | typeof db = db): Promise<Set<ModuleKey>> {
-  return (await orgModuleState(organizationId, now, tx))?.effective ?? new Set();
+/** One read per organization per page render (layout, page and guards all ask). Outside a render (actions, API routes) it is not memoized. */
+const currentModuleState = cache((organizationId: string) => orgModuleState(organizationId));
+
+export async function orgModules(organizationId: string, now?: Date, tx?: Tx | typeof db): Promise<Set<ModuleKey>> {
+  const state = now || tx ? await orgModuleState(organizationId, now ?? new Date(), tx ?? db) : await currentModuleState(organizationId);
+  // A copy: callers may not change the memoized set.
+  return new Set(state?.effective ?? []);
 }
 
 export async function hasModule(organizationId: string, module: ModuleKey, tx?: Tx | typeof db): Promise<boolean> {
-  return (await orgModules(organizationId, new Date(), tx)).has(module);
+  return (await orgModules(organizationId, undefined, tx)).has(module);
 }
 
 /** Server-side gate used by services. Guests and staff get the same stable error code. */

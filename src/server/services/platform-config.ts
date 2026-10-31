@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { z } from 'zod';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
@@ -19,6 +20,11 @@ export const CONFIG_DEFAULTS: PlatformConfigValues = { signupsOpen: true, defaul
 
 /** Pass `tx` when called inside a transaction, so no second pool connection is needed. */
 export async function getPlatformConfig(tx: Tx | typeof db = db): Promise<PlatformConfigValues> {
+  // Read once per page render; inside a transaction (or outside a render) it is always read fresh.
+  return tx === db ? configForRender() : readPlatformConfig(tx);
+}
+const configForRender = cache(() => readPlatformConfig(db));
+async function readPlatformConfig(tx: Tx | typeof db): Promise<PlatformConfigValues> {
   const rows = await tx.platformConfig.findMany({ where: { key: { in: Object.keys(CONFIG_DEFAULTS) } } });
   const merged: Record<string, unknown> = { ...CONFIG_DEFAULTS };
   for (const r of rows) merged[r.key] = r.value;

@@ -4,12 +4,11 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { safeNextPath, zodFieldErrors, type ActionResult } from '@/lib/action-result';
 import { audit } from '@/server/audit';
-import { burnPasswordCheck, hashPassword, passwordSchema, verifyPassword } from '@/server/auth/password';
+import { hashPassword, passwordSchema } from '@/server/auth/password';
 import { clientIp, createSession, destroySession, revokeAllSessions } from '@/server/auth/session';
 import { attemptLogin } from '@/server/auth/login';
 import { hashToken } from '@/server/crypto';
 import { db } from '@/server/db';
-import { env } from '@/server/env';
 import { rateLimit, RateLimitError } from '@/server/rate-limit';
 
 const emailSchema = z.string().trim().toLowerCase().email('invalid_email').max(254);

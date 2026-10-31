@@ -3,7 +3,7 @@ import { InlineAction } from '@/components/forms/inline-action';
 import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Icon, Input, PageHeader, Select, Stat, statGrid } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { db } from '@/server/db';
-import { listTablesForLocation } from '@/server/services/tables';
+import { listTablesForLocation, qrSvg, tableQrUrl } from '@/server/services/tables';
 import { requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
 import { SetupStepNav } from '@/components/dashboard/setup-nav';
@@ -25,6 +25,13 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
   const base = `/dashboard/${ctx.org.slug}`;
   const canManage = ctx.can('tables.manage');
   const occupied = tables.filter((t) => t.sessions[0]).length;
+  // QR codes are drawn here, inside the page (about 2 KB each), instead of one signed-in image
+  // request per table: a page with 30 tables used to make 30 extra requests on every visit.
+  const qrImages = new Map(
+    await Promise.all(
+      tables.filter((t) => t.qrTokens[0]).map(async (t) => [t.id, `data:image/svg+xml;base64,${Buffer.from(await qrSvg(tableQrUrl(t.qrTokens[0].token), 160)).toString('base64')}`] as const),
+    ),
+  );
   // Tables grouped by dining area (in area order), tables without an area last.
   const groups = [
     ...areas.map((a) => ({ key: a.id, name: a.name, list: tables.filter((t) => t.areaId === a.id) })),
@@ -94,7 +101,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
                   <li key={t.id} className={cn('flex gap-3.5 rounded-[var(--radius-card)] border bg-surface p-3.5 shadow-xs', session ? 'border-accent/30' : 'border-line')} data-testid="table-card">
                     {token ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=svg`} alt={`QR code for table ${t.label}`} className="size-20 shrink-0 rounded-lg border border-line bg-white p-1" width={80} height={80} loading="lazy" decoding="async" />
+                      <img src={qrImages.get(t.id)} alt={`QR code for table ${t.label}`} className="size-20 shrink-0 rounded-lg border border-line bg-white p-1" width={80} height={80} decoding="async" />
                     ) : (
                       <span className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-dashed border-line text-muted" aria-hidden>
                         <Icon name="qr" className="size-6" />

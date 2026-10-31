@@ -140,3 +140,20 @@ test('published: the link card opens the live menu, and the preview shows it wit
   await expect(guest.getByTestId('storefront')).toHaveAttribute('dir', 'rtl');
   await guest.close();
 });
+
+test('the preview page fits a 360 px phone even before its script has measured the screen', async ({ browser }) => {
+  // Reproduces the intermittent "10 px wider" failure: on a slow phone the first paint happens
+  // before the device frame is scaled. With scripts off, that first paint is what we see.
+  const js = await browser.newContext();
+  const signin = await js.newPage();
+  await login(signin, s.owner, s.password);
+  const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, javaScriptEnabled: false });
+  await ctx.addCookies(await js.cookies());
+  await js.close();
+  const page = await ctx.newPage();
+  await page.goto(`/dashboard/${s.orgSlug}/preview`);
+  await expect(page.getByTestId('restaurant-preview')).toBeVisible();
+  const wider = await page.evaluate(() => document.documentElement.scrollWidth - 360);
+  expect(wider, `preview is ${wider}px wider than the screen`).toBeLessThanOrEqual(1);
+  await ctx.close();
+});

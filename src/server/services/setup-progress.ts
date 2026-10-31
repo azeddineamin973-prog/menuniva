@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { db } from '../db';
 import { countUnrouted } from './routing';
 
@@ -34,7 +35,10 @@ export type SetupProgress = { steps: SetupStep[]; completed: number; locationId:
  * location the owner currently has selected, so a second location's tables and publishing
  * register instead of leaving the checklist stuck on the first one.
  */
-export async function getSetupProgress(organizationId: string, locationId?: string | null): Promise<SetupProgress> {
+/** Memoized per page render: the sidebar card, the step bar and the setup page share one computation. */
+export const getSetupProgress = cache((organizationId: string, locationId?: string | null): Promise<SetupProgress> => computeSetupProgress(organizationId, locationId ?? null));
+
+async function computeSetupProgress(organizationId: string, locationId: string | null): Promise<SetupProgress> {
   const org = await db.restaurantOrganization.findUniqueOrThrow({
     where: { id: organizationId },
     include: { branding: true, locations: { orderBy: { createdAt: 'asc' } } },
