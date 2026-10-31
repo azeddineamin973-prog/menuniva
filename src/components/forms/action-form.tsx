@@ -2,7 +2,7 @@
 
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { createContext, useActionState, useContext, useEffect, useRef, useState } from 'react';
-import { Alert, Button, wrapButtonClass } from '@/components/ui';
+import { Alert, Button, wrapButtonClass, Icon } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { DEFAULT_UPLOAD_MAX_BYTES, parseUploadErrorCode, uploadMessage } from '@/lib/upload-messages';
@@ -151,8 +151,8 @@ export function ActionForm({
             {pending ? 'Saving…' : submitLabel}
           </Button>
           {shown?.ok && (
-            <span className="text-sm font-medium text-success" role="status">
-              ✓ {successText}
+            <span className="animate-fade-in inline-flex items-center gap-1.5 text-sm font-medium text-success" role="status">
+              <Icon name="checkCircle" className="size-4" /> {successText}
             </span>
           )}
         </div>

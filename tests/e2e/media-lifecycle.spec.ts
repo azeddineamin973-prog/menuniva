@@ -84,8 +84,8 @@ test('dish photo: upload, display to guests, remove', async ({ page }) => {
   await guest.close();
   expect(Buffer.from(await (await page.request.get(url)).body())).toEqual(png('dish-1'));
 
-  page.once('dialog', (d) => d.accept()); // "Remove this photo?" confirmation
   await tile.getByRole('button', { name: 'Remove' }).click();
+  await page.getByTestId('confirm-dialog').getByTestId('confirm-action').click(); // "Remove this photo?" confirmation
   await expect(page.locator(`img[src="${url}"]`)).toHaveCount(0);
   await expect.poll(photoUrls).toHaveLength(0);
   expect((await page.request.get(url)).status()).toBe(404);

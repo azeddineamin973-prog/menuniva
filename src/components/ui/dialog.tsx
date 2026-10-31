@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
 
 /**
@@ -61,8 +62,9 @@ export function Dialog({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-  if (!open) return null;
-  return (
+  if (!open || typeof document === 'undefined') return null;
+  // Portal: a dialog opened from inside a card, table or blurred bar is never clipped by it.
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid={testId}>
       <button type="button" aria-hidden tabIndex={-1} className="animate-fade-in absolute inset-0 bg-black/50" onClick={onClose} />
       <div
@@ -77,6 +79,7 @@ export function Dialog({
         {children && <div className="mt-4">{children}</div>}
         {footer && <div className="mt-5 flex flex-wrap justify-end gap-2">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

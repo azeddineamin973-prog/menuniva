@@ -117,8 +117,8 @@ test('menu: change the main photo, reorder and remove', async ({ page }) => {
   await expect(manager.getByTestId('managed-photo').first().locator('img')).toHaveAttribute('src', first!);
 
   // Remove the main photo: the other one takes over.
-  page.once('dialog', (d) => d.accept());
   await manager.getByTestId('managed-photo').first().getByTestId('remove-photo').click();
+  await page.getByTestId('confirm-dialog').getByTestId('confirm-action').click();
   await expect(manager.getByTestId('managed-photo')).toHaveCount(1);
   await expect(manager.getByTestId('managed-photo').first().locator('img')).not.toHaveAttribute('src', first!);
   await expect(manager.getByTestId('managed-photo').first().getByTestId('main-photo-badge')).toBeVisible();

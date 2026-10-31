@@ -110,8 +110,8 @@ test('M11-06..08 (browser): owner sets up loyalty, guest joins voluntarily with 
   const row = page.getByTestId('member-row').filter({ hasText: '+351900000088' });
   await expect(row.getByTestId('member-balance')).toContainText('0 / 5');
   await expect(row).not.toContainText('marketing opt-in');
-  page.once('dialog', (d) => d.accept());
   await row.getByTestId('member-delete').click();
+  await page.getByTestId('confirm-dialog').getByTestId('confirm-action').click();
   await expect(page.getByTestId('member-row')).toHaveCount(0);
   const [acc] = await sql<{ phone: string; deletedAt: Date | null }>(`SELECT phone, "deletedAt" FROM "LoyaltyAccount" WHERE "organizationId" = $1`, [s.orgId]);
   expect(acc.phone).not.toContain('900000088');
