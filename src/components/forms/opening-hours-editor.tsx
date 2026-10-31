@@ -1,4 +1,5 @@
 'use client';
+import { Icon } from '@/components/ui/icons';
 
 import { useState } from 'react';
 import { DAY_KEYS, type OpeningHours } from '@/lib/opening-hours';
@@ -59,7 +60,7 @@ export function OpeningHoursEditor({ name, initial, inheritsFrom }: { name: stri
                   aria-label={`Remove ${DAY_LABEL[day]} hours ${r.open}–${r.close}`}
                   onClick={() => update(day, ranges.filter((_, j) => j !== i))}
                 >
-                  ✕
+                  <Icon name="x" className="size-4" />
                 </button>
               </span>
             ))}

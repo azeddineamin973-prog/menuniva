@@ -71,7 +71,7 @@ function CaptureHelp() {
         </Button>
         {copied && (
           <span role="status" className="font-medium text-success">
-            ✓ Copied
+            <Icon name="check" className="me-1 inline size-3.5 align-[-2px]" />Copied
           </span>
         )}
       </div>

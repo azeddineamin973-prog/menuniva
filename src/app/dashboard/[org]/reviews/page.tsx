@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, PageHeader, Select, Stat, Textarea, statGrid } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, ChipRow, Checkbox, Disclosure, EmptyState, Field, FilterChip, Icon, PageHeader, Select, Stat, Textarea, humanize, statGrid } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { formatTimeInZone } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
@@ -12,9 +12,6 @@ import { requireTenantPage } from '@/server/tenant';
 import { feedbackNoteAction, feedbackStatusAction, reviewSettingsAction } from './actions';
 
 const STATUSES = ['NEW', 'INVESTIGATING', 'RESOLVED', 'ARCHIVED'] as const;
-/** Inbox filter chip. */
-const pill = (active: boolean) =>
-  `inline-flex min-h-8 items-center rounded-full px-3 text-sm ring-1 ring-line pointer-coarse:min-h-10 ${active ? 'bg-graphite font-medium text-white ring-graphite dark:bg-lime dark:text-graphite dark:ring-lime' : 'text-ink hover:bg-surface-2'}`;
 const TONE: Record<string, 'warning' | 'info' | 'success' | 'neutral'> = { NEW: 'warning', INVESTIGATING: 'info', RESOLVED: 'success', ARCHIVED: 'neutral' };
 
 export default async function ReviewsPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ status?: string; max?: string }> }) {
@@ -59,23 +56,22 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
       )}
       {!review?.googleReviewUrl && (
         <div className="mb-4">
-          <Alert tone="info">
-            No official Google review link is set for {location.name}. Add it in{' '}
-            <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>. Until then guests only see the private form.
+          <Alert tone="info" action={<Link className="text-sm font-medium underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Add link</Link>}>
+            No official Google review link is set for {location.name}. Until then guests only see the private feedback form.
           </Alert>
         </div>
       )}
       <div className={statGrid(4, 'mb-6')}>
-        <Stat label="Average (30 days)" value={<span data-testid="stat-average">{stats.average ?? '—'}</span>} hint={`${stats.count} responses`} />
-        <Stat label="Open" value={<span data-testid="stat-open">{stats.open}</span>} hint="New or investigating" />
-        <Stat label="Low ratings resolved" value={`${stats.lowResolved} / ${stats.lowTotal}`} hint="Ratings of 3★ or less" />
-        <Card>
-          <CardBody className="space-y-1">
+        <Stat icon="star" label="Average (30 days)" value={<span data-testid="stat-average">{stats.average ?? '—'}</span>} hint={`${stats.count} responses`} />
+        <Stat icon="inbox" tone={stats.open ? 'warning' : undefined} label="Open" value={<span data-testid="stat-open">{stats.open}</span>} hint="New or investigating" />
+        <Stat icon="checkCircle" label="Low ratings resolved" value={`${stats.lowResolved} / ${stats.lowTotal}`} hint="Ratings of 3★ or less" />
+        <Card aria-label="Rating distribution">
+          <CardBody className="space-y-1.5">
             {[5, 4, 3, 2, 1].map((r) => (
               <div key={r} className="flex items-center gap-2 text-xs">
-                <span className="w-6 tabular-nums">{r}★</span>
-                <span className="h-2 flex-1 rounded bg-surface-2">
-                  <span className="block h-2 rounded bg-lime" style={{ width: `${(stats.distribution[r - 1] / max) * 100}%` }} />
+                <span className="flex w-7 items-center gap-0.5 tabular-nums text-muted">{r}<Icon name="star" className="size-3" /></span>
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                  <span className="block h-full rounded-full bg-lime" style={{ width: `${(stats.distribution[r - 1] / max) * 100}%` }} />
                 </span>
                 <span className="w-6 text-end tabular-nums">{stats.distribution[r - 1]}</span>
               </div>
@@ -85,39 +81,41 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
       </div>
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <Card>
-          <CardHeader
-            title="Feedback inbox"
-            description={
-              <span className="mt-2 flex flex-wrap gap-1.5">
-                <Link href={q(undefined, maxRating)} aria-current={!status ? 'page' : undefined} className={pill(!status)}>Active</Link>
-                {STATUSES.map((s) => (
-                  <Link key={s} href={q(s, maxRating)} aria-current={status === s ? 'page' : undefined} className={pill(status === s)}>{s.charAt(0) + s.slice(1).toLowerCase()}</Link>
-                ))}
-                <Link href={q(status, maxRating ? undefined : 3)} aria-current={maxRating ? 'page' : undefined} className={pill(!!maxRating)} data-testid="filter-low">Only 3★ or less</Link>
-              </span>
-            }
-          />
+          <CardHeader title="Feedback inbox" icon="inbox" description={`${items.length} shown`} />
+          <div className="border-b border-line px-4 py-3 sm:px-5">
+            <ChipRow label="Filter feedback">
+              <FilterChip href={q(undefined, maxRating)} active={!status}>Active</FilterChip>
+              {STATUSES.map((s) => (
+                <FilterChip key={s} href={q(s, maxRating)} active={status === s}>{humanize(s)}</FilterChip>
+              ))}
+              <FilterChip href={q(status, maxRating ? undefined : 3)} active={!!maxRating} data-testid="filter-low">Only 3★ or less</FilterChip>
+            </ChipRow>
+          </div>
           {items.length === 0 ? (
-            <CardBody><EmptyState title="No feedback here yet" description="Guests can leave feedback from their order page or the feedback link." /></CardBody>
+            <CardBody><EmptyState icon="star" title="No feedback here yet" description="Guests can leave feedback from their order page or the feedback link." /></CardBody>
           ) : (
             <ul className="divide-y divide-line">
               {items.map((f) => (
-                <li key={f.id} className="space-y-2 px-5 py-4" data-testid="feedback-row">
+                <li key={f.id} className="space-y-2.5 px-4 py-4 sm:px-5" data-testid="feedback-row">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-lg font-semibold tracking-tight" aria-label={`${f.rating} out of 5`} data-testid="feedback-rating"><span className="text-amber-500">{'★'.repeat(f.rating)}</span><span className="text-muted/35">{'★'.repeat(5 - f.rating)}</span></span>
-                    <Badge tone={TONE[f.status]} data-testid="feedback-status">{f.status.toLowerCase()}</Badge>
-                    {f.order && <Badge tone="neutral">Order #{f.order.number} · {f.order.channel.toLowerCase().replace('_', '-')}</Badge>}
+                    <span className="inline-flex items-center gap-px" role="img" aria-label={`${f.rating} out of 5`} data-testid="feedback-rating">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Icon key={n} name="star" className={n <= f.rating ? 'size-4 fill-current text-warning' : 'size-4 text-line-strong'} />
+                      ))}
+                    </span>
+                    <Badge tone={TONE[f.status]} dot data-testid="feedback-status">{humanize(f.status)}</Badge>
+                    {f.order && <Badge tone="neutral">Order #{f.order.number} · {humanize(f.order.channel)}</Badge>}
                     <span className="ms-auto text-xs text-muted">{f.createdAt.toLocaleDateString('pt-PT')} {formatTimeInZone(f.createdAt, location.timeZone)} · {f.language.toUpperCase()}</span>
                   </div>
                   {f.categories.length > 0 && (
                     <div className="flex flex-wrap gap-1">{f.categories.map((c) => <Badge key={c} tone="dark">{m.feedback.categories[c]}</Badge>)}</div>
                   )}
-                  {f.comment && <p className="whitespace-pre-wrap text-sm">“{f.comment}”</p>}
+                  {f.comment && <p className="text-sm whitespace-pre-wrap text-ink break-words">“{f.comment}”</p>}
                   {f.wantsFollowUp && (
-                    <p className="text-sm text-warning" data-testid="feedback-contact">Asks to be contacted: {f.contactName ? `${f.contactName} · ` : ''}{f.contactInfo}</p>
+                    <p className="flex items-start gap-1.5 text-sm text-warning" data-testid="feedback-contact"><Icon name="phone" className="mt-0.5 size-3.5 shrink-0" />Asks to be contacted: {f.contactName ? `${f.contactName} · ` : ''}{f.contactInfo}</p>
                   )}
                   {f.notes.length > 0 && (
-                    <ul className="space-y-1 rounded-xl bg-surface-2 p-3 text-sm">
+                    <ul className="space-y-1 rounded-lg border border-line bg-surface-2/60 p-3 text-sm">
                       {f.notes.map((n) => <li key={n.id} data-testid="feedback-note"><span className="text-xs text-muted">{n.createdAt.toLocaleDateString('pt-PT')} · </span>{n.body}</li>)}
                     </ul>
                   )}
@@ -140,7 +138,7 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
         </Card>
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Repeated issues" description="Categories chosen in ratings of 3★ or less, last 30 days." />
+            <CardHeader icon="alert" title="Repeated issues" description="Categories chosen in ratings of 3★ or less, last 30 days." />
             <CardBody>
               {stats.issues.length === 0 ? (
                 <p className="text-sm text-muted">No repeated issues.</p>
@@ -154,9 +152,7 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
             </CardBody>
           </Card>
           {manage && (
-            <Card>
-              <CardHeader title="Feedback settings" />
-              <CardBody>
+            <Disclosure icon="settings" title="Feedback settings" description="Guest form and low-rating alerts">
                 <ActionForm action={reviewSettingsAction} testId="review-settings-form">
                   <input type="hidden" name="org" value={ctx.org.slug} />
                   <input type="hidden" name="locationId" value={location.id} />
@@ -166,10 +162,9 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
                       {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}★</option>)}
                     </Select>
                   </Field>
-                  <p className="text-xs text-muted">Guest feedback link: <code>/r/{ctx.org.slug}/feedback?l={location.slug}</code></p>
+                  <p className="text-xs break-all text-muted">Guest feedback link: <code>/r/{ctx.org.slug}/feedback?l={location.slug}</code></p>
                 </ActionForm>
-              </CardBody>
-            </Card>
+            </Disclosure>
           )}
         </div>
       </div>

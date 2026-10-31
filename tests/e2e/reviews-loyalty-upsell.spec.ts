@@ -39,7 +39,7 @@ test('M11 TEST 13 + 14 (browser): 1★ and 5★ get the same Google link; low ra
   await low.getByRole('button', { name: 'Add note' }).click();
   await expect(low.getByTestId('feedback-note')).toContainText('Called the guest');
   await low.getByTestId('fb-RESOLVED').click();
-  await expect(low.getByTestId('feedback-status')).toHaveText('resolved');
+  await expect(low.getByTestId('feedback-status')).toHaveText('Resolved');
   await expect(page.getByTestId('low-rating-alert')).toHaveCount(0);
   await expect(page.getByTestId('issues')).toContainText('Waiting time');
 });
@@ -109,7 +109,7 @@ test('M11-06..08 (browser): owner sets up loyalty, guest joins voluntarily with 
   await page.reload();
   const row = page.getByTestId('member-row').filter({ hasText: '+351900000088' });
   await expect(row.getByTestId('member-balance')).toContainText('0 / 5');
-  await expect(row).not.toContainText('marketing opt-in');
+  await expect(row).not.toContainText('Marketing opt-in');
   await row.getByTestId('member-delete').click();
   await page.getByTestId('confirm-dialog').getByTestId('confirm-action').click();
   await expect(page.getByTestId('member-row')).toHaveCount(0);

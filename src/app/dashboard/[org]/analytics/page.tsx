@@ -1,8 +1,6 @@
-import Link from 'next/link';
-import { Alert, Button, buttonClass, Card, CardBody, CardHeader, EmptyState, Input, PageHeader, Stat, statGrid } from '@/components/ui';
+import { Alert, Button, buttonClass, Card, CardBody, CardHeader, EmptyState, FilterChip, Icon, Input, PageHeader, Stat, statGrid } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { formatCents } from '@/lib/money';
-import { cn } from '@/lib/cn';
 import { currentLocation } from '@/server/current-location';
 import { hasModule } from '@/server/modules';
 import { resolveRange, restaurantAnalytics } from '@/server/services/analytics';
@@ -22,7 +20,7 @@ function Bars({ rows, label }: { rows: { key: string; label: string; value: numb
       {rows.map((r) => (
         <li key={r.key} className="flex items-center gap-2 text-xs">
           <span className="w-16 shrink-0 tabular-nums text-muted">{r.label}</span>
-          <span className="h-2.5 flex-1 rounded bg-surface-2"><span className="block h-2.5 rounded bg-lime" style={{ width: `${(r.value / max) * 100}%` }} /></span>
+          <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2"><span className="block h-full rounded-full bg-lime" style={{ width: `${(r.value / max) * 100}%` }} /></span>
           <span className="w-24 shrink-0 text-end tabular-nums">{r.hint}</span>
         </li>
       ))}
@@ -51,11 +49,11 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
     <>
       <PageHeader
         title={m.nav.analytics}
-        description={`${location.name} · ${range.from === range.to ? range.from : `${range.from} → ${range.to}`} · times in ${a.timeZone}. Every figure comes from recorded orders and payments.`}
+        description={`${location.name} · ${range.from === range.to ? range.from : `${range.from} – ${range.to}`} · times in ${a.timeZone}. Every figure comes from recorded orders and payments.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {PRESETS.map(([k, label]) => (
-              <Link key={k} href={`${base}?p=${k}`} aria-current={range.preset === k ? 'page' : undefined} className={cn('inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium ring-1 ring-line pointer-coarse:h-10', range.preset === k ? 'bg-graphite text-white dark:bg-lime dark:text-graphite' : 'hover:bg-surface-2')} data-testid={`range-${k}`}>{label}</Link>
+              <FilterChip key={k} href={`${base}?p=${k}`} active={range.preset === k} data-testid={`range-${k}`}>{label}</FilterChip>
             ))}
             <form className="flex flex-wrap items-center gap-1.5" data-testid="range-custom">
               <input type="hidden" name="p" value="custom" />
@@ -64,9 +62,9 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
               <Button type="submit" variant="secondary" size="sm">Apply</Button>
             </form>
             {canExport ? (
-              <a href={`/api/dashboard/${ctx.org.slug}/analytics/export?${q}`} className={buttonClass('primary', 'sm')} data-testid="export-csv">Export CSV</a>
+              <a href={`/api/dashboard/${ctx.org.slug}/analytics/export?${q}`} className={buttonClass('secondary', 'sm')} data-testid="export-csv"><Icon name="download" />Export CSV</a>
             ) : (
-              <span className="text-xs text-muted" title="Not included in your plan">CSV export not in plan</span>
+              <span className="inline-flex items-center gap-1 text-xs text-muted" title="Not included in your plan"><Icon name="lock" className="size-3.5" />CSV export not in plan</span>
             )}
           </div>
         }
@@ -75,17 +73,17 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
         <Alert tone="info">Order value is what orders were worth. Collected is money actually recorded as paid. They are different numbers on purpose.</Alert>
       </div>
       <div className={statGrid(4, 'mb-6')}>
-        <Stat label="Order value" value={<span data-testid="m-order-value">{money(a.money.orderValueCents)}</span>} hint={`${a.orders.total - a.orders.cancelled} orders, cancelled excluded`} />
-        <Stat label="Collected payments" value={<span data-testid="m-collected">{money(a.money.collectedCents)}</span>} hint="Recorded in this period, voided excluded" />
-        <Stat label="Unpaid" value={<span data-testid="m-unpaid">{money(a.money.unpaidCents)}</span>} hint={`${money(a.money.unpaidFinishedCents)} on finished orders`} />
-        <Stat label="Cancelled value" value={<span data-testid="m-cancelled">{money(a.money.cancelledValueCents)}</span>} hint={`${a.orders.cancelled} cancelled orders`} />
+        <Stat icon="chart" label="Order value" value={<span data-testid="m-order-value">{money(a.money.orderValueCents)}</span>} hint={`${a.orders.total - a.orders.cancelled} orders, cancelled excluded`} />
+        <Stat icon="card" label="Collected payments" value={<span data-testid="m-collected">{money(a.money.collectedCents)}</span>} hint="Recorded in this period, voided excluded" />
+        <Stat icon="alert" label="Unpaid" value={<span data-testid="m-unpaid">{money(a.money.unpaidCents)}</span>} hint={`${money(a.money.unpaidFinishedCents)} on finished orders`} />
+        <Stat icon="x" label="Cancelled value" value={<span data-testid="m-cancelled">{money(a.money.cancelledValueCents)}</span>} hint={`${a.orders.cancelled} cancelled orders`} />
         <Stat label="Average order" value={a.orders.averageCents === null ? '—' : money(a.orders.averageCents)} />
         <Stat label="Discounts given" value={money(a.money.discountCents)} />
         <Stat label="Delivery fees" value={money(a.money.deliveryFeesCents)} />
         <Stat label="Completed orders" value={a.orders.completed} />
       </div>
       {a.orders.total === 0 ? (
-        <EmptyState title="No orders in this period" description="Pick another period, or come back once guests have ordered." />
+        <EmptyState icon="chart" title="No orders in this period" description="Pick another period, or come back once guests have ordered." />
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ActionForm, FieldError } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select, disclosureClass } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select, disclosureClass, humanize } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { centsToInputValue, formatCents } from '@/lib/money';
@@ -53,7 +53,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
       {location.deliveryEnabled && !settings?.deliveryHours && !location.openingHours && (
         <div className="mb-4" data-testid="no-hours-warning"><Alert tone="danger" title="No hours set">Guests can currently order delivery at any time of day. Enter delivery hours below or your opening hours in Settings.</Alert></div>
       )}
-      {!location.deliveryEnabled && <div className="mb-4"><Alert tone="warning">Delivery is switched off. Turn it on in <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
+      {!location.deliveryEnabled && <div className="mb-4"><Alert tone="warning">Delivery is switched off. Turn it on in <Link className="font-medium underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="space-y-6">
           <Card>
@@ -66,7 +66,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
                   <li key={o.id} className="space-y-2 px-5 py-3 text-sm" data-testid="active-delivery">
                     <div className="flex flex-wrap justify-between gap-2">
                       <span><strong>#{o.number}</strong> · {o.delivery?.addressLine}, {o.delivery?.postalCode} {o.delivery?.city}</span>
-                      <span className="flex gap-2"><Badge>{o.status.toLowerCase().replace(/_/g, ' ')}</Badge><span className="tabular-nums">{formatCents(o.totalCents)}</span></span>
+                      <span className="flex gap-2"><Badge>{humanize(o.status)}</Badge><span className="tabular-nums">{formatCents(o.totalCents)}</span></span>
                     </div>
                     <p className="text-xs text-muted">{o.delivery?.zone?.name} · {o.customerPhone} · {o.paymentMethodIntent === 'CARD_TERMINAL' ? 'card at the door' : 'cash on delivery'}{o.paymentStatus === 'PAID' ? ' · paid' : ''}</p>
                     <ActionForm action={assignDriverAction} submitLabel="Assign" submitVariant="secondary" className="flex items-center gap-2 space-y-0">
@@ -112,7 +112,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
               {zones.map((z) => (
                 <li key={z.id} className="space-y-2 px-5 py-4" data-testid="zone">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <span className="font-medium">{z.name} {!z.isActive && <Badge tone="danger">inactive</Badge>}</span>
+                    <span className="font-medium">{z.name} {!z.isActive && <Badge tone="danger">Inactive</Badge>}</span>
                     <span className="text-muted">{formatCents(z.feeCents)}{z.minOrderCents ? ` · min ${formatCents(z.minOrderCents)}` : ''}{z.freeDeliveryThresholdCents !== null ? ` · free from ${formatCents(z.freeDeliveryThresholdCents)}` : ''}</span>
                   </div>
                   <details>

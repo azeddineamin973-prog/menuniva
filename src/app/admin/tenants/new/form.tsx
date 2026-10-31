@@ -4,7 +4,7 @@ import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
-import { Alert, Button, Field, Input, Select } from '@/components/ui';
+import { Alert, Button, Field, Input, Select, Icon } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { createTenantAction } from '../../actions';
 
@@ -25,7 +25,7 @@ export function CreateTenantForm() {
         ) : (
           <p className="text-sm text-muted">The owner already had an account and has been added as owner.</p>
         )}
-        <Link href={`/admin/tenants/${d.id}`} className="text-sm font-medium underline">Open tenant →</Link>
+        <Link href={`/admin/tenants/${d.id}`} className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-2">Open tenant <Icon name="arrowRight" className="size-3.5" /></Link>
       </div>
     );
   }

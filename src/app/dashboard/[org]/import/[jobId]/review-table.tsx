@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { ProductThumb } from '@/components/dashboard/product-thumb';
-import { Badge, Button, Input, Select } from '@/components/ui';
+import { Badge, Button, Input, Select, Icon } from '@/components/ui';
 import { initialActionState } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { formatCents } from '@/lib/money';
@@ -368,7 +368,7 @@ export function ReviewTable({
                         )}
                         {i.warnings.length > 0 && (
                           <p className="mt-1 text-xs text-warning" title={i.warnings.join('\n')}>
-                            ⚠ {i.warnings[0]}
+                            <Icon name="alert" className="me-1 inline size-3.5 align-[-2px]" />{i.warnings[0]}
                             {i.warnings.length > 1 && <span className="text-muted"> +{i.warnings.length - 1}</span>}
                           </p>
                         )}

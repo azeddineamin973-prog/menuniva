@@ -74,7 +74,7 @@ test('M12 TEST 16 (browser): Super Admin switches a module off, records billing;
 
     await page.goto(`/dashboard/${s.orgSlug}/subscription`);
     await expect(page.getByTestId('sub-plan')).toHaveText('Starter');
-    await expect(page.getByTestId('sub-status')).toHaveText('trialing');
+    await expect(page.getByTestId('sub-status')).toHaveText('Trialing');
     await expect(page.getByTestId('feature-promotions')).toHaveAttribute('data-on', 'false');
     await expect(page.getByTestId('feature-loyalty')).toHaveAttribute('data-on', 'true'); // trial includes every module
     await expect(page.getByTestId('limit-menuItems')).toContainText('2 / 250');

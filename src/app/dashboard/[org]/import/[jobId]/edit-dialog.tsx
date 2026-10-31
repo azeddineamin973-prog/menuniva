@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { ProductThumb } from '@/components/dashboard/product-thumb';
-import { Alert, Button, Field, Input, Select, Textarea } from '@/components/ui';
+import { Alert, Button, Field, Input, Select, Textarea, Icon } from '@/components/ui';
 import { initialActionState } from '@/lib/action-result';
 import { centsToInputValue, formatCents } from '@/lib/money';
 import { saveImportItemAction } from '../actions';
@@ -158,7 +158,7 @@ export function EditDialog({
           {item.warnings.length > 0 && (
             <ul className="space-y-0.5 text-xs text-warning">
               {item.warnings.map((w) => (
-                <li key={w}>⚠ {w}</li>
+                <li key={w} className="flex items-start gap-1.5"><Icon name="alert" className="mt-0.5 size-3.5 shrink-0" />{w}</li>
               ))}
             </ul>
           )}

@@ -14,19 +14,19 @@ export default async function SupportPage() {
     <>
       <PageHeader title="Support issues" description="Requests sent by restaurants from their dashboard." />
       {tickets.length === 0 ? (
-        <EmptyState title="No support issues" />
+        <EmptyState icon="help" title="No support issues" description="Requests restaurants send from their dashboard appear here." />
       ) : (
         <Card>
-          <CardHeader title={`${tickets.length} issues`} />
+          <CardHeader icon="help" title={`${tickets.length} ${tickets.length === 1 ? 'issue' : 'issues'}`} />
           <ul className="divide-y divide-line">
             {tickets.map((t) => (
-              <li key={t.id} className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
+              <li key={t.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:px-5">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{t.subject}</p>
+                  <p className="font-medium break-words text-ink">{t.subject}</p>
                   <p className="text-xs text-muted">{t.organization?.name ?? 'No tenant'} · {t.createdAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
-                  <p className="mt-1 text-sm whitespace-pre-wrap">{t.body}</p>
+                  <p className="mt-1.5 text-sm break-words whitespace-pre-wrap text-ink-2">{t.body}</p>
                 </div>
-                <ActionForm action={updateSupportTicketAction} submitLabel="Update" submitVariant="secondary" className="flex items-end gap-2 space-y-0">
+                <ActionForm action={updateSupportTicketAction} submitLabel="Update" submitVariant="secondary" className="flex flex-wrap items-center gap-2 space-y-0">
                   <input type="hidden" name="id" value={t.id} />
                   <Select name="status" defaultValue={t.status} aria-label="Status" className="w-40">
                     <option value="OPEN">Open</option>

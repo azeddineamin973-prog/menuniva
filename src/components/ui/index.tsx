@@ -384,3 +384,40 @@ export function Tabs({ items, className, label }: { items: { href: string; label
 export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
   return <kbd className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded border border-line bg-surface-2 px-1 font-sans text-[11px] text-muted', className)}>{children}</kbd>;
 }
+
+// ------------------------------------------------------------------ filters & disclosure
+
+/** Filter chip (link or button). Same look everywhere: menu filters, inboxes, date ranges. */
+export function chipClass(active: boolean, extra?: string) {
+  return cn(
+    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:h-10',
+    active ? 'border-ink bg-ink text-bg' : 'border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink',
+    extra,
+  );
+}
+
+export function FilterChip({ href, active, count, children, className, ...props }: ComponentProps<typeof Link> & { active: boolean; count?: number }) {
+  return (
+    <Link href={href} aria-current={active ? 'true' : undefined} className={chipClass(active, className as string | undefined)} {...props}>
+      {children}
+      {count !== undefined && <span className={cn('rounded px-1 text-[11px] tabular-nums', active ? 'bg-white/15 dark:bg-black/15' : 'bg-surface-2 text-muted')}>{count}</span>}
+    </Link>
+  );
+}
+
+/** Horizontal, scrollable row of filter chips (one line on phones). */
+export function ChipRow({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <nav aria-label={label} className={cn('mn-scroll -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0', className)}>
+      {children}
+    </nav>
+  );
+}
+
+export { Disclosure } from './disclosure';
+
+/** "OUT_FOR_DELIVERY" → "Out for delivery". For enum values shown to staff. */
+export function humanize(value: string) {
+  const s = value.toLowerCase().replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

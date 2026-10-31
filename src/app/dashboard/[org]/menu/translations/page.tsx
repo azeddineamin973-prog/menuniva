@@ -182,8 +182,8 @@ export default async function TranslationsPage({ params, searchParams }: { param
 
           {grid.pages > 1 && (
             <div className="mt-4 flex items-center justify-between gap-3" data-testid="tr-pagination">
-              <ButtonLink href={href({ page: String(grid.page - 1) })} variant="secondary" size="sm" aria-disabled={grid.page === 1} className={grid.page === 1 ? 'pointer-events-none opacity-50' : ''}>
-                ← Previous
+              <ButtonLink href={href({ page: String(grid.page - 1) })} variant="secondary" size="sm" aria-disabled={grid.page === 1} icon="chevronLeft" className={grid.page === 1 ? 'pointer-events-none opacity-50' : ''}>
+                Previous
               </ButtonLink>
               <span className="text-sm text-muted">
                 Page {grid.page} of {grid.pages}
@@ -193,9 +193,10 @@ export default async function TranslationsPage({ params, searchParams }: { param
                 variant="secondary"
                 size="sm"
                 aria-disabled={grid.page === grid.pages}
+                iconEnd="chevronRight"
                 className={grid.page === grid.pages ? 'pointer-events-none opacity-50' : ''}
               >
-                Next →
+                Next
               </ButtonLink>
             </div>
           )}

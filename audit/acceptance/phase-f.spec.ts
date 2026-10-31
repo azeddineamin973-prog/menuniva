@@ -209,7 +209,7 @@ test('PROMOTIONS: percentage, fixed, expired code, duplicate code, single-use co
     if (o.amount) await f.getByLabel('€ off').fill(o.amount);
     if (o.buy) await f.getByLabel('Buy X').fill(o.buy);
     if (o.get) await f.getByLabel('Get Y free').fill(o.get);
-    if (o.cat) await f.getByLabel('Categories (empty = all)').selectOption({ label: o.cat });
+    if (o.cat) await f.getByRole('group', { name: /Categories/ }).getByLabel(o.cat, { exact: true }).check();
     if (o.starts) await f.getByLabel('Starts').fill(o.starts);
     if (o.ends) await f.getByLabel('Ends').fill(o.ends);
     if (o.codeUses) await f.getByLabel('Code uses').fill(o.codeUses);

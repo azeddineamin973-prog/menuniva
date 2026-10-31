@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { ActionForm } from '@/components/forms/action-form';
-import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, Select } from '@/components/ui';
+import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, Select, humanize } from '@/components/ui';
 import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
 import { MODULE_LABELS, MODULES } from '@/lib/modules';
@@ -35,7 +35,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const sub = org.subscription;
   return (
     <>
-      <PageHeader title={org.name} description={`/${org.slug} · ${org.country} · created ${d(org.createdAt)}`} actions={<Badge tone={org.status === 'ACTIVE' ? 'success' : org.status === 'SUSPENDED' ? 'danger' : 'info'}>{org.status}</Badge>} />
+      <PageHeader back={{ href: '/admin', label: 'Tenants' }} title={org.name} meta={<Badge dot tone={org.status === 'ACTIVE' ? 'success' : org.status === 'SUSPENDED' ? 'danger' : 'info'}>{humanize(org.status)}</Badge>} description={`/${org.slug} · ${org.country} · created ${d(org.createdAt)}`} />
       {sub?.pendingPlanId && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-4 text-sm" data-testid="admin-pending-plan">
           <span>The owner requested a change to <strong>{plans.find((p) => p.id === sub.pendingPlanId)?.name ?? sub.pendingPlanId}</strong>. Agree the price with them first.</span>
@@ -129,7 +129,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                 {org.memberships.map((m) => (
                   <li key={m.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                     <span className="min-w-0 break-words">{m.user.name} · {m.user.email}</span>
-                    <Badge>{m.role.replace('RESTAURANT_', '').replace(/_/g, ' ').toLowerCase()}</Badge>
+                    <Badge>{humanize(m.role.replace('RESTAURANT_', ''))}</Badge>
                   </li>
                 ))}
               </ul>
@@ -157,8 +157,8 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
               {sub.billingRecords.map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center gap-3 py-2" data-testid="billing-record">
                   <span className="font-medium tabular-nums">{formatCents(r.amountCents)}</span>
-                  <span className="text-muted">{d(r.periodStart)} → {d(r.periodEnd)}</span>
-                  <Badge tone={r.status === 'VOIDED' ? 'danger' : 'success'}>{r.status.toLowerCase().replace(/_/g, ' ')}</Badge>
+                  <span className="text-muted">{d(r.periodStart)} – {d(r.periodEnd)}</span>
+                  <Badge tone={r.status === 'VOIDED' ? 'danger' : 'success'}>{humanize(r.status)}</Badge>
                   {r.note && <span className="text-xs text-muted">{r.note}</span>}
                   {r.status !== 'VOIDED' && <span className="ms-auto"><InlineAction action={voidBillingAction} fields={{ recordId: r.id, reason: 'Recorded by mistake' }} label="Void" variant="ghost" confirm="Void this billing record (recorded by mistake)?" /></span>}
                 </li>

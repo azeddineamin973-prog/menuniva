@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { AppShell, type ShellAlert, type SidebarLink } from '@/components/dashboard/sidebar';
-import { Badge } from '@/components/ui';
+import { Badge, Icon } from '@/components/ui';
 import { ToastProvider } from '@/components/ui/toast';
 import { dirOf, getMessages, LANGUAGE_TAG } from '@/i18n';
 import { NAV_ITEMS } from '@/lib/nav';
@@ -58,7 +58,7 @@ export default async function DashboardLayout({ children, params }: { children: 
           <Badge tone="lime">Setup</Badge>
           <span className="text-ink-2">Your restaurant is not published yet.</span>
           <Link href={`${base}/setup`} className="inline-flex min-h-8 items-center font-medium text-ink underline-offset-4 hover:underline">
-            Continue setup →
+            Continue setup <Icon name="arrowRight" className="ms-0.5 inline size-3.5 align-[-2px]" />
           </Link>
         </div>
       )}

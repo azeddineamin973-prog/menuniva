@@ -169,12 +169,12 @@ export default async function StorefrontPage({ params, searchParams }: { params:
               {m.customer.directions}
             </a>
           )}
-          {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Website ↗</a>}
+          {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Website<Icon name="external" className="size-3.5 opacity-70" /></a>}
           {location.instagramUrl && <a href={location.instagramUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Instagram</a>}
           {location.facebookUrl && <a href={location.facebookUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Facebook</a>}
           {location.tiktokUrl && <a href={location.tiktokUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>TikTok</a>}
           {modules.has('feedback') && <Link href={`/r/${org.slug}/feedback?l=${location.slug}`} className={CHIP}>{m.customer.leaveFeedback}</Link>}
-          {review?.googleReviewUrl && <a href={review.googleReviewUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Google ↗</a>}
+          {review?.googleReviewUrl && <a href={review.googleReviewUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Google<Icon name="external" className="size-3.5 opacity-70" /></a>}
         </div>
       </div>
       <div id="menu">

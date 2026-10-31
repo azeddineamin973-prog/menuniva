@@ -2,7 +2,7 @@
 
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input } from '@/components/ui';
+import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Icon } from '@/components/ui';
 import { arrangeProductImageAction, removeProductImageAction, uploadProductImageAction } from '../actions';
 
 export type ManagedPhoto = { id: string; url: string; origin: string };
@@ -49,8 +49,8 @@ export function PhotoManager({ org, productId, photos, maxPhotos, maxBytes }: { 
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                   <span className="flex">
-                    <InlineAction action={arrangeProductImageAction} fields={f(p.id, { move: 'left' })} label="←" title="Move earlier" variant="ghost" className={`px-2! ${i === 0 ? 'invisible' : ''}`} />
-                    <InlineAction action={arrangeProductImageAction} fields={f(p.id, { move: 'right' })} label="→" title="Move later" variant="ghost" className={`px-2! ${i === photos.length - 1 ? 'invisible' : ''}`} />
+                    <InlineAction action={arrangeProductImageAction} fields={f(p.id, { move: 'left' })} label={<Icon name="arrowLeft" className="size-4 rtl:rotate-180" />} title="Move earlier" variant="ghost" className={`px-2! ${i === 0 ? 'invisible' : ''}`} />
+                    <InlineAction action={arrangeProductImageAction} fields={f(p.id, { move: 'right' })} label={<Icon name="arrowRight" className="size-4 rtl:rotate-180" />} title="Move later" variant="ghost" className={`px-2! ${i === photos.length - 1 ? 'invisible' : ''}`} />
                   </span>
                   <InlineAction action={removeProductImageAction} fields={f(p.id)} label="Remove" variant="ghost" className="px-2! text-danger" confirm="Remove this photo? It is deleted from your menu." testId="remove-photo" />
                 </div>

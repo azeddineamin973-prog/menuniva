@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, Button, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Input, Label, PageHeader, Select } from '@/components/ui';
+import { Alert, Badge, Button, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Icon, Input, Label, PageHeader, Select, humanize } from '@/components/ui';
 import { getMessages, LANGUAGE_TAG } from '@/i18n';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { formatTimeInZone, zonedParts } from '@/lib/time';
@@ -51,38 +51,38 @@ export default async function ReservationsPage({ params, searchParams }: { param
         description="Guests request a time; you confirm. No SMS is sent — guests check their private status page."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <ButtonLink href={`${base}?date=${shift(date, -1)}`} variant="secondary" size="sm" aria-label="Previous day">←</ButtonLink>
+            <ButtonLink href={`${base}?date=${shift(date, -1)}`} variant="secondary" size="sm" aria-label="Previous day" title="Previous day" icon="chevronLeft" className="px-2 rtl:[&_svg]:rotate-180" />
             <form className="flex items-center gap-2">
-              <Input type="date" name="date" defaultValue={date} className="w-40" aria-label="Date" />
+              <Input type="date" name="date" defaultValue={date} className="w-40 min-w-0" aria-label="Date" />
               <Button type="submit" variant="secondary" size="sm">Go</Button>
             </form>
-            <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm" aria-label="Next day">→</ButtonLink>
+            <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm" aria-label="Next day" title="Next day" icon="chevronRight" className="px-2 rtl:[&_svg]:rotate-180" />
             {date !== today && <ButtonLink href={base} variant="ghost" size="sm">Today</ButtonLink>}
           </div>
         }
       />
-      {!location.reservationsEnabled && <div className="mb-4"><Alert tone="warning">Reservations are switched off. Turn them on in <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
+      {!location.reservationsEnabled && <div className="mb-4"><Alert tone="warning" action={<Link className="text-sm font-medium underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Ordering channels</Link>}>Reservations are switched off, so guests cannot book online.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card>
           <CardHeader title={new Date(`${date}T12:00:00Z`).toLocaleDateString(LANGUAGE_TAG[ctx.user.preferredLanguage], { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })} description={`${list.length} reservations · ${covers} guests expected`} />
           {list.length === 0 ? (
-            <CardBody><EmptyState title="No reservations for this day" /></CardBody>
+            <CardBody><EmptyState icon="calendar" title="No reservations for this day" description="Guest requests appear here as soon as they are made." /></CardBody>
           ) : (
             <ul className="divide-y divide-line">
               {list.map((r) => (
-                <li key={r.id} className="space-y-2 px-5 py-4" data-testid="reservation-row">
+                <li key={r.id} className="space-y-2 px-4 py-3.5 sm:px-5" data-testid="reservation-row">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-lg font-semibold tabular-nums">{formatTimeInZone(r.startsAt, location.timeZone)}</span>
                     <span className="flex-1 font-medium">{r.name} · {r.partySize} guests</span>
-                    <Badge tone={TONE[r.status]}>{r.status.toLowerCase().replace('_', ' ')}</Badge>
+                    <Badge tone={TONE[r.status]} dot>{humanize(r.status)}</Badge>
                   </div>
                   <p className="text-sm text-muted">{r.phone}{r.email ? ` · ${r.email}` : ''}</p>
-                  {r.specialRequest && <p className="text-sm text-warning">“{r.specialRequest}”</p>}
+                  {r.specialRequest && <p className="flex items-start gap-1.5 text-sm text-warning"><Icon name="info" className="mt-0.5 size-3.5 shrink-0" />{r.specialRequest}</p>}
                   <div className="flex flex-wrap items-center gap-2">
                     {r.assignments.map((a) => (
                       <span key={a.id} className="flex items-center gap-1">
                         <Badge tone="dark" data-testid="assigned-table">Table {a.table.label}</Badge>
-                        <InlineAction action={unassignTableAction} fields={{ org: ctx.org.slug, reservationId: r.id, tableId: a.table.id }} label={<><span aria-hidden>✕</span><span className="sr-only">Remove table {a.table.label}</span></>} title="Remove table" variant="ghost" />
+                        <InlineAction action={unassignTableAction} fields={{ org: ctx.org.slug, reservationId: r.id, tableId: a.table.id }} label={<><Icon name="x" className="size-3.5" /><span className="sr-only">Remove table {a.table.label}</span></>} title="Remove table" variant="ghost" />
                       </span>
                     ))}
                     {['REQUESTED', 'CONFIRMED', 'ARRIVED'].includes(r.status) && tables.length > 0 && (
@@ -106,8 +106,8 @@ export default async function ReservationsPage({ params, searchParams }: { param
           )}
         </Card>
         {ctx.can('settings.manage') && (
-          <Card>
-            <CardHeader title="Reservation settings" />
+          <Card className="xl:sticky xl:top-20">
+            <CardHeader icon="settings" title="Reservation settings" />
             <CardBody>
               <ActionForm action={saveReservationSettingsAction} testId="reservation-settings-form">
                 <input type="hidden" name="org" value={ctx.org.slug} />

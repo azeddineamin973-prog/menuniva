@@ -1,7 +1,6 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Badge, Button, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, PageHeader, Select } from '@/components/ui';
-import { cn } from '@/lib/cn';
+import { Badge, Button, Card, CardBody, CardHeader, Checkbox, Disclosure, EmptyState, Field, FilterChip, Icon, Input, PageHeader, Select, humanize } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
 import { loyaltyMembers, rewardText } from '@/server/services/loyalty';
@@ -32,38 +31,36 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
         <Card>
           <CardHeader
+            icon="users"
             title={`Members (${members.length})`}
-            action={
-              <form className="flex w-full flex-wrap items-center gap-2 sm:w-auto" role="search">
-                <Input name="q" type="search" defaultValue={sp.q ?? ''} placeholder="Phone or name" className="min-w-0 flex-1 sm:w-48 sm:flex-none" aria-label="Search members" data-testid="member-search" />
-                <Button type="submit" variant="secondary" size="sm">Search</Button>
-                <a
-                  href={sp.birthdays ? `/dashboard/${ctx.org.slug}/loyalty` : `/dashboard/${ctx.org.slug}/loyalty?birthdays=1`}
-                  className={cn('inline-flex min-h-8 items-center rounded-full px-3 text-sm whitespace-nowrap ring-1 ring-line pointer-coarse:min-h-10', sp.birthdays ? 'bg-graphite text-white dark:bg-lime dark:text-graphite' : 'hover:bg-surface-2')}
-                  data-testid="birthdays-filter"
-                >
-                  {sp.birthdays ? 'All members' : `Birthdays this month (${birthdayCount})`}
-                </a>
-              </form>
-            }
           />
+          <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
+            <form className="relative flex min-w-0 flex-1 basis-56 items-center gap-2" role="search">
+              <Icon name="search" className="pointer-events-none absolute start-3 text-muted" />
+              <Input name="q" type="search" defaultValue={sp.q ?? ''} placeholder="Phone or name" className="min-w-0 flex-1 ps-9" aria-label="Search members" data-testid="member-search" />
+              <Button type="submit" variant="secondary">Search</Button>
+            </form>
+            <FilterChip href={sp.birthdays ? `/dashboard/${ctx.org.slug}/loyalty` : `/dashboard/${ctx.org.slug}/loyalty?birthdays=1`} active={!!sp.birthdays} count={sp.birthdays ? undefined : birthdayCount} data-testid="birthdays-filter">
+              {sp.birthdays ? 'All members' : 'Birthdays this month'}
+            </FilterChip>
+          </div>
           {members.length === 0 ? (
-            <CardBody><EmptyState title={sp.q ? 'No member matches this search' : 'No members yet'} description={program?.enabled ? 'Guests see the invitation on their order page.' : 'Switch the programme on to invite guests.'} /></CardBody>
+            <CardBody><EmptyState icon="heart" title={sp.q ? 'No member matches this search' : 'No members yet'} description={program?.enabled ? 'Guests see the invitation on their order page.' : 'Switch the programme on to invite guests.'} /></CardBody>
           ) : (
             <ul className="divide-y divide-line">
               {members.map((a) => (
-                <li key={a.id} className="space-y-2 px-5 py-4" data-testid="member-row">
+                <li key={a.id} className="space-y-2 px-4 py-3.5 sm:px-5" data-testid="member-row">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium tabular-nums">{a.phone}</span>
                     {a.name && <span className="text-muted">· {a.name}</span>}
                     <Badge tone={a.balance >= target ? 'lime' : 'neutral'} data-testid="member-balance">{a.balance} / {target} {unit}</Badge>
-                    {a.marketingOptIn && <Badge tone="info">marketing opt-in</Badge>}
-                    {a.birthday && <Badge tone="neutral">birthday {a.birthday.split('-').reverse().join('/')}</Badge>}
+                    {a.marketingOptIn && <Badge tone="info">Marketing opt-in</Badge>}
+                    {a.birthday && <Badge tone="neutral">Birthday {a.birthday.split('-').reverse().join('/')}</Badge>}
                     <span className="ms-auto text-xs text-muted">joined {a.createdAt.toLocaleDateString('pt-PT')}</span>
                   </div>
                   {a.transactions.length > 0 && (
                     <p className="text-xs text-muted">
-                      {a.transactions.map((t) => `${t.type.toLowerCase()} ${t.amount > 0 ? '+' : ''}${t.amount}${t.note ? ` (${t.note})` : ''}`).join(' · ')}
+                      {a.transactions.map((t) => `${humanize(t.type)} ${t.amount > 0 ? '+' : ''}${t.amount}${t.note ? ` (${t.note})` : ''}`).join(' · ')}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-1.5">
@@ -76,9 +73,7 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
             </ul>
           )}
         </Card>
-        <Card>
-          <CardHeader title="Programme settings" />
-          <CardBody>
+        <Disclosure icon="settings" title="Programme settings" description={program?.enabled ? `On · ${target} ${unit} for a reward` : 'Off · open to switch it on'} defaultOpen={!program?.enabled} className="xl:sticky xl:top-20">
             <ActionForm action={saveLoyaltyProgramAction} testId="loyalty-settings-form">
               <input type="hidden" name="org" value={ctx.org.slug} />
               <Checkbox name="enabled" label="Loyalty programme on" defaultChecked={program?.enabled ?? false} />
@@ -101,8 +96,7 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
                 <Input id="ly-exp" name="expiryDays" type="number" min={30} max={1095} defaultValue={program?.expiryDays ?? ''} />
               </Field>
             </ActionForm>
-          </CardBody>
-        </Card>
+        </Disclosure>
       </div>
     </>
   );

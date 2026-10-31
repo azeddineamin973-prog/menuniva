@@ -1,4 +1,4 @@
-import { Badge, Card, CardBody, CardHeader, Field, Input, PageHeader } from '@/components/ui';
+import { Badge, Card, CardBody, CardHeader, Field, Input, PageHeader, humanize } from '@/components/ui';
 import { db } from '@/server/db';
 import { integrationHealth } from '@/server/services/admin';
 import { adminResetLinkAction } from '../actions';
@@ -24,7 +24,7 @@ export default async function HealthPage() {
                   <span className="font-medium">{i.name}</span>
                   <span className="block text-xs text-muted">{i.note}</span>
                 </span>
-                <Badge tone={i.status === 'CONNECTED' ? 'success' : i.status.startsWith('NOT') ? 'neutral' : 'info'}>{i.status}</Badge>
+                <Badge tone={i.status === 'CONNECTED' ? 'success' : i.status.startsWith('NOT') ? 'neutral' : 'info'}>{humanize(i.status)}</Badge>
               </li>
             ))}
           </ul>

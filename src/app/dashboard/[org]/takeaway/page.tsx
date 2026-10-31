@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ActionForm, FieldError } from '@/components/forms/action-form';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select, humanize } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { centsToInputValue, formatCents } from '@/lib/money';
@@ -31,7 +31,7 @@ export default async function TakeawayPage({ params }: { params: Promise<{ org: 
       {location.takeawayEnabled && !settings?.pickupHours && !location.openingHours && (
         <div className="mb-4" data-testid="no-hours-warning"><Alert tone="danger" title="No hours set">Guests can currently order takeaway at any time of day. Enter pickup hours below or your opening hours in Settings.</Alert></div>
       )}
-      {!location.takeawayEnabled && <div className="mb-4"><Alert tone="warning">Takeaway is switched off. Turn it on in <Link className="underline" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
+      {!location.takeawayEnabled && <div className="mb-4"><Alert tone="warning">Takeaway is switched off. Turn it on in <Link className="font-medium underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Settings → Ordering channels</Link>.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader title="Pickup settings" description={`Today: ${opts.asap.allowed ? 'as soon as possible available' : 'no immediate pickup'} · ${opts.slots.length} pickup times left.`} />
@@ -69,7 +69,7 @@ export default async function TakeawayPage({ params }: { params: Promise<{ org: 
                   <span><strong>#{o.number}</strong> · {o.customerName} · {o.customerPhone}</span>
                   <span className="flex items-center gap-2">
                     {o.pickupAt && <Badge tone="dark">{formatTimeInZone(o.pickupAt, location.timeZone)}</Badge>}
-                    <Badge>{o.status.toLowerCase()}</Badge>
+                    <Badge>{humanize(o.status)}</Badge>
                     <span className="tabular-nums">{formatCents(o.totalCents)}</span>
                   </span>
                 </li>

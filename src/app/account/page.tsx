@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Logo } from '@/components/brand/logo';
 import { ActionForm } from '@/components/forms/action-form';
-import { Alert, Card, CardBody, CardHeader, Field, Input, Select } from '@/components/ui';
+import { Alert, Card, CardBody, CardHeader, Field, Input, Select, Icon } from '@/components/ui';
 import { LANGUAGE_NATIVE_NAME, LANGUAGES } from '@/i18n/config';
 import { getCurrentUser } from '@/server/auth/session';
 import { changePasswordAction, deleteAccountAction, updateProfileAction } from './actions';
@@ -17,7 +17,7 @@ export default async function AccountPage() {
     <main className="mx-auto max-w-2xl space-y-6 px-4 py-10">
       <div className="flex items-center justify-between">
         <Logo />
-        <Link href="/dashboard" className="inline-flex min-h-10 items-center text-sm underline underline-offset-2">← Dashboard</Link>
+        <Link href="/dashboard" className="inline-flex min-h-10 items-center gap-1 text-[13px] font-medium text-muted hover:text-ink"><Icon name="arrowLeft" className="size-3.5 rtl:rotate-180" /> Dashboard</Link>
       </div>
       <h1 className="text-2xl font-semibold tracking-tight">My account</h1>
       <Card>

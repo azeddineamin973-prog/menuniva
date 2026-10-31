@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { ActionForm } from '@/components/forms/action-form';
-import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass } from '@/components/ui';
+import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass, humanize } from '@/components/ui';
 import { formatCents } from '@/lib/money';
 import { db } from '@/server/db';
 import { UserFacingError } from '@/server/errors';
@@ -60,7 +60,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
               <CardHeader
                 title={`Order #${o.number}`}
                 description={`${o.createdAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })} · ${formatCents(o.totalCents)}`}
-                action={<span className="flex gap-1.5"><Badge>{o.status.toLowerCase()}</Badge><Badge tone={o.paymentStatus === 'PAID' ? 'success' : o.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'neutral'}>{o.paymentStatus.replace('_', ' ').toLowerCase()}</Badge></span>}
+                action={<span className="flex gap-1.5"><Badge>{humanize(o.status)}</Badge><Badge tone={o.paymentStatus === 'PAID' ? 'success' : o.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'neutral'}>{o.paymentStatus.replace('_', ' ').toLowerCase()}</Badge></span>}
               />
               <ul className="divide-y divide-line">
                 {o.items.map((i) => {

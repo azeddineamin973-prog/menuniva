@@ -87,48 +87,44 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
             ) : (
               <ActionForm action={assignCategoryStationsAction} submitLabel="Save routing" submitVariant="dark" successText="Routing saved" testId="category-routing-form">
                 <input type="hidden" name="org" value={ctx.org.slug} />
-                <div className="overflow-x-auto rounded-xl border border-line">
-                  <table className="w-full text-sm">
-                    <thead className="bg-surface-2">
-                      <tr>
-                        <th className="p-2 text-start font-medium">Category</th>
-                        <th className="p-2 text-start font-medium">Dishes</th>
-                        <th className="p-2 text-start font-medium">Station</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                      {review.categories.map((c) => (
-                        <tr key={c.categoryId} data-testid="routing-row" data-category={c.name}>
-                          <td className="p-2">
-                            <span className="font-medium">{c.name}</span>
-                            {!c.currentStationId && <Badge tone="warning" className="ms-2">No station</Badge>}
-                            {c.suggestedStationId && c.suggestedStationId !== c.currentStationId && <span className="ms-2 text-xs text-muted">suggested: {c.suggestedStationName}</span>}
-                          </td>
-                          <td className="p-2 text-xs text-muted">
-                            {c.products}
-                            {c.overridden > 0 && <span className="block">{c.overridden} set individually</span>}
-                          </td>
-                          <td className="p-2">
-                            <Select
-                              name={`station:${c.categoryId}`}
-                              defaultValue={c.suggestedStationId ?? c.currentStationId ?? ''}
-                              aria-label={`Station for ${c.name}`}
-                              className="w-full min-w-36 sm:w-48"
-                              data-testid={`station-select-${c.categoryId}`}
-                            >
-                              <option value="">— no station —</option>
-                              {activeStations.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* A list rather than a table: on phones each category gets the full width for its station picker. */}
+                <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+                  <li className="hidden grid-cols-[minmax(0,1fr)_5rem_14rem] gap-3 bg-surface-2/60 px-3 py-2 text-xs font-medium text-muted sm:grid" aria-hidden>
+                    <span>Category</span>
+                    <span>Dishes</span>
+                    <span>Station</span>
+                  </li>
+                  {review.categories.map((c) => (
+                    <li key={c.categoryId} className="grid gap-2 px-3 py-2.5 text-sm sm:grid-cols-[minmax(0,1fr)_5rem_14rem] sm:items-center sm:gap-3" data-testid="routing-row" data-category={c.name}>
+                      <span className="min-w-0">
+                        <span className="font-medium break-words text-ink">{c.name}</span>
+                        {!c.currentStationId && <Badge tone="warning" className="ms-2">No station</Badge>}
+                        {c.suggestedStationId && c.suggestedStationId !== c.currentStationId && <span className="block text-xs text-muted">Suggested: {c.suggestedStationName}</span>}
+                        <span className="block text-xs text-muted sm:hidden">
+                          {c.products} dishes{c.overridden > 0 ? ` · ${c.overridden} set individually` : ''}
+                        </span>
+                      </span>
+                      <span className="hidden text-xs text-muted sm:block">
+                        {c.products}
+                        {c.overridden > 0 && <span className="block">{c.overridden} set individually</span>}
+                      </span>
+                      <Select
+                        name={`station:${c.categoryId}`}
+                        defaultValue={c.suggestedStationId ?? c.currentStationId ?? ''}
+                        aria-label={`Station for ${c.name}`}
+                        className="w-full"
+                        data-testid={`station-select-${c.categoryId}`}
+                      >
+                        <option value="">— no station —</option>
+                        {activeStations.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </li>
+                  ))}
+                </ul>
                 <p className="text-xs text-muted">Saving applies every row as shown above, including the ones you changed by hand. Dishes with their own station keep it.</p>
               </ActionForm>
             )}

@@ -390,7 +390,7 @@ function OrderCard({ o, org, now, tag, t, canManage, busy, onStatus, onAck, onPr
             {i.notes && <span className="block ps-5 text-xs font-medium text-warning">“{i.notes}”</span>}
             {!i.stationId && (
               <span className="block ps-5 text-xs text-warning" data-testid="item-no-station">
-                ⚠ {t.noStation}
+                <Icon name="alert" className="me-1 inline size-3.5 align-[-2px]" />{t.noStation}
               </span>
             )}
           </li>

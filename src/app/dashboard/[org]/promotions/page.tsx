@@ -1,5 +1,5 @@
 import { ActionForm, FieldError } from '@/components/forms/action-form';
-import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Label, PageHeader, Select, disclosureClass } from '@/components/ui';
+import { Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, Label, PageHeader, Select, disclosureClass } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { centsToInputValue, formatCents } from '@/lib/money';
 import { zonedParts } from '@/lib/time';
@@ -58,19 +58,31 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
         <div data-promo-field="BUY_X_GET_Y"><Field label="Get Y free" htmlFor={`gy-${p?.id ?? 'new'}`}><Input id={`gy-${p?.id ?? 'new'}`} name="getQuantity" type="number" min={1} defaultValue={p?.getQuantity ?? ''} /></Field></div>
         <div data-promo-field="COMBO"><Field label="Combo €" htmlFor={`cp-${p?.id ?? 'new'}`}><Input id={`cp-${p?.id ?? 'new'}`} name="comboPrice" inputMode="decimal" defaultValue={centsToInputValue(p?.comboPriceCents)} /></Field></div>
       </div>
-      <p className="text-xs text-muted pointer-coarse:hidden">To choose several dishes or categories, hold Ctrl (⌘ on a Mac) while clicking.</p>
+      {/* Checkbox lists instead of multi-selects: no Ctrl-click, and easy to use with a thumb. */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Dishes (empty = all; combo = the dishes in the combo)" htmlFor={`pr-${p?.id ?? 'new'}`}>
-          <Select id={`pr-${p?.id ?? 'new'}`} name="productIds" multiple className="h-32 py-1 sm:h-40" defaultValue={p?.productIds ?? []}>
-            {products.map((x) => <option key={x.id} value={x.id}>{pickName(x.translations, langs)}</option>)}
-          </Select>
+        <fieldset className="min-w-0">
+          <legend className="mb-1.5 text-sm font-medium text-ink">Dishes <span className="font-normal text-muted">(none = all; combo = the dishes in the combo)</span></legend>
+          <div className="mn-scroll max-h-44 space-y-px overflow-y-auto rounded-lg border border-line bg-surface p-1">
+            {products.map((x) => (
+              <label key={x.id} className="flex min-h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm hover:bg-surface-2 has-checked:bg-accent-soft/60 pointer-coarse:min-h-10">
+                <input type="checkbox" name="productIds" value={x.id} defaultChecked={p?.productIds.includes(x.id)} className="size-4 shrink-0 accent-[#6cb30a]" />
+                <span className="min-w-0 truncate">{pickName(x.translations, langs)}</span>
+              </label>
+            ))}
+          </div>
           <FieldError name="productIds" />
-        </Field>
-        <Field label="Categories (empty = all)" htmlFor={`ca-${p?.id ?? 'new'}`}>
-          <Select id={`ca-${p?.id ?? 'new'}`} name="categoryIds" multiple className="h-32 py-1 sm:h-40" defaultValue={p?.categoryIds ?? []}>
-            {categories.map((x) => <option key={x.id} value={x.id}>{pickName(x.translations, langs)}</option>)}
-          </Select>
-        </Field>
+        </fieldset>
+        <fieldset className="min-w-0">
+          <legend className="mb-1.5 text-sm font-medium text-ink">Categories <span className="font-normal text-muted">(none = all)</span></legend>
+          <div className="mn-scroll max-h-44 space-y-px overflow-y-auto rounded-lg border border-line bg-surface p-1">
+            {categories.map((x) => (
+              <label key={x.id} className="flex min-h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm hover:bg-surface-2 has-checked:bg-accent-soft/60 pointer-coarse:min-h-10">
+                <input type="checkbox" name="categoryIds" value={x.id} defaultChecked={p?.categoryIds.includes(x.id)} className="size-4 shrink-0 accent-[#6cb30a]" />
+                <span className="min-w-0 truncate">{pickName(x.translations, langs)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </div>
       <div>
         <Label>Channels</Label>
@@ -102,23 +114,22 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
 
   return (
     <>
-      <PageHeader title={m.nav.promotions} description="Discounts are calculated on the server for every order. A euro is never discounted twice and totals never go below zero." />
-      <div className="mb-4"><Alert tone="info">Promotions are optional. Guests see the saving in their cart and on their order.</Alert></div>
-      <div className="grid gap-6 xl:grid-cols-[1fr_520px]">
+      <PageHeader title={m.nav.promotions} description="Optional discounts. Guests see the saving in their cart and on their order. Totals never go below zero and a euro is never discounted twice." />
+            <div className="grid gap-6 xl:grid-cols-[1fr_520px]">
         <Card>
-          <CardHeader title={`Promotions (${promos.length})`} />
+          <CardHeader icon="tag" title={`Promotions (${promos.length})`} />
           {promos.length === 0 ? (
-            <CardBody className="text-sm text-muted">No promotions yet.</CardBody>
+            <CardBody><EmptyState icon="tag" title="No promotions yet" description="Create one with the form. It applies automatically to matching orders." /></CardBody>
           ) : (
             <ul className="divide-y divide-line">
               {promos.map((p) => (
-                <li key={p.id} className="px-5 py-4" data-testid="promotion">
+                <li key={p.id} className="px-4 py-3.5 sm:px-5" data-testid="promotion">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">{p.name}</span>
                     <span className="flex flex-wrap gap-1.5">
-                      <Badge tone={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'active' : 'off'}</Badge>
+                      <Badge tone={p.isActive ? 'success' : 'neutral'} dot>{p.isActive ? 'Active' : 'Off'}</Badge>
                       <Badge>{summary(p)}</Badge>
-                      {p.coupons[0] && <Badge tone="dark">code {p.coupons[0].code}</Badge>}
+                      {p.coupons[0] && <Badge tone="dark">Code {p.coupons[0].code}</Badge>}
                       <Badge>{p._count.orderDiscounts} uses{p.usageLimit ? ` / ${p.usageLimit}` : ''}</Badge>
                     </span>
                   </div>
@@ -133,8 +144,8 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
             </ul>
           )}
         </Card>
-        <Card>
-          <CardHeader title="New promotion" />
+        <Card className="xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto">
+          <CardHeader icon="plus" title="New promotion" />
           <CardBody>
             <ActionForm action={savePromotionAction} submitLabel="Create promotion" resetOnSuccess testId="promotion-form">
               <PromoFields />

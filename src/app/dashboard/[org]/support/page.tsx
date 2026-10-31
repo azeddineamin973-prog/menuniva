@@ -1,5 +1,5 @@
 import { ActionForm } from '@/components/forms/action-form';
-import { Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Textarea } from '@/components/ui';
+import { Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Textarea, humanize } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { getPlatformConfig } from '@/server/services/platform-config';
 import { mySupportRequests } from '@/server/services/support';
@@ -27,7 +27,7 @@ export default async function SupportPage({ params }: { params: Promise<{ org: s
                 <li key={t.id} className="space-y-1 px-5 py-3" data-testid="support-request">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{t.subject}</span>
-                    <Badge tone={TONE[t.status] ?? 'neutral'}>{t.status.toLowerCase().replace('_', ' ')}</Badge>
+                    <Badge tone={TONE[t.status] ?? 'neutral'}>{humanize(t.status)}</Badge>
                     <span className="ms-auto text-xs text-muted">{t.createdAt.toLocaleDateString('pt-PT')}</span>
                   </div>
                   <p className="text-sm whitespace-pre-wrap text-muted">{t.body}</p>

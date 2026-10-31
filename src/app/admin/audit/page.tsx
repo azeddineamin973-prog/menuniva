@@ -1,4 +1,5 @@
-import { Card, CardHeader, PageHeader } from '@/components/ui';
+import { Card, CardHeader, EmptyState, PageHeader } from '@/components/ui';
+import { Table, TableWrap, TD, TH, THead, TR } from '@/components/ui/table';
 import { db } from '@/server/db';
 import { requirePlatformAdminPage } from '@/server/tenant';
 
@@ -16,29 +17,38 @@ export default async function AuditPage() {
   return (
     <>
       <PageHeader title="Platform audit log" description="Every Super Admin action is recorded here." />
-      <Card className="overflow-x-auto">
-        <CardHeader title={`${logs.length} most recent platform actions`} />
-        <table className="w-full text-sm">
-          <thead className="text-xs text-muted uppercase">
-            <tr>
-              <th className="px-4 py-2 text-start">When (UTC)</th>
-              <th className="px-4 py-2 text-start">Action</th>
-              <th className="px-4 py-2 text-start">Actor</th>
-              <th className="px-4 py-2 text-start">Tenant</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((l) => (
-              <tr key={l.id} className="border-t border-line">
-                <td className="px-4 py-2 whitespace-nowrap">{l.createdAt.toISOString().slice(0, 19).replace('T', ' ')}</td>
-                <td className="px-4 py-2 font-mono text-xs">{l.action}</td>
-                <td className="px-4 py-2">{l.actor?.email ?? 'system'}</td>
-                <td className="px-4 py-2">{l.organization?.name ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      {logs.length === 0 ? (
+        <EmptyState icon="book" title="No platform actions yet" description="Changes made by Super Admins (tenants, plans, settings) are listed here." />
+      ) : (
+        <Card className="overflow-hidden">
+          <CardHeader icon="book" title="Recent platform actions" description={`${logs.length} most recent`} />
+          <TableWrap>
+            <Table>
+              <THead>
+                <tr>
+                  <TH>When (UTC)</TH>
+                  <TH>Action</TH>
+                  <TH className="hidden sm:table-cell">Actor</TH>
+                  <TH className="hidden md:table-cell">Tenant</TH>
+                </tr>
+              </THead>
+              <tbody>
+                {logs.map((l) => (
+                  <TR key={l.id}>
+                    <TD className="whitespace-nowrap tabular-nums">{l.createdAt.toISOString().slice(0, 16).replace('T', ' ')}</TD>
+                    <TD>
+                      <span className="font-mono text-xs break-all">{l.action}</span>
+                      <span className="block text-xs text-muted sm:hidden">{l.actor?.email ?? 'system'}</span>
+                    </TD>
+                    <TD className="hidden sm:table-cell">{l.actor?.email ?? 'system'}</TD>
+                    <TD className="hidden md:table-cell">{l.organization?.name ?? '—'}</TD>
+                  </TR>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrap>
+        </Card>
+      )}
     </>
   );
 }

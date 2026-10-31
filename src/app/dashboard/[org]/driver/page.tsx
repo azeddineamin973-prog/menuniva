@@ -1,5 +1,5 @@
 import { ActionForm } from '@/components/forms/action-form';
-import { Badge, Card, CardBody, Checkbox, EmptyState, PageHeader } from '@/components/ui';
+import { Badge, buttonClass, Card, CardBody, Checkbox, EmptyState, Icon, PageHeader, humanize } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { fmt } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
@@ -20,7 +20,7 @@ export default async function DriverPage({ params }: { params: Promise<{ org: st
     <>
       <PageHeader title={t.driverTitle} />
       {orders.length === 0 ? (
-        <EmptyState title={t.driverEmpty} />
+        <EmptyState icon="truck" title={t.driverEmpty} />
       ) : (
         <div className="space-y-4">
           {orders.map((o) => {
@@ -31,22 +31,22 @@ export default async function DriverPage({ params }: { params: Promise<{ org: st
               <Card key={o.id} data-testid="driver-order">
                 <CardBody className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xl font-semibold">#{o.number}</p>
-                    <Badge tone={o.status === 'OUT_FOR_DELIVERY' ? 'info' : o.status === 'READY' ? 'lime' : 'neutral'}>{o.status.toLowerCase().replace(/_/g, ' ')}</Badge>
+                    <p className="text-xl font-semibold tabular-nums">#{o.number}</p>
+                    <Badge tone={o.status === 'OUT_FOR_DELIVERY' ? 'info' : o.status === 'READY' ? 'lime' : 'neutral'} dot>{humanize(o.status)}</Badge>
                   </div>
                   <div>
                     <p className="text-xs text-muted">{t.deliverTo}</p>
                     <p className="font-medium">{d.recipientName}</p>
-                    <p>{d.addressLine}, {d.postalCode} {d.city}</p>
-                    {d.notes && <p className="text-sm text-warning">“{d.notes}”</p>}
+                    <p className="break-words">{d.addressLine}, {d.postalCode} {d.city}</p>
+                    {d.notes && <p className="mt-1 flex items-start gap-1.5 text-sm text-warning"><Icon name="info" className="mt-0.5 size-3.5 shrink-0" />{d.notes}</p>}
                   </div>
                   <p className="text-sm text-muted">{o.items.map((i) => `${i.quantity}× ${i.nameSnapshot}`).join(', ')}</p>
                   <p className="text-sm">
                     <strong className="tabular-nums">{formatCents(o.totalCents)}</strong> · {o.paymentStatus === 'PAID' ? t.paid : o.paymentMethodIntent === 'CARD_TERMINAL' ? m.customer.cardOnDelivery : m.customer.cashOnDelivery}
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    <a href={`tel:${d.phone.replace(/\s/g, '')}`} className="inline-flex h-11 items-center rounded-xl border border-line px-4 text-sm">📞 {t.callCustomer}</a>
-                    <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-xl border border-line px-4 text-sm">🗺 {t.openMap}</a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a href={`tel:${d.phone.replace(/\s/g, '')}`} className={buttonClass('secondary', 'lg')}><Icon name="phone" /> {t.callCustomer}</a>
+                    <a href={mapUrl} target="_blank" rel="noopener noreferrer" className={buttonClass('secondary', 'lg')}><Icon name="map" /> {t.openMap}</a>
                   </div>
                   {o.status === 'READY' && (
                     <ActionForm action={driverUpdateAction} submitLabel={t.outForDelivery} testId="driver-out">

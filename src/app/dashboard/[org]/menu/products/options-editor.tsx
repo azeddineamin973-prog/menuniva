@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ActionForm } from '@/components/forms/action-form';
-import { Button, Card, CardBody, CardHeader, Checkbox, Input } from '@/components/ui';
+import { Button, Card, CardBody, CardHeader, Checkbox, Input, Icon } from '@/components/ui';
 import type { LanguageCode } from '@/generated/prisma/enums';
 import { LANGUAGE_NATIVE_NAME } from '@/i18n/config';
 import { saveOptionsAction } from '../actions';
@@ -18,7 +18,7 @@ function NamesInput({ names, onChange, languages, source, placeholder }: { names
   const others = languages.filter((l) => l !== source);
   return (
     <div className="min-w-0 flex-1">
-      <Input value={names[source] ?? ''} placeholder={`${placeholder} (${LANGUAGE_NATIVE_NAME[source]})`} onChange={(e) => onChange({ ...names, [source]: e.target.value })} />
+      <Input value={names[source] ?? ''} aria-label={`${placeholder} (${LANGUAGE_NATIVE_NAME[source]})`} placeholder={`${placeholder} (${LANGUAGE_NATIVE_NAME[source]})`} onChange={(e) => onChange({ ...names, [source]: e.target.value })} />
       {others.length > 0 && (
         <button type="button" className="mt-1 inline-flex min-h-8 items-center rounded-lg px-1 text-xs text-muted underline-offset-2 hover:text-ink hover:underline pointer-coarse:min-h-10" onClick={() => setOpen(!open)} aria-expanded={open}>
           {open ? 'Hide translations' : `Translations (${others.filter((l) => names[l]?.trim()).length}/${others.length})`}
@@ -27,7 +27,7 @@ function NamesInput({ names, onChange, languages, source, placeholder }: { names
       {open && (
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {others.map((l) => (
-            <Input key={l} dir={l === 'ar' ? 'rtl' : 'ltr'} value={names[l] ?? ''} placeholder={LANGUAGE_NATIVE_NAME[l]} onChange={(e) => onChange({ ...names, [l]: e.target.value })} className="h-9" />
+            <Input key={l} dir={l === 'ar' ? 'rtl' : 'ltr'} value={names[l] ?? ''} aria-label={`${placeholder} (${LANGUAGE_NATIVE_NAME[l]})`} placeholder={LANGUAGE_NATIVE_NAME[l]} onChange={(e) => onChange({ ...names, [l]: e.target.value })} className="h-9" />
           ))}
         </div>
       )}
@@ -87,7 +87,7 @@ export function OptionsEditor({ org, productId, languages, source, initial }: { 
                       Max qty <Input type="number" min={1} max={20} className="w-16" value={o.maxQuantity} onChange={(e) => updGroup(i, { options: g.options.map((x, m) => (m === k ? { ...x, maxQuantity: Number(e.target.value) } : x)) })} />
                     </label>
                     <Checkbox label="Available" checked={o.isAvailable} onChange={(e) => updGroup(i, { options: g.options.map((x, m) => (m === k ? { ...x, isAvailable: e.target.checked } : x)) })} />
-                    <Button type="button" variant="ghost" size="sm" onClick={() => updGroup(i, { options: g.options.filter((_, m) => m !== k) })}>✕</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => updGroup(i, { options: g.options.filter((_, m) => m !== k) })} aria-label="Remove option" title="Remove option" className="px-2"><Icon name="x" /></Button>
                   </div>
                 ))}
                 <Button type="button" variant="secondary" size="sm" onClick={() => updGroup(i, { options: [...g.options, { names: {}, priceDelta: '0', maxQuantity: 1, isAvailable: true }] })}>

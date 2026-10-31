@@ -1,6 +1,6 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Input, PageHeader, Select, Stat, statGrid } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, Field, Icon, Input, PageHeader, Select, Stat, humanize, statGrid } from '@/components/ui';
 import { cancelPlanChangeAction, planChangeAction } from '../support/actions';
 import { getMessages, LANGUAGE_TAG } from '@/i18n';
 import { MODULE_LABELS, MODULES } from '@/lib/modules';
@@ -36,8 +36,8 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
       {sub.status === 'PAST_DUE' && <div className="mb-4"><Alert tone="warning">A payment is overdue. Please contact MenuNiva support{config.supportEmail ? ` (${config.supportEmail})` : ''}.</Alert></div>}
       {trialDays !== null && trialDays <= 0 && <div className="mb-4"><Alert tone="warning">Your trial has ended. Only your plan's features remain available.</Alert></div>}
       <div className={statGrid(3, 'mb-6')}>
-        <Stat label="Plan" value={<span data-testid="sub-plan">{sub.plan.name}</span>} hint={sub.plan.monthlyPriceCents !== null ? `${formatCents(sub.plan.monthlyPriceCents)} / month` : 'Price agreed individually'} />
-        <Stat label="Status" value={<Badge tone={TONE[sub.status]} data-testid="sub-status">{sub.status.toLowerCase().replace('_', ' ')}</Badge>} hint={sub.billingPeriod === 'YEARLY' ? 'Billed yearly' : 'Billed monthly'} />
+        <Stat icon="card" label="Plan" value={<span data-testid="sub-plan">{sub.plan.name}</span>} hint={sub.plan.monthlyPriceCents !== null ? `${formatCents(sub.plan.monthlyPriceCents)} / month` : 'Price agreed individually'} />
+        <Stat label="Status" value={<Badge tone={TONE[sub.status]} dot data-testid="sub-status">{humanize(sub.status)}</Badge>} hint={sub.billingPeriod === 'YEARLY' ? 'Billed yearly' : 'Billed monthly'} />
         <Stat
           label={sub.status === 'TRIALING' ? 'Trial ends' : 'Current period ends'}
           value={fmtDate(sub.status === 'TRIALING' ? sub.trialEndsAt : sub.currentPeriodEnd)}
@@ -46,7 +46,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Plan limits" description="Your current usage, counted live." />
+          <CardHeader icon="activity" title="Plan limits" description="Your current usage, counted live." />
           <CardBody className="space-y-3">
             {LIMIT_KEYS.map((k) => {
               const limit = limits[k];
@@ -55,19 +55,19 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
               return (
                 <div key={k} data-testid={`limit-${k}`}>
                   <div className="flex justify-between text-sm"><span>{LIMIT_LABELS[k]}</span><span className="tabular-nums">{used}{limit !== undefined ? ` / ${limit}` : ''}</span></div>
-                  {limit !== undefined && <div className="mt-1 h-1.5 rounded bg-surface-2"><div className={pct >= 90 ? 'h-1.5 rounded bg-warning' : 'h-1.5 rounded bg-lime'} style={{ width: `${pct}%` }} /></div>}
+                  {limit !== undefined && <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2"><div className={pct >= 90 ? 'h-full rounded-full bg-warning' : 'h-full rounded-full bg-lime'} style={{ width: `${pct}%` }} /></div>}
                 </div>
               );
             })}
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Features" description={sub.status === 'TRIALING' && config.trialIncludesAllModules && trialDays !== null && trialDays > 0 ? 'During the trial every feature is available.' : 'Included in your plan or added for you.'} />
+          <CardHeader icon="layers" title="Features" description={sub.status === 'TRIALING' && config.trialIncludesAllModules && trialDays !== null && trialDays > 0 ? 'During the trial every feature is available.' : 'Included in your plan or added for you.'} />
           <CardBody>
             <ul className="grid gap-1.5 text-sm sm:grid-cols-2">
               {MODULES.map((k) => (
                 <li key={k} className="flex items-center gap-2" data-testid={`feature-${k}`} data-on={modules.has(k)}>
-                  <span aria-hidden className={modules.has(k) ? 'text-success' : 'text-muted'}>{modules.has(k) ? '✓' : '—'}</span>
+                  <Icon name={modules.has(k) ? 'checkCircle' : 'minus'} className={modules.has(k) ? 'size-4 text-success' : 'size-4 text-muted/60'} />
                   <span className={modules.has(k) ? '' : 'text-muted'}>{MODULE_LABELS[k]}</span>
                 </li>
               ))}
@@ -76,7 +76,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
         </Card>
       </div>
       <Card className="mt-6">
-        <CardHeader title="Change plan" description="Your request goes to MenuNiva. Nothing changes until it is confirmed; you are told the price before any change." />
+        <CardHeader icon="refresh" title="Change plan" description="Your request goes to MenuNiva. Nothing changes until it is confirmed; you are told the price before any change." />
         <CardBody>
           {sub.pendingPlanId ? (
             <div className="flex flex-wrap items-center gap-3 text-sm" data-testid="pending-plan">
@@ -97,7 +97,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
         </CardBody>
       </Card>
       <Card className="mt-6">
-        <CardHeader title="Billing history" description="Only payments MenuNiva actually recorded. These are not legal invoices." />
+        <CardHeader icon="bill" title="Billing history" description="Only payments MenuNiva actually recorded. These are not legal invoices." />
         {sub.billingRecords.length === 0 ? (
           <CardBody><p className="text-sm text-muted" data-testid="billing-empty">No payments recorded yet.</p></CardBody>
         ) : (
@@ -106,7 +106,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
               <li key={r.id} className="flex flex-wrap items-center gap-3 px-5 py-3" data-testid="billing-row">
                 <span className="font-medium tabular-nums">{formatCents(r.amountCents)}</span>
                 <span className="text-muted">{fmtDate(r.periodStart)} – {fmtDate(r.periodEnd)}</span>
-                {r.status === 'VOIDED' && <Badge tone="danger">voided</Badge>}
+                {r.status === 'VOIDED' && <Badge tone="danger">Voided</Badge>}
                 {r.note && r.status !== 'VOIDED' && <span className="text-xs text-muted">{r.note}</span>}
               </li>
             ))}

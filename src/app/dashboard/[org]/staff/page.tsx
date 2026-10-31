@@ -1,6 +1,6 @@
 import { ActionForm } from '@/components/forms/action-form';
 import { LinkResultForm } from '@/components/forms/link-result-form';
-import { Alert, Badge, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass } from '@/components/ui';
+import { Alert, Badge, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass, humanize } from '@/components/ui';
 import { assignableRoles } from '@/lib/permissions';
 import { db } from '@/server/db';
 import { EMAIL_DELIVERY_AVAILABLE } from '@/server/email';
@@ -52,7 +52,7 @@ export default async function StaffPage({ params }: { params: Promise<{ org: str
                     </div>
                     <div className="flex gap-2">
                       <Badge tone="dark">{ROLE_LABEL[m.role]}</Badge>
-                      {m.status !== 'ACTIVE' && <Badge tone="danger">{m.status}</Badge>}
+                      {m.status !== 'ACTIVE' && <Badge tone="danger">{humanize(m.status)}</Badge>}
                     </div>
                   </div>
                   {editable && (

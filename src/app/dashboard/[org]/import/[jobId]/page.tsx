@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { InlineAction } from '@/components/forms/inline-action';
 import { ProductThumb } from '@/components/dashboard/product-thumb';
-import { Alert, Badge, ButtonLink, Card, EmptyState } from '@/components/ui';
+import { Alert, Badge, ButtonLink, Card, EmptyState, Icon } from '@/components/ui';
 import { LANGUAGE_NATIVE_NAME, LANGUAGE_TAG } from '@/i18n/config';
 import { formatCents } from '@/lib/money';
 import { formatDateTimeInZone } from '@/lib/time';
@@ -116,8 +116,8 @@ export default async function ImportJobPage({ params }: { params: Promise<{ org:
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Link href={`${base}/import`} className="inline-flex min-h-9 items-center text-sm text-muted hover:text-ink pointer-coarse:min-h-10">
-            ← Import Studio
+          <Link href={`${base}/import`} className="inline-flex min-h-9 items-center gap-1 text-[13px] text-muted hover:text-ink pointer-coarse:min-h-10">
+            <Icon name="arrowLeft" className="size-3.5 rtl:rotate-180" /> Import Studio
           </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Review import</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -161,7 +161,7 @@ export default async function ImportJobPage({ params }: { params: Promise<{ org:
           </p>
           {!!result.withoutStation && (
             <p className="mt-1 text-sm text-warning" data-testid="publish-unrouted">
-              ⚠ {result.withoutStation} dishes have no preparation station and will not appear on any kitchen screen.
+              <Icon name="alert" className="me-1 inline size-4 align-[-3px]" />{result.withoutStation} dishes have no preparation station and will not appear on any kitchen screen.
             </p>
           )}
           <p className="mt-2 text-sm text-muted">Next: add your dine-in prices in the menu, then make the dishes visible to guests.</p>

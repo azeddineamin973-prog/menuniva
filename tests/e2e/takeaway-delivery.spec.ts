@@ -117,7 +117,7 @@ test('M9-07/08/11: owner assigns the driver; driver takes it out and delivers wi
   await expect(card.getByTestId('driver-delivered')).toBeVisible();
   await card.getByTestId('driver-delivered').getByLabel(/Cash collected/).check();
   await card.getByTestId('driver-delivered').getByRole('button').click();
-  await expect(card).toContainText('delivered');
+  await expect(card).toContainText('Delivered');
   const [after] = await sql<{ status: string; paymentStatus: string }>(`SELECT status, "paymentStatus" FROM "Order" WHERE id = $1`, [o.id]);
   expect(after).toEqual({ status: 'DELIVERED', paymentStatus: 'PAID' });
   // The driver cannot open management screens

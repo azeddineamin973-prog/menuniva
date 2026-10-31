@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Logo } from '@/components/brand/logo';
-import { Badge, ButtonLink, Card } from '@/components/ui';
+import { Badge, ButtonLink, Card, humanize } from '@/components/ui';
 import { getCurrentUser } from '@/server/auth/session';
 import { listUserOrganizations } from '@/server/services/organizations';
 
@@ -31,7 +31,7 @@ export default async function DashboardRouter({ searchParams }: { searchParams: 
               <span className="font-medium">{ms.organization.name}</span>
               <span className="flex gap-2">
                 {ms.organization.isDemo && <Badge tone="warning">Demo</Badge>}
-                <Badge>{ms.role.replace('RESTAURANT_', '').toLowerCase()}</Badge>
+                <Badge>{humanize(ms.role.replace('RESTAURANT_', ''))}</Badge>
               </span>
             </Card>
           </Link>
