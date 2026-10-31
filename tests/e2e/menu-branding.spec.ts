@@ -56,7 +56,7 @@ test('M1-08/M3-04/M6-05: branding upload and colours appear on the SEO-ready sto
   await login(page, s.owner, s.password);
   await page.goto(`/dashboard/${s.orgSlug}/settings/branding`);
   const form = page.getByTestId('branding-form');
-  await form.getByRole('button', { name: 'Moroccan' }).click();
+  await form.getByRole('radio', { name: /Moroccan/ }).click();
   await form.locator('#logo').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG_1x1 });
   await form.locator('#tagline').fill('Cozinha de teste E2E');
   await form.getByRole('button', { name: 'Save' }).click();

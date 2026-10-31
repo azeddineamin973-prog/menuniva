@@ -26,6 +26,7 @@ export function RestaurantPreview({
   defaultLang,
   displayHost,
   initialDevice = 'phone',
+  liveHref,
 }: {
   pages: PreviewPage[];
   languages: { code: string; label: string }[];
@@ -33,6 +34,8 @@ export function RestaurantPreview({
   /** Shown in the desktop frame's address bar. */
   displayHost: string;
   initialDevice?: Device;
+  /** Public address of the published storefront (absent while it is a draft). */
+  liveHref?: string;
 }) {
   const [device, setDevice] = useState<Device>(initialDevice);
   // `lang` is what the toolbar shows (also follows the menu's own switcher); `frameLang` only
@@ -182,12 +185,24 @@ export function RestaurantPreview({
           >
             <Icon name="refresh" />
           </button>
+          {liveHref && (
+            <a
+              href={liveHref}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-lime px-3 text-[13px] font-semibold text-lime-ink shadow-xs hover:bg-lime-hover pointer-coarse:h-11"
+              data-testid="preview-open-live"
+            >
+              <Icon name="globe" className="size-4" /> Open live storefront
+            </a>
+          )}
           <a
             href={src}
             target="_blank"
             rel="noopener"
             className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink pointer-coarse:h-11"
             data-testid="preview-open-tab"
+            title={liveHref ? 'Open this preview in a new tab' : 'Open the draft preview in a new tab (only your team can see it)'}
           >
             <Icon name="external" className="size-4" /> <span className="hidden sm:inline">Open in new tab</span>
             <span className="sr-only sm:hidden">Open in new tab</span>

@@ -4,6 +4,9 @@ import { notFound } from 'next/navigation';
 import { MenuApp } from '@/components/storefront/menu-app';
 import { StorefrontShell } from '@/components/storefront/shell';
 import { PreviewBanner } from '@/components/storefront/preview-banner';
+import { OpenStatus, OrderModeBar } from '@/components/storefront/order-modes';
+import { isOpenAt } from '@/lib/opening-hours';
+import { zonedParts } from '@/lib/time';
 import { getMessages } from '@/i18n';
 import { LANGUAGE_TAG } from '@/i18n/config';
 import { db } from '@/server/db';
@@ -12,14 +15,13 @@ import { env } from '@/server/env';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { allergyNoticeFor, canPreviewOrg, guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
 import { Icon, type IconName } from '@/components/ui/icons';
-import { cn } from '@/lib/cn';
 import { StorefrontHours } from '@/components/storefront/opening-hours';
 import type { OpeningHours } from '@/lib/opening-hours';
 
 export const dynamic = 'force-dynamic';
 
 const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: true };
-const CHIP = 'inline-flex min-h-10 items-center gap-1.5 rounded-full bg-sf-card/70 px-3.5 font-medium ring-1 ring-sf-text/10 transition hover:bg-sf-card';
+const CHIP = 'inline-flex min-h-10 items-center gap-1.5 rounded-full shadow-sm bg-sf-card/70 px-3.5 font-medium ring-1 ring-sf-text/10 transition hover:bg-sf-card';
 
 type Params = { org: string; location?: string[] };
 
@@ -103,60 +105,46 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}`, icon: 'phone' });
   if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, icon: 'external', external: true });
   if (location.uberEatsUrl) actions.push({ label: m.customer.orderOnUberEats, href: location.uberEatsUrl, icon: 'external', external: true });
+  const hours = (location.openingHours as OpeningHours | null) ?? null;
+  const zp = zonedParts(new Date(), location.timeZone);
+  // Only when hours are configured: never guess whether the restaurant is open.
+  const openNow = hours && Object.keys(hours).length > 0 ? isOpenAt(hours, zp.weekday, zp.hour * 60 + zp.minute) : null;
   const mapsHref = location.addressLine1 ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([org.name, location.addressLine1, location.postalCode, location.city].filter(Boolean).join(', '))}` : null;
 
   return (
-    <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={[location.addressLine1, location.city].filter(Boolean).join(', ') || undefined} lang={lang} languages={org.enabledLanguages} poweredBy={m.common.poweredBy}>
+    <StorefrontShell
+      branding={org.branding}
+      restaurantName={org.name}
+      subtitle={[location.addressLine1, location.city].filter(Boolean).join(', ') || undefined}
+      lang={lang}
+      languages={org.enabledLanguages}
+      poweredBy={m.common.poweredBy}
+      headerMeta={<OpenStatus open={openNow} labels={m.customer} />}
+    >
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       {isPreview && <PreviewBanner />}
-      <div className="mx-auto max-w-3xl space-y-3 px-4 pt-5">
-        {org.branding?.tagline && <p className="font-serif text-lg leading-snug">{org.branding.tagline}</p>}
-        {actions.length > 0 && (
-          // Ways to order first (large, brand-coloured), the rest as a compact two-column row so
-          // the menu itself starts higher on a phone.
-          <div className="space-y-2">
-            {actions.some((a) => a.primary) && (
-              <div className={cn('grid gap-2', actions.filter((a) => a.primary).length > 1 && 'grid-cols-2')}>
-                {actions
-                  .filter((a) => a.primary)
-                  .map((a) => (
-                    <Link
-                      key={a.label}
-                      href={a.href}
-                      className="flex min-h-13 items-center justify-center gap-2 rounded-2xl bg-sf-primary px-3 py-2.5 text-center text-[15px] leading-tight font-medium text-sf-on-primary shadow-sm transition hover:shadow-md active:scale-[0.99] motion-reduce:transition-none"
-                    >
-                      <Icon name={a.icon} className="size-[18px] shrink-0" />
-                      {a.label}
-                    </Link>
-                  ))}
-              </div>
-            )}
-            {actions.some((a) => !a.primary) && (
-              <div className="grid grid-cols-2 gap-2">
-                {actions
-                  .filter((a) => !a.primary)
-                  .map((a) => {
-                    const cls = 'flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-sf-card/85 px-3 py-2 text-center text-sm leading-tight font-medium shadow-sm ring-1 ring-sf-text/10 transition hover:bg-sf-card motion-reduce:transition-none';
-                    return a.external ? (
-                      <a key={a.label} href={a.href} target="_blank" rel="noopener noreferrer" className={cls}>
-                        {a.label}
-                        <Icon name="external" className="size-3.5 shrink-0 opacity-70" />
-                      </a>
-                    ) : (
-                      <Link key={a.label} href={a.href} className={cls}>
-                        <Icon name={a.icon} className="size-4 shrink-0" />
-                        {a.label}
-                      </Link>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        )}
+      <div className="mx-auto max-w-5xl space-y-4 px-4 pt-5 sm:px-6">
+        {org.branding?.tagline && <p className="max-w-2xl font-serif text-lg leading-snug sm:text-xl">{org.branding.tagline}</p>}
+        <OrderModeBar
+          label={m.customer.howToOrder}
+          modes={[
+            ...(actions.some((a) => !a.external) ? [{ key: 'menu', label: m.customer.menu, href: `${base}${guestQuery({}, keep)}`, icon: 'book' as const, active: true }] : []),
+            ...actions.filter((a) => !a.external).map((a) => ({ key: a.href, label: a.label, href: a.href, icon: a.icon })),
+          ]}
+        />
         {wa && <p className="text-xs opacity-60">{m.customer.whatsappOpenNote}</p>}
         <StorefrontHours hours={(location.openingHours as OpeningHours | null) ?? null} timeZone={location.timeZone} tag={LANGUAGE_TAG[lang]} m={m.customer} />
         {/* Contact and review links as chips: easy to hit with a thumb, unlike underlined words. */}
-        <div className="flex flex-wrap gap-2 text-sm">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden [&>*]:shrink-0" data-testid="storefront-contact">
+          {/* Other platforms (Glovo, Uber Eats): links out, kept apart from MenuNiva's own ordering. */}
+          {actions
+            .filter((a) => a.external)
+            .map((a) => (
+              <a key={a.href} href={a.href} target="_blank" rel="noopener noreferrer" className={`${CHIP} font-semibold`}>
+                {a.label}
+                <Icon name="external" className="size-3.5 opacity-70" />
+              </a>
+            ))}
           {location.phone && (
             <a href={`tel:${location.phone.replace(/\s/g, '')}`} className={CHIP} aria-label={`${m.customer.call} ${location.phone}`}>
               <Icon name="phone" className="size-4" />

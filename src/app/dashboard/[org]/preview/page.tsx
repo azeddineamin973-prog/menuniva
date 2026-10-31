@@ -33,7 +33,7 @@ export default async function PreviewAndSharePage({ params }: { params: Promise<
         }
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <RestaurantPreview pages={pages} languages={o.enabledLanguages.map((l) => ({ code: l, label: LANGUAGE_NATIVE_NAME[l] }))} defaultLang={o.defaultLanguage} displayHost={host} />
+        <RestaurantPreview pages={pages} languages={o.enabledLanguages.map((l) => ({ code: l, label: LANGUAGE_NATIVE_NAME[l] }))} defaultLang={o.defaultLanguage} displayHost={host} liveHref={link.location.isPublished ? link.path : undefined} />
         <div className="space-y-4 xl:sticky xl:top-20">
           <RestaurantLinkCard link={link} orgSlug={ctx.org.slug} canPublish={ctx.can('settings.manage')} showPreviewButton={false} />
         </div>

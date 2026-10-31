@@ -1,3 +1,5 @@
+import { presetByKey } from './storefront-themes';
+
 /**
  * Small colour helpers for restaurant branding. Owners pick any colours they like; these make
  * sure text placed on them stays readable (WCAG contrast), whatever they picked.
@@ -69,11 +71,14 @@ export function ensureContrast(color: string, bg: string, min = 4.5) {
 
 export type StorefrontPalette = {
   primary: string;
+  secondary: string;
   accent: string;
   bg: string;
   text: string;
   /** Text on primary-coloured buttons and the header. */
   onPrimary: string;
+  /** Text on the secondary colour. */
+  onSecondary: string;
   /** Primary as a text colour on cards (prices, links). */
   primaryInk: string;
   /** Card / sheet surface. */
@@ -81,16 +86,25 @@ export type StorefrontPalette = {
   dark: boolean;
 };
 
-/** Turns the owner's four brand colours into a palette where every text pairing is readable. */
-export function storefrontPalette(b: { primaryColor?: string | null; accentColor?: string | null; backgroundColor?: string | null; textColor?: string | null } | null): StorefrontPalette {
+/**
+ * Turns the owner's brand colours into a palette where every text pairing is readable.
+ * Presets supply their own secondary and surface colours, unless the owner changed the
+ * background since (then both are derived, like for a custom theme).
+ */
+export function storefrontPalette(
+  b: { themePreset?: string | null; primaryColor?: string | null; accentColor?: string | null; backgroundColor?: string | null; textColor?: string | null } | null,
+): StorefrontPalette {
   const valid = (c: string | null | undefined, fallback: string) => (c && parseHex(c) ? toHex(parseHex(c)!) : fallback);
   const primary = valid(b?.primaryColor, '#1f5c4a');
   const accent = valid(b?.accentColor, '#b8975a');
   const bg = valid(b?.backgroundColor, '#fbf7ee');
   const dark = isDark(bg);
+  const preset = presetByKey(b?.themePreset);
+  const fromPreset = preset && toHex(parseHex(preset.background)!) === bg;
   // Cards are white on light backgrounds and a slightly lifted shade of the background on dark ones.
-  const card = dark ? mix(bg, PAPER, 0.07) : PAPER;
+  const card = fromPreset ? toHex(parseHex(preset.surface)!) : dark ? mix(bg, PAPER, 0.07) : PAPER;
+  const secondary = fromPreset ? toHex(parseHex(preset.secondary)!) : mix(primary, isDark(primary) ? PAPER : INK, 0.2);
   const wanted = valid(b?.textColor, '#1e2420');
   const text = contrast(wanted, bg) >= 4.5 && contrast(wanted, card) >= 4.5 ? wanted : readableOn(card);
-  return { primary, accent, bg, text, onPrimary: readableOn(primary), primaryInk: ensureContrast(primary, card), card, dark };
+  return { primary, secondary, accent, bg, text, onPrimary: readableOn(primary), onSecondary: readableOn(secondary), primaryInk: ensureContrast(primary, card), card, dark };
 }

@@ -48,6 +48,8 @@
   --sf-on-primary: #ffffff;
   --sf-primary-ink: #1f5c4a;
   --sf-card: #ffffff;
+  --sf-secondary: #2e7a63;
+  --sf-on-secondary: #ffffff;
 }
 
 .dark {
@@ -106,6 +108,8 @@
   --color-sf-on-primary: var(--sf-on-primary);
   --color-sf-primary-ink: var(--sf-primary-ink);
   --color-sf-card: var(--sf-card);
+  --color-sf-secondary: var(--sf-secondary);
+  --color-sf-on-secondary: var(--sf-on-secondary);
 
   --shadow-xs: var(--mn-shadow-xs);
   --shadow-sm: var(--mn-shadow-sm);

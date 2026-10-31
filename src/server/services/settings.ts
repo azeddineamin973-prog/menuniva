@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { THEME_KEYS } from '@/lib/storefront-themes';
 import type { CountryCode } from '@/generated/prisma/enums';
 import { LANGUAGES } from '@/i18n/config';
 import { openingHoursSchema } from '@/lib/opening-hours';
@@ -182,7 +183,7 @@ export async function updateChannelSettings(ctx: TenantContext, input: unknown) 
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const brandingSchema = z.object({
-  themePreset: z.enum(['classic', 'moroccan', 'minimal', 'bistro']),
+  themePreset: z.enum(THEME_KEYS),
   primaryColor: hex,
   accentColor: hex,
   backgroundColor: hex,

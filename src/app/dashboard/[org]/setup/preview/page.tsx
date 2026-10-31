@@ -33,7 +33,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ org: s
       <PageHeader title="Preview your customer menu" description="This is exactly what guests will see on their phones. Check names, prices, photos and every language." />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         {link ? (
-          <RestaurantPreview pages={pages} languages={o.enabledLanguages.map((l) => ({ code: l, label: LANGUAGE_NATIVE_NAME[l] }))} defaultLang={o.defaultLanguage} displayHost={displayUrl(link.url).split('/')[0]} />
+          <RestaurantPreview pages={pages} languages={o.enabledLanguages.map((l) => ({ code: l, label: LANGUAGE_NATIVE_NAME[l] }))} defaultLang={o.defaultLanguage} displayHost={displayUrl(link.url).split('/')[0]} liveHref={link.location.isPublished ? link.path : undefined} />
         ) : (
           <Card className="p-6 text-sm text-muted">Add a location first.</Card>
         )}

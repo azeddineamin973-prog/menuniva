@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MenuApp, type CheckoutConfig } from '@/components/storefront/menu-app';
 import { StorefrontShell } from '@/components/storefront/shell';
@@ -12,6 +11,7 @@ import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
 import { pickupOptions, previewOrPublicLocation } from '@/server/services/fulfilment';
 import { PreviewBanner } from '@/components/storefront/preview-banner';
+import { OrderModeBar, type OrderMode } from '@/components/storefront/order-modes';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { upsellRulesFor } from '@/server/services/upsell';
 import { allergyNoticeFor, guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
@@ -91,14 +91,24 @@ export default async function OrderModePage({ params, searchParams }: { params: 
 
   const [menu, upsellRules] = await Promise.all([getPublicMenu(location.id, lang, channel), upsellRulesFor(org.id)]);
   const title = mode === 'pickup' ? m.customer.pickup : mode === 'delivery' ? m.customer.restaurantDelivery : m.customer.orderViaWhatsApp;
+  // The same ordering switcher as the menu page, with this channel highlighted.
+  const lq = guestQuery({ l: sp.l }, keep);
+  const all: OrderMode[] = [
+    { key: 'menu', label: m.customer.menu, href: `${base}${sp.l ? `/${encodeURIComponent(sp.l)}` : ''}${guestQuery({}, keep)}`, icon: 'book' },
+    ...(location.takeawayEnabled && modules.has('takeaway') ? [{ key: 'pickup', label: m.customer.pickup, href: `${base}/order/pickup${lq}`, icon: 'bag' as const }] : []),
+    ...(location.deliveryEnabled && modules.has('delivery') ? [{ key: 'delivery', label: m.customer.restaurantDelivery, href: `${base}/order/delivery${lq}`, icon: 'truck' as const }] : []),
+    ...(location.reservationsEnabled && modules.has('reservations') ? [{ key: 'reserve', label: m.customer.reserveTable, href: `${base}/reserve${lq}`, icon: 'calendar' as const }] : []),
+    ...(wa ? [{ key: 'whatsapp', label: m.customer.orderViaWhatsApp, href: `${base}/order/whatsapp${lq}`, icon: 'phone' as const }] : []),
+  ];
+  const modes = all.map((x) => ({ ...x, active: x.key === mode }));
   const minDelivery = location.deliveryZones.reduce<number | null>((min, z) => (min === null || z.minOrderCents < min ? z.minOrderCents : min), null);
 
   return (
     <StorefrontShell branding={branding} restaurantName={org.name} subtitle={title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
       {isPreview && <PreviewBanner />}
-      <div className="mx-auto max-w-3xl px-4 pt-3 text-sm">
-        <Link href={`${base}${sp.l ? `/${sp.l}` : ''}${guestQuery({}, keep)}`} className="inline-flex min-h-10 items-center gap-1 rounded-full pe-2 underline underline-offset-2 opacity-75">← {m.customer.menu}</Link>
-        <p className="mt-1 opacity-70" data-testid="order-mode">{m.customer.viewOnly}{mode === 'pickup' && checkout.pickup!.minOrderCents > 0 ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(checkout.pickup!.minOrderCents / 100))}` : ''}{mode === 'delivery' && minDelivery ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(minDelivery / 100))}` : ''}</p>
+      <div className="mx-auto max-w-5xl space-y-2.5 px-4 pt-4 text-sm sm:px-6">
+        <OrderModeBar label={m.customer.howToOrder} modes={modes} />
+        <p className="opacity-70" data-testid="order-mode">{m.customer.viewOnly}{mode === 'pickup' && checkout.pickup!.minOrderCents > 0 ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(checkout.pickup!.minOrderCents / 100))}` : ''}{mode === 'delivery' && minDelivery ? ` ${m.customer.minimumOrder.replace('{amount}', new Intl.NumberFormat(tag, { style: 'currency', currency: 'EUR' }).format(minDelivery / 100))}` : ''}</p>
       </div>
       <MenuApp
         channel={channel}

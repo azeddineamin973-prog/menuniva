@@ -56,7 +56,7 @@ export default async function ReviewsPage({ params, searchParams }: { params: Pr
       )}
       {!review?.googleReviewUrl && (
         <div className="mb-4">
-          <Alert tone="info" action={<Link className="text-sm font-medium underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Add link</Link>}>
+          <Alert tone="info" action={<Link className="inline-flex min-h-10 items-center text-sm font-medium whitespace-nowrap underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Add link</Link>}>
             No official Google review link is set for {location.name}. Until then guests only see the private feedback form.
           </Alert>
         </div>

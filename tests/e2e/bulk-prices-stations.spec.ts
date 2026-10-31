@@ -165,7 +165,7 @@ test('kitchen and café routing for a whole menu in one submit, with suggestions
   await page.reload();
   const routing = page.getByTestId('category-routing-form');
   const drinks = page.getByTestId('routing-row').filter({ hasText: 'Bebidas e chá' });
-  await expect(drinks).toContainText('suggested: Seed Café');
+  await expect(drinks).toContainText('Suggested: Seed Café');
   await screenshot(page, 'station-routing-suggestions');
 
   await routing.getByRole('button', { name: 'Save routing' }).click();

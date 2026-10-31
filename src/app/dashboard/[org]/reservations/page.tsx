@@ -61,7 +61,7 @@ export default async function ReservationsPage({ params, searchParams }: { param
           </div>
         }
       />
-      {!location.reservationsEnabled && <div className="mb-4"><Alert tone="warning" action={<Link className="text-sm font-medium underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Ordering channels</Link>}>Reservations are switched off, so guests cannot book online.</Alert></div>}
+      {!location.reservationsEnabled && <div className="mb-4"><Alert tone="warning" action={<Link className="inline-flex min-h-10 items-center text-sm font-medium whitespace-nowrap underline underline-offset-2" href={`/dashboard/${ctx.org.slug}/settings/channels`}>Ordering channels</Link>}>Reservations are switched off, so guests cannot book online.</Alert></div>}
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card>
           <CardHeader title={new Date(`${date}T12:00:00Z`).toLocaleDateString(LANGUAGE_TAG[ctx.user.preferredLanguage], { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })} description={`${list.length} reservations · ${covers} guests expected`} />

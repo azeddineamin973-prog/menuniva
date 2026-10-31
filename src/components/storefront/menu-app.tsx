@@ -10,6 +10,8 @@ import { formatCents } from '@/lib/money';
 import { pickSuggestions, type UpsellRuleView } from '@/lib/upsell';
 import { buildWhatsAppText } from '@/lib/whatsapp';
 import type { PublicCategory, PublicProduct } from '@/server/services/public-menu';
+import { Icon } from '@/components/ui/icons';
+import { DishCard, lowestPrice, NoPhoto } from './dish-card';
 
 export type CartLine = {
   lineId: string;
@@ -121,6 +123,8 @@ export function MenuApp({
   const count = lines.reduce((n, l) => n + l.quantity, 0);
   const estimate = lines.reduce((n, l) => n + l.unitCents * l.quantity, 0);
   const featured = useMemo(() => menu.flatMap((cat) => cat.products.filter((p) => p.isFeatured)), [menu]);
+  // Photos for the cart lines (the cart only stores ids and names).
+  const images = useMemo(() => new Map(menu.flatMap((cat) => cat.products.map((p) => [p.id, p.imageUrl] as const))), [menu]);
 
   // Searching filters the same data the page already has, so it works offline and instantly.
   // Accents are stripped so "cha" finds "Chá".
@@ -187,52 +191,53 @@ export function MenuApp({
     }
   };
 
+  const cardLabels = { from: c.from, soldOut: c.soldOut, unavailable: c.unavailable, popular: c.popular, add: c.addToCart ?? '+' };
   return (
-    <div className="mx-auto max-w-3xl pb-32">
+    <div className="mx-auto max-w-5xl pb-36">
       {tableLabel && (
-        <div ref={bannerRef} className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-1.5 border-b border-sf-text/5 bg-sf-bg/95 px-4 py-2 backdrop-blur" data-testid="table-banner">
-          <span className="shrink-0 rounded-full bg-sf-primary px-3 py-1.5 text-[13px] font-medium whitespace-nowrap text-sf-on-primary">{fmt(c.table, { label: tableLabel })}</span>
+        <div ref={bannerRef} className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-1.5 border-b border-sf-text/5 bg-sf-bg/95 px-4 py-2 backdrop-blur sm:px-6" data-testid="table-banner">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sf-primary px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap text-sf-on-primary">
+            <Icon name="tables" className="size-3.5" />
+            {fmt(c.table, { label: tableLabel })}
+          </span>
           {scope.qrToken && <TableActions qrToken={scope.qrToken} m={m} />}
         </div>
       )}
       {!canOrder && orderingMessage && (
-        <div className="mx-4 mt-4 rounded-2xl border border-sf-accent/40 bg-sf-card/70 p-3 text-sm" role="status">
-          {orderingMessage}
+        <div className="mx-4 mt-4 flex items-start gap-2.5 rounded-2xl bg-sf-card p-3.5 text-sm shadow-sm ring-1 ring-sf-accent/30 sm:mx-6" role="status">
+          <Icon name="info" className="mt-0.5 size-4 shrink-0 text-sf-accent" />
+          <span>{orderingMessage}</span>
         </div>
       )}
 
-      {menu.length > 0 && (
-        <div className="px-4 pt-3">
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 start-3.5 flex items-center opacity-50" aria-hidden>
-              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="m16 16 4 4" />
-              </svg>
-            </span>
-            {/* 16 px text: iOS Safari zooms the page into smaller fields. */}
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={c.searchMenu}
-              aria-label={c.searchMenu}
-              enterKeyHint="search"
-              className="h-11 w-full rounded-full border border-sf-text/10 bg-sf-card/90 ps-10 pe-11 text-base shadow-sm focus:border-sf-primary focus:ring-2 focus:ring-sf-primary/20 focus:outline-none"
-              data-testid="menu-search"
-            />
-            {search && (
-              <button type="button" onClick={() => setSearch('')} aria-label={c.clearSearch} className="absolute inset-y-0 end-1 flex w-10 items-center justify-center text-xl opacity-60" data-testid="menu-search-clear">
-                ×
-              </button>
-            )}
+      {/* Search and categories stay at hand while scrolling (under the table banner, if any). */}
+      <div className="sticky z-10 bg-sf-bg/95 pt-3 backdrop-blur supports-[backdrop-filter]:bg-sf-bg/80" style={{ top: bannerHeight }}>
+        {menu.length > 0 && (
+          <div className="px-4 sm:px-6">
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 start-4 flex items-center opacity-50" aria-hidden>
+                <Icon name="search" className="size-[18px]" />
+              </span>
+              {/* 16 px text: iOS Safari zooms the page into smaller fields. */}
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={c.searchMenu}
+                aria-label={c.searchMenu}
+                enterKeyHint="search"
+                className="h-12 w-full rounded-2xl border-0 bg-sf-card ps-11 pe-12 text-base shadow-sm ring-1 ring-sf-text/[0.08] placeholder:opacity-60 focus:ring-2 focus:ring-sf-primary focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+                data-testid="menu-search"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} aria-label={c.clearSearch} className="absolute inset-y-1 end-1 flex w-10 items-center justify-center rounded-xl opacity-60 hover:bg-sf-text/5 hover:opacity-100" data-testid="menu-search-clear">
+                  <Icon name="x" className="size-4" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Category chips stay under the table banner, whatever height the banner wraps to. */}
-      <div className="sticky z-10 bg-sf-bg/95 backdrop-blur" style={{ top: bannerHeight }}>
-        <nav ref={chipsRef} className="flex gap-2 overflow-x-auto scroll-smooth px-4 py-2.5 [scrollbar-width:none]" aria-label={c.menu}>
+        )}
+        <nav ref={chipsRef} className="flex gap-2 overflow-x-auto scroll-smooth px-4 py-3 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden" aria-label={c.menu}>
           {shownMenu.map((cat) => (
             <a
               key={cat.id}
@@ -241,90 +246,96 @@ export function MenuApp({
               aria-current={activeCat === cat.id ? 'true' : undefined}
               data-cat={cat.id}
               className={cn(
-                'flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition',
-                activeCat === cat.id ? 'border-sf-primary bg-sf-primary text-sf-on-primary shadow-sm' : 'border-sf-text/10 bg-sf-card/70 hover:bg-sf-card',
+                'flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium whitespace-nowrap transition-colors motion-reduce:transition-none',
+                activeCat === cat.id ? 'bg-sf-primary text-sf-on-primary shadow-sm' : 'bg-sf-card ring-1 ring-sf-text/[0.08] hover:ring-sf-text/20',
               )}
             >
               {cat.name}
+              <span className={cn('text-xs tabular-nums', activeCat === cat.id ? 'opacity-80' : 'opacity-50')}>{cat.products.length}</span>
             </a>
           ))}
         </nav>
       </div>
 
-      {menu.length === 0 && <p className="px-4 py-10 text-center opacity-70">{c.unavailable}</p>}
+      {menu.length === 0 && (
+        <div className="mx-4 mt-6 flex flex-col items-center rounded-3xl bg-sf-card px-6 py-12 text-center shadow-sm ring-1 ring-sf-text/5 sm:mx-6">
+          <NoPhoto className="size-16 rounded-2xl" />
+          <p className="mt-4 font-medium">{c.unavailable}</p>
+        </div>
+      )}
       {menu.length > 0 && matches === 0 && (
-        <p className="px-4 py-10 text-center opacity-70" role="status" data-testid="menu-no-results">
-          {c.noDishesFound}
-        </p>
+        <div className="mx-4 mt-6 flex flex-col items-center rounded-3xl bg-sf-card px-6 py-10 text-center shadow-sm ring-1 ring-sf-text/5 sm:mx-6" role="status" data-testid="menu-no-results">
+          <span className="flex size-12 items-center justify-center rounded-full bg-sf-text/5" aria-hidden>
+            <Icon name="search" className="size-5 opacity-60" />
+          </span>
+          <p className="mt-3 font-medium">{c.noDishesFound}</p>
+          <button type="button" onClick={() => setSearch('')} className="mt-3 rounded-full px-4 py-2 text-sm font-medium text-sf-primary-ink ring-1 ring-sf-text/10 hover:bg-sf-text/5">
+            {c.clearSearch}
+          </button>
+        </div>
       )}
 
       {featured.length > 0 && !needle && (
-        <section className="px-4 pt-2">
-          <h2 className="mb-2 font-serif text-xl">{c.featured}</h2>
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
-            {featured.map((p) => (
-              <button key={p.id} type="button" onClick={() => setOpen(p)} className="w-56 shrink-0 overflow-hidden rounded-3xl bg-sf-card text-start shadow-sm ring-1 ring-sf-text/5 transition hover:shadow-md">
-                {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-36 w-full bg-sf-accent/10 object-cover" decoding="async" /> : <NoPhoto className="h-36 w-full" />}
-                <div className="p-3">
-                  <p className="line-clamp-1 font-medium">{p.name}</p>
-                  <p className="text-sm font-semibold text-sf-primary-ink">{money(p.priceCents)}</p>
-                </div>
+        <section className="pt-3" aria-labelledby="featured-title">
+          <h2 id="featured-title" className="px-4 font-serif text-2xl sm:px-6">{c.featured}</h2>
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-3 pb-3 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+            {featured.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setOpen(p)}
+                className="group w-64 shrink-0 snap-start overflow-hidden rounded-3xl bg-sf-card text-start shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_24px_-14px_rgb(0_0_0/0.3)] ring-1 ring-sf-text/5 transition-shadow hover:shadow-[0_2px_4px_rgb(0_0_0/0.05),0_18px_32px_-16px_rgb(0_0_0/0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-primary sm:w-72"
+              >
+                <span className="relative block">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt="" className="aspect-[4/3] w-full bg-sf-accent/10 object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" width={288} height={216} />
+                  ) : (
+                    <NoPhoto className="aspect-[4/3] w-full" />
+                  )}
+                  {p.isPopular && <span className="absolute start-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">{c.popular}</span>}
+                </span>
+                <span className="flex items-end justify-between gap-2 p-3.5">
+                  <span className="line-clamp-2 leading-snug font-semibold">{p.name}</span>
+                  <span className="shrink-0 font-bold text-sf-primary-ink tabular-nums">{money(lowestPrice(p))}</span>
+                </span>
               </button>
             ))}
           </div>
         </section>
       )}
 
-      {shownMenu.map((cat) => (
-        <section key={cat.id} id={`cat-${cat.id}`} className="px-4 pt-7" style={{ scrollMarginTop: stickyOffset + 8 }}>
-          <h2 className="font-serif text-2xl">{cat.name}</h2>
-          {cat.description && <p className="mt-1 text-sm opacity-70">{cat.description}</p>}
-          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-            {cat.products.map((p) => {
-              const blocked = p.soldOut || !p.available;
-              const from = p.priceCents + Math.min(0, ...p.variants.map((v) => v.priceDeltaCents));
-              return (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    disabled={blocked}
-                    onClick={() => setOpen(p)}
-                    className="group flex h-full w-full gap-3 rounded-3xl bg-sf-card/90 p-3 text-start shadow-sm ring-1 ring-sf-text/5 transition hover:shadow-md disabled:opacity-55"
-                    data-testid="customer-product"
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <p className="font-medium leading-snug">{p.name}</p>
-                      {p.description && <p className="mt-1 line-clamp-2 text-sm opacity-70">{p.description}</p>}
-                      <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-                        <span className="rounded-full bg-sf-primary/10 px-2.5 py-1 text-sm font-semibold text-sf-primary-ink tabular-nums">
-                          {p.variants.length > 1 && <span className="text-xs font-normal opacity-70">{c.from} </span>}
-                          {money(from)}
-                        </span>
-                        {p.soldOut && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">{c.soldOut}</span>}
-                        {!p.soldOut && !p.available && <span className="rounded-full bg-sf-text/5 px-2 py-0.5 text-xs">{c.unavailable}</span>}
-                        {p.isPopular && <span className="rounded-full bg-sf-accent/20 px-2 py-0.5 text-xs">{c.popular}</span>}
-                      </div>
-                    </div>
-                    {/* A dish with no photo gets a neutral brand-coloured tile rather than a
-                        broken-image frame, so rows stay the same height either way. */}
-                    {p.imageUrl ? (
-                      <img src={p.imageUrl} alt="" className="h-24 w-24 shrink-0 rounded-2xl bg-sf-accent/10 object-cover sm:h-28 sm:w-28" loading="lazy" decoding="async" width={112} height={112} />
-                    ) : (
-                      <NoPhoto className="h-24 w-24 rounded-2xl sm:h-28 sm:w-28" />
-                    )}
-                  </button>
-                </li>
-              );
-            })}
+      {shownMenu.map((cat, ci) => (
+        <section key={cat.id} id={`cat-${cat.id}`} className="px-4 pt-6 sm:px-6 sm:pt-8" style={{ scrollMarginTop: stickyOffset + 8 }} aria-labelledby={`cat-title-${cat.id}`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id={`cat-title-${cat.id}`} className="font-serif text-2xl sm:text-[1.7rem]">{cat.name}</h2>
+            <span className="text-xs tabular-nums opacity-55">{cat.products.length}</span>
+          </div>
+          {cat.description && <p className="mt-1 max-w-2xl text-sm opacity-70">{cat.description}</p>}
+          <ul className="mt-3 grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            {cat.products.map((p, pi) => (
+              <li key={p.id}>
+                <DishCard p={p} money={money} labels={cardLabels} canOrder={canOrder} onOpen={() => setOpen(p)} priority={ci === 0 && pi < 2} />
+              </li>
+            ))}
           </ul>
         </section>
       ))}
 
       {count > 0 && !cartOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-30 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <button type="button" onClick={() => setCartOpen(true)} className="mx-auto flex w-full max-w-3xl items-center justify-between rounded-2xl bg-sf-primary px-5 py-4 text-sf-on-primary shadow-lg active:scale-[0.99]" data-testid="view-cart">
-            <span className="font-medium">{fmt(c.viewCart, { count })}</span>
-            <span className="font-semibold tabular-nums">{money(estimate)}</span>
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-sf-bg via-sf-bg/80 to-transparent p-4 pt-8 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            className="animate-slide-up pointer-events-auto mx-auto flex w-full max-w-xl items-center gap-3 rounded-2xl bg-sf-primary px-4 py-3.5 text-sf-on-primary shadow-[0_12px_30px_-10px_rgb(0_0_0/0.5)] transition-transform active:scale-[0.99] motion-reduce:animate-none motion-reduce:transition-none"
+            data-testid="view-cart"
+          >
+            <span className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-current/15" aria-hidden>
+              <Icon name="bag" className="size-[18px]" />
+              <span className="absolute -end-1.5 -top-1.5 flex min-w-5 items-center justify-center rounded-full bg-sf-accent px-1 text-[11px] leading-5 font-bold text-white tabular-nums">{count}</span>
+            </span>
+            <span className="flex-1 text-start font-semibold">{fmt(c.viewCart, { count })}</span>
+            <span className="font-bold tabular-nums">{money(estimate)}</span>
+            <Icon name="chevronRight" className="size-4 opacity-70 rtl:rotate-180" />
           </button>
         </div>
       )}
@@ -345,6 +356,7 @@ export function MenuApp({
           upsell={suggestions.length > 0 ? <UpsellBox suggestions={suggestions} m={m} money={money} onAdd={acceptSuggestion} onDismiss={(id) => setDismissed((d) => [...d, id])} /> : null}
           tableCodeRequired={tableCodeRequired}
           checkout={checkout}
+          images={images}
           onClose={() => setCartOpen(false)}
           onSubmitted={(token) => {
             setLines([]);
@@ -357,22 +369,6 @@ export function MenuApp({
         />
       )}
     </div>
-  );
-}
-
-/**
- * Tile for a dish without a photo: a quiet serving-cloche mark in the restaurant's accent colour,
- * so the card looks finished rather than like an image that failed to load.
- */
-function NoPhoto({ className }: { className?: string }) {
-  return (
-    <span className={cn('flex shrink-0 items-center justify-center bg-sf-accent/15 text-sf-accent', className)} aria-hidden data-testid="no-photo">
-      <svg viewBox="0 0 48 48" className="size-9 opacity-70" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 32a15 15 0 0 1 30 0z" />
-        <path d="M6 36h36M24 14v3" />
-        <circle cx="24" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      </svg>
-    </span>
   );
 }
 
@@ -445,8 +441,10 @@ function Sheet({ children, onClose, label, closeLabel }: { children: React.React
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={label}>
       {/* Tapping outside closes the sheet; keyboard and screen-reader users have Escape and the close button. */}
-      <button type="button" aria-hidden tabIndex={-1} title={closeLabel} className="absolute inset-0 bg-black/45" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl bg-sf-bg shadow-xl outline-none sm:rounded-3xl">
+      <button type="button" aria-hidden tabIndex={-1} title={closeLabel} className="animate-fade-in absolute inset-0 bg-black/50 backdrop-blur-[2px] motion-reduce:animate-none" onClick={onClose} />
+      <div ref={panel} tabIndex={-1} className="animate-slide-up relative max-h-[94dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[1.75rem] bg-sf-bg shadow-2xl outline-none motion-reduce:animate-none sm:max-w-xl sm:rounded-[1.75rem]">
+        {/* Grab handle: shows on phones that this is a sheet over the menu. */}
+        <span aria-hidden className="pointer-events-none absolute start-1/2 top-2 z-20 h-1 w-10 -translate-x-1/2 rounded-full bg-white/70 shadow-sm sm:hidden rtl:translate-x-1/2" />
         {children}
       </div>
     </div>
@@ -455,7 +453,7 @@ function Sheet({ children, onClose, label, closeLabel }: { children: React.React
 
 function CloseButton({ onClick, label, className }: { onClick: () => void; label: string; className?: string }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} className={cn('flex size-10 items-center justify-center rounded-full bg-sf-card/90 text-xl leading-none shadow-sm ring-1 ring-sf-text/10', className)} data-testid="sheet-close">
+    <button type="button" onClick={onClick} aria-label={label} className={cn('flex size-10 items-center justify-center rounded-full bg-sf-card/95 text-xl leading-none shadow-md ring-1 ring-sf-text/10 backdrop-blur transition-transform hover:scale-105 motion-reduce:transition-none', className)} data-testid="sheet-close">
       <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
         <path d="M6 6l12 12M18 6 6 18" />
       </svg>
@@ -537,15 +535,30 @@ function ProductSheet({
       <div className="sticky top-0 z-10 h-0">
         <CloseButton onClick={onClose} label={m.common.close} className="absolute end-3 top-3" />
       </div>
-      {p.imageUrl && <img src={p.imageUrl} alt="" className="aspect-[4/3] max-h-64 w-full bg-sf-accent/10 object-cover sm:aspect-[16/9]" />}
-      <div className="space-y-5 p-5">
+      {p.imageUrl ? (
+        <img src={p.imageUrl} alt="" className="aspect-[4/3] max-h-[22rem] w-full bg-sf-accent/10 object-cover sm:aspect-[16/10]" decoding="async" />
+      ) : (
+        <div className="h-6" aria-hidden />
+      )}
+      <div className="space-y-5 p-5 sm:p-6">
         <div className={cn(!p.imageUrl && 'pe-12')}>
-          <h3 className="font-serif text-2xl">{p.name}</h3>
-          {p.description && <p className="mt-1 opacity-80">{p.description}</p>}
+          {(p.isPopular || p.tags.length > 0) && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {p.isPopular && <span className="inline-flex items-center gap-1 rounded-full bg-sf-accent/15 px-2.5 py-0.5 text-xs font-semibold"><Icon name="star" className="size-3" />{c.popular}</span>}
+              {p.tags.map((t) => <span key={t} className="rounded-full bg-sf-text/[0.06] px-2.5 py-0.5 text-xs font-medium capitalize">{t}</span>)}
+            </div>
+          )}
+          <div className="flex items-start justify-between gap-4">
+            <h3 className="font-serif text-[1.65rem] leading-tight">{p.name}</h3>
+            <p className="shrink-0 pt-1 text-lg font-bold text-sf-primary-ink tabular-nums">{money(p.priceCents + (variant?.priceDeltaCents ?? 0))}</p>
+          </div>
+          {p.description && <p className="mt-2 leading-relaxed opacity-80">{p.description}</p>}
           {p.ingredients && <p className="mt-2 text-sm opacity-70">{p.ingredients}</p>}
         </div>
-        <div className="rounded-2xl bg-sf-card/70 p-3 text-sm">
-          <p className="font-medium">{c.allergens}</p>
+        <div className="flex gap-3 rounded-2xl bg-sf-card p-3.5 text-sm shadow-sm ring-1 ring-sf-text/5">
+          <Icon name="info" className="mt-0.5 size-4 shrink-0 text-sf-accent" />
+          <div className="min-w-0">
+          <p className="font-semibold">{c.allergens}</p>
           {p.allergens ? (
             <>
               {p.allergens.contains.length > 0 && <p>{fmt(c.containsAllergens, { list: allergenList(p.allergens.contains) })}</p>}
@@ -555,13 +568,14 @@ function ProductSheet({
           ) : (
             <p className="opacity-70">{c.allergenInfoNotVerified}</p>
           )}
+          </div>
         </div>
         {p.variants.length > 0 && (
           <fieldset>
-            <legend className="mb-2 font-medium">{c.chooseOne} <span className="text-xs opacity-60">· {c.requiredChoice}</span></legend>
+            <legend className="mb-2.5 text-[15px] font-semibold">{c.chooseOne} <span className="text-xs opacity-60">· {c.requiredChoice}</span></legend>
             <div className="space-y-2">
               {p.variants.map((v) => (
-                <label key={v.id} className={cn('flex cursor-pointer items-center justify-between rounded-xl border bg-sf-card/70 px-3 py-2.5', variantId === v.id ? 'border-sf-primary' : 'border-sf-text/10')}>
+                <label key={v.id} className={cn('flex min-h-13 cursor-pointer items-center justify-between gap-3 rounded-2xl bg-sf-card px-4 py-3 ring-1 transition-shadow motion-reduce:transition-none', variantId === v.id ? 'shadow-sm ring-2 ring-sf-primary' : 'ring-sf-text/10 hover:ring-sf-text/20')}>
                   <span className="flex items-center gap-2">
                     <input type="radio" name="variant" checked={variantId === v.id} onChange={() => setVariantId(v.id)} className="size-5 shrink-0 accent-[var(--sf-primary)]" />
                     {v.name}
@@ -574,7 +588,7 @@ function ProductSheet({
         )}
         {p.modifierGroups.map((g) => (
           <fieldset key={g.id}>
-            <legend className="mb-2 font-medium">
+            <legend className="mb-2.5 text-[15px] font-semibold">
               {g.name}{' '}
               <span className="text-xs opacity-60">
                 · {g.maxSelect === 1 ? c.chooseOne : g.minSelect > 0 ? fmt(c.chooseBetween, { min: g.minSelect, max: g.maxSelect }) : fmt(c.chooseUpTo, { n: g.maxSelect })}
@@ -583,7 +597,7 @@ function ProductSheet({
             </legend>
             <div className="space-y-2">
               {g.options.map((o) => (
-                <label key={o.id} className={cn('flex cursor-pointer items-center justify-between rounded-xl border bg-sf-card/70 px-3 py-2.5', sel[o.id] ? 'border-sf-primary' : 'border-sf-text/10')}>
+                <label key={o.id} className={cn('flex min-h-13 cursor-pointer items-center justify-between gap-3 rounded-2xl bg-sf-card px-4 py-3 ring-1 transition-shadow motion-reduce:transition-none', sel[o.id] ? 'shadow-sm ring-2 ring-sf-primary' : 'ring-sf-text/10 hover:ring-sf-text/20')}>
                   <span className="flex items-center gap-2">
                     <input type={g.maxSelect === 1 ? 'radio' : 'checkbox'} name={`g-${g.id}`} checked={!!sel[o.id]} onChange={() => toggle(g.id, o.id)} className="size-5 shrink-0 accent-[var(--sf-primary)]" />
                     {o.name}
@@ -596,30 +610,34 @@ function ProductSheet({
         ))}
         <label className="block">
           <span className="mb-1 block font-medium">{c.notesForKitchen} <span className="text-xs opacity-60">({m.common.optional})</span></span>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 200))} placeholder={c.notesPlaceholder} className="min-h-[70px] w-full rounded-xl border border-sf-text/10 bg-sf-card/80 p-3 text-base" />
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 200))} placeholder={c.notesPlaceholder} className="min-h-[76px] w-full rounded-2xl border-0 bg-sf-card p-3.5 text-base ring-1 ring-sf-text/10 focus:ring-2 focus:ring-sf-primary focus:outline-none" />
         </label>
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
         {/* On a browse-only page (the public storefront) there is nothing to add to, so the
             quantity stepper and a permanently greyed-out "Add" button are replaced by the ways
             the guest can actually order. */}
         {canOrder ? (
-          <div className="sticky bottom-0 -mx-5 -mb-5 flex items-center gap-3 border-t border-sf-text/5 bg-sf-bg p-4">
-            <div className="flex items-center rounded-xl border border-sf-text/10 bg-sf-card">
-              <button type="button" className="h-11 w-11 text-xl" onClick={() => setQty(Math.max(1, qty - 1))} aria-label="−">−</button>
-              <span className="w-8 text-center tabular-nums" aria-label={c.quantity}>{qty}</span>
-              <button type="button" className="h-11 w-11 text-xl" onClick={() => setQty(Math.min(50, qty + 1))} aria-label="+">+</button>
+          <div className="sticky bottom-0 -mx-5 -mb-5 flex items-center gap-3 border-t border-sf-text/[0.06] bg-sf-bg/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6">
+            <div className="flex items-center gap-1 rounded-2xl bg-sf-card p-1 ring-1 ring-sf-text/10">
+              <button type="button" className="flex size-10 items-center justify-center rounded-xl hover:bg-sf-text/5 disabled:opacity-35" disabled={qty <= 1} onClick={() => setQty(Math.max(1, qty - 1))} aria-label="−">
+                <Icon name="minus" className="size-4" />
+              </button>
+              <span className="w-7 text-center font-semibold tabular-nums" aria-label={c.quantity} aria-live="polite">{qty}</span>
+              <button type="button" className="flex size-10 items-center justify-center rounded-xl bg-sf-primary text-sf-on-primary disabled:opacity-35" disabled={qty >= 50} onClick={() => setQty(Math.min(50, qty + 1))} aria-label="+">
+                <Icon name="plus" className="size-4" />
+              </button>
             </div>
-            <button type="button" disabled={p.soldOut} onClick={add} className="h-12 flex-1 rounded-xl bg-sf-primary font-medium text-sf-on-primary disabled:opacity-50" data-testid="add-to-cart">
+            <button type="button" disabled={p.soldOut} onClick={add} className="h-12 flex-1 rounded-2xl bg-sf-primary px-4 font-semibold text-sf-on-primary shadow-[0_8px_20px_-10px_rgb(0_0_0/0.5)] transition-transform active:scale-[0.99] disabled:opacity-50 motion-reduce:transition-none" data-testid="add-to-cart">
               {fmt(c.addToCartPrice, { price: money(unit * qty) })}
             </button>
           </div>
         ) : (
           orderActions.length > 0 && (
-            <div className="sticky bottom-0 -mx-5 -mb-5 space-y-2 border-t border-sf-text/5 bg-sf-bg p-4" data-testid="sheet-order-actions">
-              <p className="text-sm font-medium">{c.howToOrder}</p>
-              <div className="grid gap-2">
+            <div className="sticky bottom-0 -mx-5 -mb-5 space-y-2 border-t border-sf-text/[0.06] bg-sf-bg/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6" data-testid="sheet-order-actions">
+              <p className="text-sm font-semibold">{c.howToOrder}</p>
+              <div className={cn('grid gap-2', orderActions.length > 1 && 'sm:grid-cols-2')}>
                 {orderActions.map((a) => (
-                  <a key={a.href} href={a.href} className="flex h-12 items-center justify-center rounded-xl bg-sf-primary font-medium text-sf-on-primary">
+                  <a key={a.href} href={a.href} className="flex h-12 items-center justify-center rounded-2xl bg-sf-primary px-3 text-center font-semibold text-sf-on-primary">
                     {a.label}
                   </a>
                 ))}
@@ -648,9 +666,12 @@ function CartSheet({
   upsell,
   tableCodeRequired,
   checkout,
+  images,
   onClose,
   onSubmitted,
 }: {
+  /** Dish photos by product id, for the cart lines. */
+  images?: Map<string, string | null>;
   channel: OrderChannel;
   scope: { qrToken?: string; orgSlug: string; locationSlug: string };
   lang: LanguageCode;
@@ -845,30 +866,52 @@ function CartSheet({
 
   return (
     <Sheet onClose={onClose} label={c.cart} closeLabel={m.common.close}>
-      <div className="space-y-4 p-5" data-testid="cart-sheet">
-        <div className="flex items-center justify-between">
-          <h3 className="font-serif text-2xl">{c.cart}</h3>
-          <button type="button" onClick={onClose} className="h-10 rounded-full bg-sf-card/80 px-4 text-sm font-medium ring-1 ring-sf-text/10" data-testid="cart-close">{m.common.close}</button>
+      <div className="space-y-4 p-5 pt-6 sm:p-6" data-testid="cart-sheet">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="flex items-center gap-2.5 font-serif text-2xl">
+            {c.cart}
+            {lines.length > 0 && <span className="rounded-full bg-sf-text/[0.07] px-2 py-0.5 font-sans text-xs font-semibold tabular-nums">{lines.reduce((n, l) => n + l.quantity, 0)}</span>}
+          </h3>
+          <button type="button" onClick={onClose} className="h-10 rounded-full bg-sf-card px-4 text-sm font-medium shadow-sm ring-1 ring-sf-text/10 hover:bg-sf-text/5" data-testid="cart-close">{m.common.close}</button>
         </div>
-        {lines.length === 0 && <p className="opacity-70">{c.cartEmpty}</p>}
+        {lines.length === 0 && (
+          <div className="flex flex-col items-center rounded-2xl bg-sf-card px-6 py-10 text-center ring-1 ring-sf-text/5">
+            <span className="flex size-12 items-center justify-center rounded-full bg-sf-text/5" aria-hidden><Icon name="bag" className="size-5 opacity-60" /></span>
+            <p className="mt-3 opacity-75">{c.cartEmpty}</p>
+          </div>
+        )}
         <ul className="space-y-2">
           {lines.map((l, i) => {
             const issue = quote?.issues.find((x) => x.index === i);
             return (
-              <li key={l.lineId} className={cn('rounded-2xl bg-sf-card/80 p-3 ring-1', issue ? 'ring-red-300' : 'ring-sf-text/5')} data-testid="cart-line">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium">{l.name}</p>
+              <li key={l.lineId} className={cn('rounded-2xl bg-sf-card p-3 shadow-sm ring-1', issue ? 'ring-red-300' : 'ring-sf-text/5')} data-testid="cart-line">
+                <div className="flex items-start gap-3">
+                  {images?.get(l.productId) ? (
+                    <img src={images.get(l.productId)!} alt="" className="size-14 shrink-0 rounded-xl bg-sf-accent/10 object-cover" loading="lazy" decoding="async" width={56} height={56} />
+                  ) : (
+                    <NoPhoto className="size-14 rounded-xl [&_svg]:size-6" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="leading-snug font-semibold break-words">{l.name}</p>
                     {l.detail && <p className="text-xs opacity-70">{l.detail}</p>}
                     {l.notes && <p className="text-xs italic opacity-70">“{l.notes}”</p>}
                   </div>
-                  <p className="text-sm font-semibold tabular-nums">{money(l.unitCents * l.quantity)}</p>
+                  <p className="shrink-0 text-sm font-bold tabular-nums">{money(l.unitCents * l.quantity)}</p>
                 </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <button type="button" disabled={!!pending} className="size-10 rounded-xl bg-sf-card text-lg ring-1 ring-sf-text/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">−</button>
-                  <span className="w-8 text-center font-medium tabular-nums" aria-live="polite">{l.quantity}</span>
-                  <button type="button" disabled={!!pending} className="size-10 rounded-xl bg-sf-card text-lg ring-1 ring-sf-text/10 disabled:opacity-40" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">+</button>
-                  <button type="button" disabled={!!pending} className="ms-auto h-10 rounded-xl px-3 text-sm underline underline-offset-2 opacity-75 hover:bg-sf-text/5 disabled:opacity-30" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>{m.common.remove}</button>
+                <div className="mt-2.5 flex items-center gap-2 ps-[4.25rem]">
+                  <div className="flex items-center gap-1 rounded-xl bg-sf-bg p-0.5 ring-1 ring-sf-text/10">
+                    <button type="button" disabled={!!pending || l.quantity <= 1} className="flex size-9 items-center justify-center rounded-lg hover:bg-sf-text/5 disabled:opacity-35" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))} aria-label="−">
+                      <Icon name="minus" className="size-4" />
+                    </button>
+                    <span className="w-7 text-center font-semibold tabular-nums" aria-live="polite">{l.quantity}</span>
+                    <button type="button" disabled={!!pending || l.quantity >= 50} className="flex size-9 items-center justify-center rounded-lg hover:bg-sf-text/5 disabled:opacity-35" onClick={() => setLines((ls) => ls.map((x) => (x.lineId === l.lineId ? { ...x, quantity: Math.min(50, x.quantity + 1) } : x)))} aria-label="+">
+                      <Icon name="plus" className="size-4" />
+                    </button>
+                  </div>
+                  <button type="button" disabled={!!pending} className="ms-auto inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm opacity-75 hover:bg-sf-text/5 hover:opacity-100 disabled:opacity-30" onClick={() => setLines((ls) => ls.filter((x) => x.lineId !== l.lineId))}>
+                    <Icon name="trash" className="size-4" />
+                    {m.common.remove}
+                  </button>
                 </div>
                 {issue && <p className="mt-2 text-sm text-red-700" role="alert">{issueText(issue)}</p>}
               </li>
@@ -880,7 +923,7 @@ function CartSheet({
           <>
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{c.notesForKitchen} <span className="text-xs opacity-60">({m.common.optional})</span></span>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 300))} className="min-h-[60px] w-full rounded-xl border border-sf-text/10 bg-sf-card/80 p-3 text-base" placeholder={c.notesPlaceholder} />
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 300))} className="min-h-[64px] w-full rounded-2xl border-0 bg-sf-card p-3.5 text-base ring-1 ring-sf-text/10 focus:ring-2 focus:ring-sf-primary focus:outline-none" placeholder={c.notesPlaceholder} />
             </label>
             {tableCodeRequired && (
               <label className="block">
@@ -980,7 +1023,7 @@ function CartSheet({
                   (channel === 'TAKEAWAY' && !pickup)))
                 }
                 onClick={submit}
-                className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-medium text-sf-on-primary disabled:opacity-50"
+                className="h-14 w-full rounded-2xl bg-sf-primary text-lg font-semibold text-sf-on-primary shadow-[0_10px_24px_-12px_rgb(0_0_0/0.55)] transition-transform active:scale-[0.99] disabled:opacity-50 disabled:shadow-none motion-reduce:transition-none"
                 data-testid="submit-order"
               >
                 {submitting ? c.submitting : pending ? c.retrySubmit : c.submitOrder}
@@ -1001,7 +1044,7 @@ function CartSheet({
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-12 w-full items-center justify-center rounded-2xl bg-[#1f7a4c] font-medium text-white"
+                  className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#1a7f4b] font-semibold text-white shadow-[0_10px_24px_-12px_rgb(0_0_0/0.5)] transition-transform active:scale-[0.99] motion-reduce:transition-none"
                   data-testid="whatsapp-send"
                 >
                   {c.sendViaWhatsApp}

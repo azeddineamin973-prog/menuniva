@@ -27,6 +27,7 @@ export function StorefrontShell({
   children,
   compactHeader = false,
   poweredBy,
+  headerMeta,
 }: {
   branding: Branding;
   restaurantName: string;
@@ -36,6 +37,8 @@ export function StorefrontShell({
   children: React.ReactNode;
   compactHeader?: boolean;
   poweredBy: string;
+  /** Small status line under the name (e.g. open now). */
+  headerMeta?: React.ReactNode;
 }) {
   const p = storefrontPalette(branding);
   const style = {
@@ -46,6 +49,8 @@ export function StorefrontShell({
     '--sf-on-primary': p.onPrimary,
     '--sf-primary-ink': p.primaryInk,
     '--sf-card': p.card,
+    '--sf-secondary': p.secondary,
+    '--sf-on-secondary': p.onSecondary,
   } as CSSProperties;
   const serif = (branding?.headingFont ?? 'serif') === 'serif';
   const cover = branding?.coverUrl && !compactHeader ? branding.coverUrl : null;
@@ -61,7 +66,7 @@ export function StorefrontShell({
       data-palette={p.dark ? 'dark' : 'light'}
     >
       <header className={cn('relative overflow-hidden', cover ? 'bg-[#111] text-white' : 'bg-sf-primary text-sf-on-primary')}>
-        <div className={cn('relative z-10 mx-auto flex max-w-3xl gap-3 px-4', compactHeader ? 'items-center py-3' : cover ? 'min-h-48 items-end pt-14 pb-5 sm:min-h-56' : 'items-center pt-6 pb-5')}>
+        <div className={cn('relative z-10 mx-auto flex max-w-5xl gap-3 px-4 sm:px-6', compactHeader ? 'items-center py-3' : cover ? 'min-h-48 items-end pt-14 pb-5 sm:min-h-56' : 'items-center pt-6 pb-5')}>
           {branding?.logoUrl && (
             <img
               src={branding.logoUrl}
@@ -86,13 +91,14 @@ export function StorefrontShell({
                 {subtitle}
               </p>
             )}
+            {headerMeta && !compactHeader && <div className="mt-2 flex flex-wrap items-center gap-2">{headerMeta}</div>}
           </div>
           {languages.length > 1 && (
             <LanguageCookieSwitcher
               current={lang}
               available={languages}
               // Over a cover photo the switcher sits in the top corner, leaving the name the full width.
-              className={cn('shrink-0 [&_select]:border-current/30 [&_select]:bg-current/10 [&_select]:text-current [&_select]:backdrop-blur', cover && 'absolute end-4 top-4')}
+              className={cn('shrink-0 [&_select]:border-current/30 [&_select]:bg-current/10 [&_select]:text-current [&_select]:backdrop-blur', cover && 'absolute end-4 top-4 sm:end-6')}
             />
           )}
         </div>
@@ -106,7 +112,7 @@ export function StorefrontShell({
         <div aria-hidden className="relative z-10 h-1 bg-sf-accent" />
       </header>
       {children}
-      <footer className="mx-auto max-w-3xl px-4 py-8 text-center text-xs opacity-60">{poweredBy}</footer>
+      <footer className="mx-auto max-w-5xl px-4 py-10 text-center text-xs opacity-60">{poweredBy}</footer>
     </div>
   );
 }
