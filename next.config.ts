@@ -5,6 +5,11 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  // Browsers only honour this over https; it keeps returning visitors on https for two years.
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000' },
+  // No script rules (those would need per-request nonces): only framing, plugins, <base> and
+  // where forms may post, none of which MenuNiva needs beyond its own site.
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" },
 ];
 
 const nextConfig: NextConfig = {

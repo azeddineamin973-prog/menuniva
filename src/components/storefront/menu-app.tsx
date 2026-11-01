@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import type { LanguageCode, OrderChannel } from '@/generated/prisma/enums';
 import type { Messages } from '@/i18n';
 import { fmt } from '@/i18n/config';
@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { formatCents } from '@/lib/money';
 import { pickSuggestions, type UpsellRuleView } from '@/lib/upsell';
 import { buildWhatsAppText } from '@/lib/whatsapp';
+import { uuid } from '@/lib/uuid';
 import type { PublicCategory, PublicProduct } from '@/server/services/public-menu';
 import { Icon } from '@/components/ui/icons';
 import { DishCard, lowestPrice, NoPhoto } from './dish-card';
@@ -41,9 +42,8 @@ type DeliveryQuote = { valid: boolean; covered: boolean; zoneName?: string; feeC
 
 export { buildWhatsAppText };
 
-function uid() {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-}
+// A real UUID on every page (the server refuses anything else as an order's idempotency key).
+const uid = uuid;
 
 export function useCart(storageKey: string) {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -140,7 +140,6 @@ export function MenuApp({
     return menu
       .map((cat) => ({ ...cat, products: cat.products.filter((p) => fold(p.name).includes(needle) || fold(p.description ?? '').includes(needle)) }))
       .filter((cat) => cat.products.length > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu, needle]);
   const matches = shownMenu.reduce((n, cat) => n + cat.products.length, 0);
 
@@ -412,12 +411,12 @@ function UpsellBox({ suggestions, m, money, onAdd, onDismiss }: { suggestions: {
  */
 function Sheet({ children, onClose, label, closeLabel }: { children: React.ReactNode; onClose: () => void; label: string; closeLabel: string }) {
   const panel = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  // Always the latest onClose, without re-running the effect (which would move the focus).
+  const close = useEffectEvent(() => onClose());
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return closeRef.current();
+      if (e.key === 'Escape') return close();
       if (e.key !== 'Tab' || !panel.current) return;
       const items = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input, select, textarea')];
       if (!items.length) return;
@@ -791,7 +790,6 @@ function CartSheet({
 
   const issueText = (i: QuoteIssue) => (i.code === 'selection_rules' && i.group ? fmt(m.validation.chooseOption, { group: i.group }) : fmt(c.itemNoLongerAvailable, { name: i.name ?? lines[i.index]?.name ?? '' }));
 
-  const submitRef = useRef<(() => Promise<void>) | null>(null);
   const submit = async () => {
     setSubmitting(true);
     setError(null);
@@ -857,11 +855,11 @@ function CartSheet({
     setError(c.submitUncertain);
     setSubmitting(false);
   };
-  submitRef.current = submit;
+  const submitAgain = useEffectEvent(() => void submit());
   // Back online while an order is unconfirmed: check it once automatically (safe, idempotent).
   useEffect(() => {
     if (!pending) return;
-    const onOnline = () => void submitRef.current?.();
+    const onOnline = () => submitAgain();
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
   }, [pending]);

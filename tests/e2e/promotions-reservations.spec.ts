@@ -62,6 +62,7 @@ test('M10-05..09 + TEST 12 (browser): guest requests, staff assign + confirm, do
     await g.getByRole('link', { name: 'Reservar mesa' }).click();
     await g.getByTestId('reserve-date').fill(tomorrow);
     await g.getByTestId('reserve-party').selectOption('2');
+    await expect(g.getByTestId('reserve-times')).toHaveAttribute('data-for', `${tomorrow}|2`);
     const slot = g.getByTestId('reserve-slot').filter({ hasText: '20:00' });
     await expect(slot).toBeVisible();
     return { g, slot, name };

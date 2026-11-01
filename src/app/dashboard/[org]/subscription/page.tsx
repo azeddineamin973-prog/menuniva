@@ -34,7 +34,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ o
     <>
       <PageHeader title={m.nav.subscription} description="Billing is handled manually by MenuNiva: no card is stored and nothing is charged automatically." />
       {sub.status === 'PAST_DUE' && <div className="mb-4"><Alert tone="warning">A payment is overdue. Please contact MenuNiva support{config.supportEmail ? ` (${config.supportEmail})` : ''}.</Alert></div>}
-      {trialDays !== null && trialDays <= 0 && <div className="mb-4"><Alert tone="warning">Your trial has ended. Only your plan's features remain available.</Alert></div>}
+      {trialDays !== null && trialDays <= 0 && <div className="mb-4"><Alert tone="warning">Your trial has ended. Only your plan’s features remain available.</Alert></div>}
       <div className={statGrid(3, 'mb-6')}>
         <Stat icon="card" label="Plan" value={<span data-testid="sub-plan">{sub.plan.name}</span>} hint={sub.plan.monthlyPriceCents !== null ? `${formatCents(sub.plan.monthlyPriceCents)} / month` : 'Price agreed individually'} />
         <Stat label="Status" value={<Badge tone={TONE[sub.status]} dot data-testid="sub-status">{humanize(sub.status)}</Badge>} hint={sub.billingPeriod === 'YEARLY' ? 'Billed yearly' : 'Billed monthly'} />

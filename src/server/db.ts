@@ -22,7 +22,9 @@ function createClient() {
   return new PrismaClient({ adapter, log: ['warn', 'error'] });
 }
 
+// Kept on globalThis in every environment: a production build can evaluate this module from more
+// than one bundle in the same process, and each copy must not open its own connection pool.
 export const db: PrismaClient = globalForPrisma.__menunivaPrisma ?? createClient();
-if (env.APP_ENV !== 'production') globalForPrisma.__menunivaPrisma = db;
+globalForPrisma.__menunivaPrisma = db;
 
 export type Tx = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];

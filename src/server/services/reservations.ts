@@ -7,14 +7,14 @@ import { LANGUAGES } from '@/i18n/config';
 import { rangesFor, type OpeningHours } from '@/lib/opening-hours';
 import { openingHoursSchema } from '@/lib/opening-hours-schema';
 import { zonedParts, zonedTimeToUtc } from '@/lib/time';
-import { audit } from '../audit';
+import { audit, logError } from '../audit';
 import { hashToken } from '../crypto';
 import { db, type Tx } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
 import { asIdentity, type ClientIdentity } from '../client-identity';
-import { limitPublic } from '../rate-limit';
+import { assertBelowLimit, countSuccess, limitPublic } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 
 /** Reservations that occupy capacity / tables. */
@@ -146,9 +146,14 @@ export async function requestReservation(input: unknown, client: string | Client
   const token = reservationTokenFor(location.id, d.idempotencyKey);
   const existing = await db.reservation.findUnique({ where: { locationId_idempotencyKey: { locationId: location.id, idempotencyKey: d.idempotencyKey } } });
   if (existing) return { token, status: existing.status, duplicate: true };
-  await limitPublic(`reservation:${location.id}`, asIdentity(client), { guest: [5, 3600], ip: [30, 3600], scope: { key: 'location', limit: [200, 3600] } });
+  // A request holds seats until the restaurant answers, so requests are capped per day: per trusted
+  // IP (every attempt) and per phone number (requests made, from any device); the location cap
+  // counts only requests that were made. One person cannot fill a restaurant's evening.
+  const countForLocation = await limitPublic(`reservation:${location.id}`, asIdentity(client), { guest: [5, 3600], ip: [RESERVATION_LIMITS.ipPerDay, 86400], scope: { key: 'location', limit: [200, 3600] } });
+  const phoneKey = `reservation:phone:${location.id}:${d.phone.replace(/\D/g, '')}`;
+  await assertBelowLimit(phoneKey, RESERVATION_LIMITS.phonePerDay, 86400);
   const s = location.reservationSettings ?? DEFAULTS;
-  return db.$transaction(async (tx) => {
+  const made = await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'res:' + location.id}))`;
     const av = await availability(tx, location, location.reservationSettings, d.date, d.partySize, now);
     if (av.reason !== 'ok') throw new ReservationRejectedError(av.reason);
@@ -174,7 +179,13 @@ export async function requestReservation(input: unknown, client: string | Client
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'RESERVATION_REQUEST', title: `Reservation request: ${d.partySize} guests ${d.date} ${d.time}`, entityId: r.id } });
     return { token, status: r.status, duplicate: false };
   });
+  // The request exists: a failure to count it must not turn the guest's success into an error.
+  await Promise.all([countForLocation(), countSuccess(phoneKey, RESERVATION_LIMITS.phonePerDay, 86400)]).catch((e) => logError('rate-limit-count', e));
+  return made;
 }
+
+/** Daily caps on reservation requests for one location (see requestReservation). */
+export const RESERVATION_LIMITS = { ipPerDay: 10, phonePerDay: 3 } as const;
 
 export async function trackReservation(token: string) {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;

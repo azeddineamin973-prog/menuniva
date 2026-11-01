@@ -28,7 +28,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
   ]);
   const pc = location.country === 'PT' ? '4700-*, 4710-001' : '280*, 28013';
   const money = (c: number | null | undefined) => (c === null || c === undefined ? '' : centsToInputValue(c));
-  const ZoneFields = ({ z }: { z?: (typeof zones)[number] }) => (
+  const zoneFields = (z?: (typeof zones)[number]) => (
     <>
       <input type="hidden" name="org" value={ctx.org.slug} />
       <input type="hidden" name="locationId" value={location.id} />
@@ -118,7 +118,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
                   <details>
                     <summary className={disclosureClass}>Edit · {z.postalCodePatterns.join(', ')}</summary>
                     <ActionForm action={saveZoneAction} submitLabel="Save zone" submitVariant="secondary" className="mt-2">
-                      <ZoneFields z={z} />
+                      {zoneFields(z)}
                       <Checkbox name="isActive" label="Active" defaultChecked={z.isActive} />
                     </ActionForm>
                   </details>
@@ -129,7 +129,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ org: 
             </ul>
             <CardBody className="border-t border-line">
               <ActionForm action={saveZoneAction} submitLabel="Add zone" resetOnSuccess testId="add-zone-form">
-                <ZoneFields />
+                {zoneFields()}
               </ActionForm>
             </CardBody>
           </Card>

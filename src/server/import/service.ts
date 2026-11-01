@@ -11,7 +11,7 @@ import { assertModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { newPublicToken } from '../crypto';
 import { deleteTenantMedia } from '../media';
-import { mediaKeyFromPath, sniffImage, storage, storeTenantImage } from '../storage';
+import { isOversizedPicture, mediaKeyFromPath, sniffImage, storage, storeTenantImage } from '../storage';
 import type { TenantContext } from '../tenant';
 import { ADAPTERS, PLATFORM_SOURCES } from './adapters';
 import { DUPLICATE_THRESHOLD, groupDuplicates, normalizeName, similarity } from './dedupe';
@@ -645,7 +645,7 @@ export async function copyImportedImages(
       if (!url) return;
       const res = await fetchImage(url);
       const kind = res.status === 200 ? sniffImage(res.body) : null;
-      if (!kind || res.body.length > MAX_IMAGE_BYTES) return;
+      if (!kind || res.body.length > MAX_IMAGE_BYTES || (await isOversizedPicture(res.body))) return;
       const key = `${organizationId}/products/${newPublicToken()}.${kind.ext}`;
       await storage.put(key, res.body, kind.contentType);
       stored = `/media/${key}`;

@@ -91,6 +91,8 @@ export function ActionForm({
   };
   const [state, formAction, pending] = useActionState<ActionResult<unknown>, FormData>(safeAction, initialActionState);
   const [shown, setShown] = useState<ActionResult<unknown> | null>(null);
+  // Language of the page around the form, read when a message is shown (the DOM is needed for it).
+  const [shownLang, setShownLang] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const ref = useRef<HTMLFormElement>(null);
   const uiLang = () => ref.current?.closest('[lang]')?.getAttribute('lang') ?? null;
@@ -108,6 +110,7 @@ export function ActionForm({
   useEffect(() => {
     if (state === initialActionState) return;
     setShown(state);
+    setShownLang(uiLang());
     if (state.ok) {
       if (resetOnSuccess) ref.current?.reset();
       onSuccess?.(state.data);
@@ -158,7 +161,7 @@ export function ActionForm({
         </div>
         {shown && !shown.ok && shown.error && (
           <Alert tone="danger">
-            {shown.error === 'validation' ? 'Some fields need attention. Please check the highlighted fields.' : friendlyError(shown.error, uiLang())}
+            {shown.error === 'validation' ? 'Some fields need attention. Please check the highlighted fields.' : friendlyError(shown.error, shownLang)}
           </Alert>
         )}
       </form>

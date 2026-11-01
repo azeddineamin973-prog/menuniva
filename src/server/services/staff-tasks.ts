@@ -1,6 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
-import { audit } from '../audit';
+import { audit, logError } from '../audit';
 import { db } from '../db';
 import { UserFacingError } from '../errors';
 import { asIdentity, type ClientIdentity } from '../client-identity';
@@ -19,7 +19,7 @@ export async function createTableRequest(input: unknown, client: string | Client
   const d = tableRequestSchema.parse(input);
   const table = await resolveTableToken(d.qrToken);
   if (!table || !table.location.isPublished) throw new UserFacingError('qr_invalid', 404);
-  await limitPublic(`table-request:${table.id}`, asIdentity(client), { guest: [6, 600], ip: [60, 600], scope: { key: 'table', limit: [30, 600] } });
+  const countForTable = await limitPublic(`table-request:${table.id}`, asIdentity(client), { guest: [6, 600], ip: [60, 600], scope: { key: 'table', limit: [30, 600] } });
   const existing = await db.staffTask.findFirst({ where: { tableId: table.id, type: d.type, status: { in: ['OPEN', 'ACKNOWLEDGED'] } } });
   if (existing) return { taskId: existing.id, duplicate: true };
   const session = await db.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
@@ -29,6 +29,7 @@ export async function createTableRequest(input: unknown, client: string | Client
   await db.notification.create({
     data: { organizationId: table.organizationId, locationId: table.locationId, type: 'STAFF_TASK', title: `${d.type === 'CALL_WAITER' ? 'Waiter called' : 'Bill requested'} — table ${table.label}`, entityId: task.id },
   });
+  await countForTable().catch((e) => logError('rate-limit-count', e));
   return { taskId: task.id, duplicate: false };
 }
 

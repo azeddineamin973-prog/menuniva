@@ -9,6 +9,8 @@ import { trustedClientIp } from '../client-identity';
 export const SESSION_COOKIE = 'mn_session';
 const SESSION_DAYS = 30;
 const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
+/** A session ends 90 days after sign-in even when used every day (a stolen cookie does not live forever). */
+const MAX_SESSION_MS = 90 * 86400_000;
 
 /** Client IP as far as the deployment's trusted proxies vouch for it (TRUST_PROXY_HOPS), else null. */
 export async function clientIp(): Promise<string | null> {
@@ -17,6 +19,9 @@ export async function clientIp(): Promise<string | null> {
 
 /** Creates a DB session and sets the httpOnly cookie. Call only from server actions / route handlers. */
 export async function createSession(userId: string) {
+  // Signing in again in the same browser replaces its previous session instead of leaving it alive.
+  const previous = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (previous) await db.session.deleteMany({ where: { tokenHash: hashToken(previous) } });
   const token = newSecretToken();
   const h = await headers();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000);
@@ -68,13 +73,14 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     where: { tokenHash: hashToken(token) },
     include: { user: true },
   });
-  if (!session || session.expiresAt < new Date() || session.user.disabledAt) return null;
+  const hardEnd = session ? session.createdAt.getTime() + MAX_SESSION_MS : 0;
+  if (!session || session.expiresAt < new Date() || Date.now() > hardEnd || session.user.disabledAt) return null;
 
-  // Sliding expiry: refresh at most once per day to limit writes.
+  // Sliding expiry: refresh at most once per day to limit writes, never past the 90-day limit.
   if (Date.now() - session.lastSeenAt.getTime() > REFRESH_AFTER_MS) {
     await db.session.update({
       where: { id: session.id },
-      data: { lastSeenAt: new Date(), expiresAt: new Date(Date.now() + SESSION_DAYS * 86400_000) },
+      data: { lastSeenAt: new Date(), expiresAt: new Date(Math.min(Date.now() + SESSION_DAYS * 86400_000, hardEnd)) },
     });
   }
   const u = session.user;

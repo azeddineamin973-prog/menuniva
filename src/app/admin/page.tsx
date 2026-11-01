@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Form from 'next/form';
 import { Badge, ButtonLink, Card, CardHeader, EmptyState, Icon, PageHeader, Stat } from '@/components/ui';
 import { Table, TableWrap, TD, TH, THead, TR } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
@@ -64,7 +65,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         <Card className="overflow-hidden">
           <CardHeader title="Tenants" icon="building" description={shown.length === tenants.length ? `${tenants.length} restaurants` : `${shown.length} of ${tenants.length} restaurants`} />
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
-            <form action="/admin" className="relative min-w-0 flex-1 basis-56" role="search">
+            <Form action="/admin" prefetch={false} className="relative min-w-0 flex-1 basis-56" role="search">
               {status !== 'ALL' && <input type="hidden" name="status" value={status} />}
               <label htmlFor="tenant-search" className="sr-only">
                 Search restaurants
@@ -78,7 +79,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
                 placeholder="Search by name or slug…"
                 className="h-9 w-full rounded-lg border border-line bg-surface ps-9 pe-3 text-sm shadow-xs placeholder:text-muted/70 hover:border-line-strong focus:border-[var(--mn-focus)] focus:ring-3 focus:ring-[var(--mn-focus)]/20 focus:outline-none pointer-coarse:h-11 pointer-coarse:text-base"
               />
-            </form>
+            </Form>
             <nav aria-label="Filter by status" className="mn-scroll -mx-1 flex gap-1 overflow-x-auto px-1">
               {FILTERS.map((f) => (
                 <Link

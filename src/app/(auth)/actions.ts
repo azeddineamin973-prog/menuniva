@@ -83,10 +83,17 @@ export async function resetPasswordAction(_prev: ActionResult, form: FormData): 
   if (!parsed.success) return { ok: false, error: 'validation', fieldErrors: zodFieldErrors(parsed.error.issues) };
   const record = await db.passwordResetToken.findUnique({ where: { tokenHash: hashToken(parsed.data.token) } });
   if (!record || record.usedAt || record.expiresAt < new Date()) return { ok: false, error: 'link_invalid' };
-  await db.$transaction(async (tx) => {
-    await tx.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
-    await tx.user.update({ where: { id: record.userId }, data: { passwordHash: await hashPassword(parsed.data.password) } });
+  const passwordHash = await hashPassword(parsed.data.password);
+  const used = await db.$transaction(async (tx) => {
+    // Consumed atomically: two submissions of the same link cannot both succeed.
+    const r = await tx.passwordResetToken.updateMany({ where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
+    if (r.count !== 1) return false;
+    await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
+    // Any other reset link for this account stops working.
+    await tx.passwordResetToken.deleteMany({ where: { userId: record.userId, usedAt: null } });
+    return true;
   });
+  if (!used) return { ok: false, error: 'link_invalid' };
   await revokeAllSessions(record.userId);
   await audit({ actorUserId: record.userId, action: 'user.password_reset', entityType: 'User', entityId: record.userId });
   return { ok: true, message: 'reset_done' };

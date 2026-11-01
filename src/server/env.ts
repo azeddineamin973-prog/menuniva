@@ -48,6 +48,8 @@ const schema = z.object({
   UBER_EATS_CLIENT_ID: z.string().optional(),
   UBER_EATS_CLIENT_SECRET: z.string().optional(),
   BILLING_PROVIDER: z.enum(['manual', 'stripe']).default('manual'),
+  /** Vercel Cron: secret sent as a bearer token to /api/cron/* (at least 16 random characters). */
+  CRON_SECRET: z.string().min(16, 'CRON_SECRET must be at least 16 characters').optional(),
   ERROR_MONITORING_DSN: z.string().optional(),
   /**
    * Number of reverse proxies in front of the app that append the client address to
@@ -100,7 +102,7 @@ function legacyJwtRole(key: string): string | null {
   }
 }
 
-export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'> & Partial<Pick<Env, 'TRUST_PROXY_HOPS' | 'TEST_FETCH_FIXTURES'>>): string[] {
+export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'DATABASE_URL' | 'APP_SECRET'> & Partial<Pick<Env, 'TRUST_PROXY_HOPS' | 'TEST_FETCH_FIXTURES' | 'DATABASE_CA_CERT'>>): string[] {
   const problems: string[] = [];
   if (e.TEST_FETCH_FIXTURES && e.APP_ENV !== 'test') problems.push('TEST_FETCH_FIXTURES: only allowed with APP_ENV=test (it replaces real network requests)');
   let dbName = '';
@@ -120,6 +122,18 @@ export function environmentProblems(e: Pick<Env, 'APP_ENV' | 'APP_BASE_URL' | 'D
   // are either spoofable (trusting X-Forwarded-For blindly) or unknown without anyone noticing.
   if ((e.APP_ENV === 'production' || e.APP_ENV === 'staging') && e.TRUST_PROXY_HOPS === undefined) problems.push('TRUST_PROXY_HOPS: set the number of reverse proxies in front of the app (see docs/DEPLOYMENT.md → Reverse proxy)');
   if (e.APP_ENV !== 'test' && dbName.includes('test')) problems.push('DATABASE_URL: the test database is wiped by automated tests; use it only with APP_ENV=test');
+  // Guest names and phone numbers must not cross the internet unencrypted: a database on another
+  // machine needs TLS (DATABASE_CA_CERT, or sslmode in the URL).
+  let dbHost = '';
+  try {
+    dbHost = new URL(e.DATABASE_URL).hostname;
+  } catch {
+    // reported above
+  }
+  const localDb = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(dbHost);
+  if ((e.APP_ENV === 'production' || e.APP_ENV === 'staging') && dbHost && !localDb && !e.DATABASE_CA_CERT?.trim() && !/[?&]sslmode=(require|verify-ca|verify-full)\b/.test(e.DATABASE_URL)) {
+    problems.push('DATABASE_URL: a remote database needs TLS in this environment; set DATABASE_CA_CERT (see docs/DEPLOYMENT.md) or sslmode=verify-full in the URL');
+  }
   return problems;
 }
 /**
@@ -133,6 +147,9 @@ export function withPlatformDefaults(source: Record<string, string | undefined>)
 function load(): Env {
   const parsed = schema.safeParse(withPlatformDefaults(process.env));
   const issues = parsed.success ? [...environmentProblems(parsed.data), ...storageProblems(parsed.data)] : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+  // On Vercel a missing APP_ENV would silently mean "development": no production checks, local
+  // file storage on a read-only disk, a large connection pool.
+  if (parsed.success && process.env.VERCEL && (parsed.data.APP_ENV === 'development' || parsed.data.APP_ENV === 'test')) issues.push('APP_ENV: set it to production or staging on Vercel (it defaults to development)');
   if (!parsed.success || issues.length) {
     throw new Error(`MenuNiva configuration error. Check your .env file:\n${issues.map((i) => `  - ${i}`).join('\n')}`);
   }

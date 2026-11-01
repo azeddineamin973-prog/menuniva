@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { audit } from '../audit';
+import { audit, logError } from '../audit';
 import { db, type Tx } from '../db';
 import { UserFacingError } from '../errors';
 import { type TenantContext } from '../tenant';
@@ -125,21 +125,16 @@ export async function updateRetention(ctx: TenantContext, days: unknown) {
 export async function applyRetention(now = new Date()) {
   const orgs = await db.restaurantOrganization.findMany({ select: { id: true, settings: { select: { dataRetentionDays: true } } } });
   const totals = { orders: 0, reservations: 0, feedback: 0, loyalty: 0 };
+  let failedRestaurants = 0;
   for (const org of orgs) {
-    const cutoff = new Date(now.getTime() - (org.settings?.dataRetentionDays ?? 730) * 86400_000);
-    const [orders, deliveries, reservations, feedback, loyalty] = await Promise.all([
-      db.order.findMany({ where: { organizationId: org.id, status: { in: [...FINISHED] }, createdAt: { lt: cutoff }, OR: [{ customerName: { not: null } }, { customerPhone: { not: null } }, { customerNotes: { not: null } }] }, select: { id: true } }),
-      db.deliveryOrderDetails.findMany({ where: { order: { organizationId: org.id, status: { in: [...FINISHED] }, createdAt: { lt: cutoff } }, NOT: { phone: ERASED } }, select: { orderId: true } }),
-      db.reservation.findMany({ where: { organizationId: org.id, endsAt: { lt: cutoff }, NOT: { name: ERASED } }, select: { id: true } }),
-      db.customerFeedback.findMany({ where: { organizationId: org.id, createdAt: { lt: cutoff }, OR: [{ contactName: { not: null } }, { contactInfo: { not: null } }] }, select: { id: true } }),
-      // Members with no activity (joining or any stamp/point movement) within the period.
-      db.loyaltyAccount.findMany({ where: { organizationId: org.id, deletedAt: null, createdAt: { lt: cutoff }, transactions: { none: { createdAt: { gte: cutoff } } } }, select: { id: true } }),
-    ]);
-    const ids = { orders: [...new Set([...orders.map((x) => x.id), ...deliveries.map((x) => x.orderId)])], reservations: reservations.map((x) => x.id), feedback: feedback.map((x) => x.id), loyalty: loyalty.map((x) => x.id) };
-    if (!ids.orders.length && !ids.reservations.length && !ids.feedback.length && !ids.loyalty.length) continue;
-    const c = await db.$transaction((tx) => eraseIds(tx, org.id, ids));
-    await audit({ organizationId: org.id, action: 'privacy.retention_applied', entityType: 'GuestData', metadata: { ...c, cutoff: cutoff.toISOString() } });
-    for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += c[k];
+    // One restaurant that cannot be processed (e.g. a very large first run) is logged and retried
+    // the next day; it never stops the others.
+    try {
+      await retainOrg(org, now, totals);
+    } catch (e) {
+      failedRestaurants++;
+      await logError('retention', e, { organizationId: org.id });
+    }
   }
   const day = 86400_000;
   const [sessions, resets, setupTokens, invitations, buckets, errors] = await Promise.all([
@@ -150,5 +145,25 @@ export async function applyRetention(now = new Date()) {
     db.rateLimitBucket.deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * day) } } }),
     db.errorLog.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 90 * day) } } }),
   ]);
-  return { guestData: totals, platform: { sessions: sessions.count, resetTokens: resets.count, setupTokens: setupTokens.count, invitations: invitations.count, rateLimitBuckets: buckets.count, errorLogs: errors.count } };
+  return { guestData: totals, failedRestaurants, platform: { sessions: sessions.count, resetTokens: resets.count, setupTokens: setupTokens.count, invitations: invitations.count, rateLimitBuckets: buckets.count, errorLogs: errors.count } };
+}
+
+async function retainOrg(org: { id: string; settings: { dataRetentionDays: number } | null }, now: Date, totals: { orders: number; reservations: number; feedback: number; loyalty: number }) {
+  {
+    const cutoff = new Date(now.getTime() - (org.settings?.dataRetentionDays ?? 730) * 86400_000);
+    const [orders, deliveries, reservations, feedback, loyalty] = await Promise.all([
+      db.order.findMany({ where: { organizationId: org.id, status: { in: [...FINISHED] }, createdAt: { lt: cutoff }, OR: [{ customerName: { not: null } }, { customerPhone: { not: null } }, { customerNotes: { not: null } }] }, select: { id: true } }),
+      db.deliveryOrderDetails.findMany({ where: { order: { organizationId: org.id, status: { in: [...FINISHED] }, createdAt: { lt: cutoff } }, NOT: { phone: ERASED } }, select: { orderId: true } }),
+      db.reservation.findMany({ where: { organizationId: org.id, endsAt: { lt: cutoff }, NOT: { name: ERASED } }, select: { id: true } }),
+      db.customerFeedback.findMany({ where: { organizationId: org.id, createdAt: { lt: cutoff }, OR: [{ contactName: { not: null } }, { contactInfo: { not: null } }] }, select: { id: true } }),
+      // Members with no activity (joining or any stamp/point movement) within the period.
+      db.loyaltyAccount.findMany({ where: { organizationId: org.id, deletedAt: null, createdAt: { lt: cutoff }, transactions: { none: { createdAt: { gte: cutoff } } } }, select: { id: true } }),
+    ]);
+    const ids = { orders: [...new Set([...orders.map((x) => x.id), ...deliveries.map((x) => x.orderId)])], reservations: reservations.map((x) => x.id), feedback: feedback.map((x) => x.id), loyalty: loyalty.map((x) => x.id) };
+    if (!ids.orders.length && !ids.reservations.length && !ids.feedback.length && !ids.loyalty.length) return;
+    // A first run on years of data can erase many rows: more time than the 5 s default.
+    const c = await db.$transaction((tx) => eraseIds(tx, org.id, ids), { timeout: 60_000 });
+    await audit({ organizationId: org.id, action: 'privacy.retention_applied', entityType: 'GuestData', metadata: { ...c, cutoff: cutoff.toISOString() } });
+    for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += c[k];
+  }
 }

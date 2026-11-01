@@ -32,6 +32,8 @@ export default async function ReservationStatusPage({ params }: { params: Promis
         {r.location.phone && <a href={`tel:${r.location.phone.replace(/\s/g, '')}`} className="inline-flex min-h-10 items-center underline underline-offset-2" dir="ltr">{r.location.phone}</a>}
         <CancelReservationButton
           token={token}
+          // Server component: rendered once per request, so reading the clock here is intended.
+          // eslint-disable-next-line react-hooks/purity
           cancellable={(r.status === 'REQUESTED' || r.status === 'CONFIRMED') && r.startsAt.getTime() - Date.now() > GUEST_CANCEL_NOTICE_MINUTES * 60_000}
           labels={{ cancel: m.reservation.cancel, confirm: m.reservation.cancelConfirm, done: m.reservation.cancelDone, tooLate: m.reservation.cancelTooLate, retry: m.common.retry }}
         />

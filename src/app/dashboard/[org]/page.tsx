@@ -73,8 +73,11 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
   if (soldOut) attention.push({ icon: 'eyeOff', text: `${soldOut} dish${soldOut === 1 ? ' is' : 'es are'} marked sold out`, href: `${base}/menu/quick`, tone: 'info' });
   if (location && !location.isPublished && ctx.can('settings.manage')) attention.push({ icon: 'globe', text: `${location.name} is not published yet`, href: `${base}/setup/publish`, tone: 'warning' });
 
+  // Server component: rendered once per request, so reading the clock here is intended.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
   const elapsed = (d: Date) => {
-    const min = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+    const min = Math.max(0, Math.round((now - d.getTime()) / 60000));
     return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
   };
   const today = new Intl.DateTimeFormat(tag, { weekday: 'long', day: 'numeric', month: 'long', timeZone }).format(new Date());

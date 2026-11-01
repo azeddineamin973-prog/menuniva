@@ -5,14 +5,14 @@ import type { LanguageCode, OrderChannel, OrderStatus, PrepStatus } from '@/gene
 import { Prisma } from '@/generated/prisma/client';
 import { LANGUAGES } from '@/i18n/config';
 import { canTransition, ACTIVE_STATUSES } from '@/lib/order-state';
-import { audit } from '../audit';
+import { audit, logError } from '../audit';
 import { hashToken, safeEqual } from '../crypto';
 import { db, type Tx } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
 import { asIdentity, type ClientIdentity } from '../client-identity';
-import { limitPublic, rateLimit } from '../rate-limit';
+import { assertBelowLimit, countSuccess, limitPublic, rateLimit } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { cartSchema, quoteCart, type QuoteIssue } from './pricing';
 import { orderingState } from './public-menu';
@@ -85,8 +85,13 @@ export async function submitTableOrder(input: unknown, client: string | ClientId
   if (existing) return { orderNumber: existing.number, trackingToken, status: existing.status, duplicate: true };
 
   const L = TABLE_ORDER_LIMITS;
-  await limitPublic(`order:${location.id}`, who, { guest: [...L.guest], ip: [...L.ip], scope: { key: 'location', limit: [...L.location] } });
-  await rateLimit(`order:table:${table.id}`, ...L.table, true);
+  // Location and table caps count only orders that were placed (see assertBelowLimit).
+  const countForLocation = await limitPublic(`order:${location.id}`, who, { guest: [...L.guest], ip: [...L.ip], scope: { key: 'location', limit: [...L.location] } });
+  await assertBelowLimit(`order:table:${table.id}`, ...L.table);
+  const countPlaced = async () => {
+    await countForLocation();
+    await countSuccess(`order:table:${table.id}`, ...L.table);
+  };
 
   // Optional table code (M8-12): staff open the table and tell guests a 4-digit code.
   if (location.tableCodeRequired) {
@@ -98,7 +103,7 @@ export async function submitTableOrder(input: unknown, client: string | ClientId
   }
 
   try {
-    return await db.$transaction(async (tx) => {
+    const placed = await db.$transaction(async (tx) => {
       const quote = await quoteCart({ locationId: location.id, channel: 'TABLE', lang: data.language, items: data.items }, tx);
       if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
 
@@ -132,6 +137,9 @@ export async function submitTableOrder(input: unknown, client: string | ClientId
       });
       return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false };
     });
+    // The order exists: a failure to count it must not turn the guest's success into an error.
+    await countPlaced().catch((e) => logError('rate-limit-count', e));
+    return placed;
   } catch (e) {
     // Two identical submissions raced: the unique (locationId, idempotencyKey) index wins.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -243,6 +251,9 @@ export async function changeOrderStatus(ctx: TenantContext, input: unknown) {
   if (order.status !== d.expectedFrom) throw new StatusConflictError(order.status);
   if (!canTransition(order.channel, order.status, d.to)) throw new UserFacingError(`Cannot change an order from ${order.status} to ${d.to}.`);
   if (d.to === 'CANCELLED' && !d.reason) throw new UserFacingError('Please give a reason for cancelling.');
+  // A cancelled order leaves the bill, and its recorded payment with it: the money must be
+  // given back (payment voided) first, so the till and MenuNiva keep the same figures.
+  if (d.to === 'CANCELLED' && (await db.paymentRecord.count({ where: { orderId: order.id, status: 'RECORDED' } }))) throw new UserFacingError('This order has a recorded payment. Void the payment first, then cancel the order.');
   if (d.to === 'READY' && order.tickets.some((t) => t.status !== 'READY' && t.status !== 'CANCELLED')) {
     throw new UserFacingError('Some stations are still preparing items for this order.');
   }
@@ -427,6 +438,9 @@ export async function trackOrder(token: string) {
       pickupAt: true,
       cancelReason: true,
       table: { select: { label: true, qrTokens: { where: { isActive: true }, select: { token: true }, take: 1 } } },
+      // The table's current QR address is only shown while this order's table is still open:
+      // an old tracking link must not hand out a QR code that staff have replaced.
+      tableSession: { select: { status: true } },
       location: { select: { name: true, slug: true, timeZone: true, takeawaySettings: { select: { pickupPoint: true } }, organization: { select: { name: true, slug: true } } } },
       items: { where: { voidedAt: null }, select: { customerNameSnapshot: true, nameSnapshot: true, variantNameSnapshot: true, quantity: true, lineTotalCents: true, modifiers: { select: { nameSnapshot: true, quantity: true } } } },
       events: { select: { toStatus: true, createdAt: true }, orderBy: { createdAt: 'asc' } },

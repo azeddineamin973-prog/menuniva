@@ -295,6 +295,7 @@ test('RESERVATIONS: request, confirm with a table, conflicting booking refused, 
     await g.page.getByRole('link', { name: 'Reservar mesa' }).click();
     await g.page.getByTestId('reserve-date').fill(tomorrow);
     await g.page.getByTestId('reserve-party').selectOption('2');
+    await expect(g.page.getByTestId('reserve-times')).toHaveAttribute('data-for', `${tomorrow}|2`);
     await g.page.getByTestId('reserve-slot').filter({ hasText: '20:00' }).click();
     await g.page.getByLabel('Nome').fill(name);
     await g.page.getByLabel('Telefone').fill('+351 933 000 204');
@@ -322,6 +323,7 @@ test('RESERVATIONS: request, confirm with a table, conflicting booking refused, 
   await g3.page.goto(`/r/${r.slug}/reserve`);
   await g3.page.getByTestId('reserve-date').fill(tomorrow);
   await g3.page.getByTestId('reserve-party').selectOption('2');
+  await expect(g3.page.getByTestId('reserve-times')).toHaveAttribute('data-for', `${tomorrow}|2`);
   await expect(g3.page.getByTestId('reserve-slot').filter({ hasText: '20:00' })).toBeDisabled();
   await g3.ctx.close();
   // Cancel A

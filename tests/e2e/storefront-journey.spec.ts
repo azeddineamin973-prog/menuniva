@@ -128,6 +128,8 @@ test('reservations: a guest books a table, sees it in the dashboard, and can can
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
   await guest.getByTestId('reserve-date').fill(tomorrow);
   await guest.getByTestId('reserve-party').selectOption('2');
+  // The times shown are those of the chosen date (today's come with the page).
+  await expect(guest.getByTestId('reserve-times')).toHaveAttribute('data-for', `${tomorrow}|2`);
   const slot = guest.getByTestId('reserve-slot').first();
   await expect(slot).toBeVisible({ timeout: 15_000 });
   await slot.click();

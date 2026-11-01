@@ -114,6 +114,11 @@ export async function enrolFromOrder(input: unknown, client: string | ClientIden
   if (order.loyaltyAccountId && order.loyaltyAccount && !order.loyaltyAccount.deletedAt) throw new UserFacingError('already_joined', 409);
   const now = new Date();
   await db.$transaction(async (tx) => {
+    // Re-checked under the order's row lock: two enrolments sent at the same moment (even with
+    // different phone numbers) must not both link the order and earn its points twice.
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
+    const current = await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { loyaltyAccount: { select: { deletedAt: true } } } });
+    if (current.loyaltyAccount && !current.loyaltyAccount.deletedAt) throw new UserFacingError('already_joined', 409);
     const existing = await tx.loyaltyAccount.findUnique({ where: { organizationId_phone: { organizationId: order.organizationId, phone } } });
     // An existing member's consent choices are never changed from an order page: whoever types a
     // phone number must not be able to opt someone else into marketing.

@@ -49,6 +49,7 @@ const PUBLIC_ROUTES: Record<string, string> = {
   'api/health/route.ts': 'health check, no data',
   'api/billing/webhook/route.ts': 'processor webhook; refused until signature verification exists',
   'media/[...key]/route.ts': 'public restaurant images with random keys',
+  'api/cron/retention/route.ts': 'Vercel Cron; answers 404 without the CRON_SECRET bearer token',
 };
 const PUBLIC_ACTIONS: Record<string, string> = {
   signupAction: 'creates an account',

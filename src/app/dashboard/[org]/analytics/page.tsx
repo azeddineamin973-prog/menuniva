@@ -1,4 +1,6 @@
-import { Alert, Button, buttonClass, Card, CardBody, CardHeader, EmptyState, FilterChip, Icon, Input, PageHeader, Stat, statGrid } from '@/components/ui';
+import { Alert, buttonClass, Card, CardBody, CardHeader, EmptyState, FilterChip, Icon, Input, PageHeader, Stat, statGrid } from '@/components/ui';
+import Form from 'next/form';
+import { SubmitButton } from '@/components/forms/submit-button';
 import { getMessages } from '@/i18n';
 import { formatCents } from '@/lib/money';
 import { currentLocation } from '@/server/current-location';
@@ -55,12 +57,12 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
             {PRESETS.map(([k, label]) => (
               <FilterChip key={k} href={`${base}?p=${k}`} active={range.preset === k} data-testid={`range-${k}`}>{label}</FilterChip>
             ))}
-            <form className="flex flex-wrap items-center gap-1.5" data-testid="range-custom">
+            <Form action="" prefetch={false} className="flex flex-wrap items-center gap-1.5" data-testid="range-custom">
               <input type="hidden" name="p" value="custom" />
-              <Input type="date" name="from" defaultValue={range.from} className="w-38!" aria-label="From" />
-              <Input type="date" name="to" defaultValue={range.to} className="w-38!" aria-label="To" />
-              <Button type="submit" variant="secondary" size="sm">Apply</Button>
-            </form>
+              <Input key={`from-${range.from}`} type="date" name="from" defaultValue={range.from} className="w-38!" aria-label="From" />
+              <Input key={`to-${range.to}`} type="date" name="to" defaultValue={range.to} className="w-38!" aria-label="To" />
+              <SubmitButton variant="secondary" size="sm" pendingLabel="Apply">Apply</SubmitButton>
+            </Form>
             {canExport ? (
               <a href={`/api/dashboard/${ctx.org.slug}/analytics/export?${q}`} className={buttonClass('secondary', 'sm')} data-testid="export-csv"><Icon name="download" />Export CSV</a>
             ) : (

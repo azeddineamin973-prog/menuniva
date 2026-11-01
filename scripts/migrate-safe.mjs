@@ -9,9 +9,15 @@ import path from 'node:path';
 import pg from 'pg';
 import { backup } from './lib/backup-core.mjs';
 
-const url = process.env.DATABASE_URL;
+// The same database Prisma migrates (prisma.config.ts): MIGRATE_DATABASE_URL when set.
+const url = process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL;
 if (!url) {
-  console.error('DATABASE_URL is required.');
+  console.error('DATABASE_URL (or MIGRATE_DATABASE_URL) is required.');
+  process.exit(1);
+}
+// Supabase's transaction pooler (port 6543) cannot run migrations (they need a session).
+if (new URL(url).port === '6543') {
+  console.error('This is the transaction pooler (port 6543). Set MIGRATE_DATABASE_URL to the session pooler or the direct connection (port 5432). Nothing was changed.');
   process.exit(1);
 }
 const dry = process.argv.includes('--dry-run');

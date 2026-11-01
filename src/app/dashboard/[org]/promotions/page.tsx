@@ -39,7 +39,7 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
 
   // The type-specific fields (% off, € off, buy X / get Y, combo price) are shown only for the
   // chosen type, with CSS :has() in globals.css (.promo-fields) — no client JavaScript needed.
-  const PromoFields = ({ p }: { p?: Promo }) => (
+  const promoFields = (p?: Promo) => (
     <div className="promo-fields space-y-4">
       <input type="hidden" name="org" value={ctx.org.slug} />
       {p && <input type="hidden" name="id" value={p.id} />}
@@ -136,7 +136,7 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
                   <details className="mt-2">
                     <summary className={disclosureClass}>Edit</summary>
                     <ActionForm action={savePromotionAction} submitLabel="Save promotion" submitVariant="secondary" className="mt-3">
-                      <PromoFields p={p} />
+                      {promoFields(p)}
                     </ActionForm>
                   </details>
                 </li>
@@ -148,7 +148,7 @@ export default async function PromotionsPage({ params }: { params: Promise<{ org
           <CardHeader icon="plus" title="New promotion" />
           <CardBody>
             <ActionForm action={savePromotionAction} submitLabel="Create promotion" resetOnSuccess testId="promotion-form">
-              <PromoFields />
+              {promoFields()}
             </ActionForm>
           </CardBody>
         </Card>

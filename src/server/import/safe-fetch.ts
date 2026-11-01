@@ -26,13 +26,44 @@ export function isPrivateAddress(ip: string): boolean {
     );
   }
   if (net.isIPv6(ip)) {
-    const v = ip.toLowerCase();
-    if (v === '::' || v === '::1') return true;
-    const mapped = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    return /^f[cd]/.test(v) || /^fe[89ab]/.test(v) || v.startsWith('ff');
+    const g = ipv6Groups(ip);
+    if (!g) return true;
+    const v4 = (hi: number, lo: number) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+    // An IPv4 address carried inside IPv6 is judged as that IPv4 address, whatever the notation:
+    // URL parsing turns [::ffff:127.0.0.1] into ::ffff:7f00:1, which a text match would miss.
+    // IPv4-mapped ::ffff:a.b.c.d, IPv4-compatible ::a.b.c.d (and :: / ::1), NAT64 64:ff9b::a.b.c.d.
+    if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) {
+      if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return true;
+      return isPrivateAddress(v4(g[6], g[7]));
+    }
+    if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return isPrivateAddress(v4(g[6], g[7]));
+    // Only global unicast (2000::/3) is public. Inside it: IETF special ranges (Teredo, benchmarking,
+    // ORCHID: 2001:0000–01ff::), documentation (2001:db8::/32) and 6to4 (2002::/16, embeds an IPv4).
+    if ((g[0] & 0xe000) !== 0x2000) return true;
+    if (g[0] === 0x2001 && (g[1] < 0x0200 || g[1] === 0x0db8)) return true;
+    return g[0] === 0x2002;
   }
   return true;
+}
+
+/** The eight 16-bit groups of an IPv6 address (expanding `::` and a trailing dotted IPv4), or null. */
+function ipv6Groups(ip: string): number[] | null {
+  let s = ip.toLowerCase().replace(/%.*$/, '');
+  const dotted = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) {
+    if (!net.isIPv4(dotted[2])) return null;
+    const [a, b, c, d] = dotted[2].split('.').map(Number);
+    s = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 1 ? head.length !== 8 : missing < 1) return null;
+  const groups = [...head, ...Array<string>(halves.length === 2 ? missing : 0).fill('0'), ...tail];
+  if (groups.some((x) => !/^[0-9a-f]{1,4}$/.test(x))) return null;
+  return groups.map((x) => parseInt(x, 16));
 }
 
 export function validatePublicUrl(raw: string, allowedHosts?: RegExp): URL {

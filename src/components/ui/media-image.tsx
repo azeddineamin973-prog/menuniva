@@ -42,7 +42,6 @@ export function MediaImage({ src, sizes, widths, phoneWidths, alt = '', ...img }
       {MEDIA_FORMATS.map((f) => (
         <source key={f} type={`image/${f}`} srcSet={mediaSrcSet(src, f, widths)} sizes={sizes} />
       ))}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt={alt} {...img} />
     </picture>
   );

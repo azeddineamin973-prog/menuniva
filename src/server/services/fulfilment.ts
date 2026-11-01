@@ -8,7 +8,7 @@ import { openingHoursSchema } from '@/lib/opening-hours-schema';
 import { isValidPostalCode, normalizePostalCode, postalCodeMatches } from '@/lib/postal';
 import { parseMoneyToCents } from '@/lib/money';
 import { zonedParts, zonedTimeToUtc } from '@/lib/time';
-import { audit } from '../audit';
+import { audit, logError } from '../audit';
 import { db } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
@@ -210,10 +210,16 @@ async function idempotentSubmit<T extends { duplicate: boolean }>(locationId: st
 
 /** Takeaway/delivery throttling: per guest, per trusted IP, per phone number and per location (audit BUG-05). */
 export const REMOTE_ORDER_LIMITS = { guest: [10, 600], ip: [60, 600], phone: [8, 3600], location: [400, 600] } as const;
+/** Returns the function that counts the order against the location's cap once it is placed. */
 async function limitRemoteOrder(locationId: string, who: ClientIdentity, phone: string) {
   const L = REMOTE_ORDER_LIMITS;
-  await limitPublic(`order:${locationId}`, who, { guest: [...L.guest], ip: [...L.ip], scope: { key: 'location', limit: [...L.location] } });
+  const countForLocation = await limitPublic(`order:${locationId}`, who, { guest: [...L.guest], ip: [...L.ip], scope: { key: 'location', limit: [...L.location] } });
   await rateLimit(`order:phone:${locationId}:${phone.replace(/\D/g, '')}`, ...L.phone, true);
+  return async <T extends { duplicate: boolean }>(result: T) => {
+    // The order exists: a failure to count it must not turn the guest's success into an error.
+    if (!result.duplicate) await countForLocation().catch((e) => logError('rate-limit-count', e));
+    return result;
+  };
 }
 
 export async function submitPickupOrder(input: unknown, client: string | ClientIdentity, now = new Date()) {
@@ -229,8 +235,8 @@ export async function submitPickupOrder(input: unknown, client: string | ClientI
   if (existing) return { orderNumber: existing.number, trackingToken, status: existing.status, duplicate: true };
   const pickupAt = resolvePickup(d.pickup, pickupOptions(location, location.takeawaySettings, now), now);
   if (!pickupAt) throw new OrderRejectedError('pickup_unavailable');
-  await limitRemoteOrder(location.id, asIdentity(client), d.phone);
-  return idempotentSubmit(location.id, d.idempotencyKey, trackingToken, () => db.$transaction(async (tx) => {
+  const placed = await limitRemoteOrder(location.id, asIdentity(client), d.phone);
+  return placed(await idempotentSubmit(location.id, d.idempotencyKey, trackingToken, () => db.$transaction(async (tx) => {
     const quote = await quoteCart({ locationId: location.id, channel: 'TAKEAWAY', lang: d.language, items: d.items, now }, tx);
     if (quote.issues.length) throw new OrderRejectedError('items_unavailable', quote.issues);
     const min = location.takeawaySettings?.minOrderCents ?? 0;
@@ -257,7 +263,7 @@ export async function submitPickupOrder(input: unknown, client: string | ClientI
     await tx.order.update({ where: { id: order.id }, data: { paymentMethodIntent: 'PAY_AT_COUNTER' } });
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'NEW_ORDER', title: `New takeaway order #${order.number} — ${d.customerName}`, entityId: order.id } });
     return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false };
-  }));
+  })));
 }
 
 // =============================================================== M9-04/05 delivery settings & zones
@@ -425,8 +431,11 @@ export async function submitDeliveryOrder(input: unknown, client: string | Clien
   const { valid, zone } = findZone(location.country, location.deliveryZones, d.postalCode);
   if (!valid) throw new OrderRejectedError('invalid_postal_code');
   if (!zone) throw new OrderRejectedError('outside_delivery_zone');
-  await limitRemoteOrder(location.id, asIdentity(client), d.phone);
-  return idempotentSubmit(location.id, d.idempotencyKey, trackingToken, () => db.$transaction(async (tx) => {
+  const placed = await limitRemoteOrder(location.id, asIdentity(client), d.phone);
+  return placed(await idempotentSubmit(location.id, d.idempotencyKey, trackingToken, () => db.$transaction(async (tx) => {
+    // Order number first: the location row stays locked until this transaction ends, so delivery
+    // orders placed at the same moment are counted one after the other and cannot exceed the cap.
+    const { orderSequence } = await tx.restaurantLocation.update({ where: { id: location.id }, data: { orderSequence: { increment: 1 } }, select: { orderSequence: true } });
     const active = await tx.order.count({ where: { locationId: location.id, channel: 'DELIVERY', status: { in: ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'] } } });
     if (active >= (settings?.maxActiveOrders ?? 10)) throw new OrderRejectedError('delivery_busy');
     const quote = await quoteCart({ locationId: location.id, channel: 'DELIVERY', lang: d.language, items: d.items, now }, tx);
@@ -437,7 +446,6 @@ export async function submitDeliveryOrder(input: unknown, client: string | Clien
     if (d.couponCode && promo.couponStatus === 'invalid') throw new OrderRejectedError('coupon_invalid');
     const afterDiscount = quote.subtotalCents - promo.totalCents;
     const fee = zone.freeDeliveryThresholdCents !== null && afterDiscount >= zone.freeDeliveryThresholdCents ? 0 : zone.feeCents;
-    const { orderSequence } = await tx.restaurantLocation.update({ where: { id: location.id }, data: { orderSequence: { increment: 1 } }, select: { orderSequence: true } });
     const order = await createOrderRecord(tx, {
       organizationId: org.id,
       locationId: location.id,
@@ -460,7 +468,7 @@ export async function submitDeliveryOrder(input: unknown, client: string | Clien
     });
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'NEW_ORDER', title: `New delivery order #${order.number} — ${zone.name}`, entityId: order.id } });
     return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false, deliveryFeeCents: fee };
-  }));
+  })));
 }
 
 // =============================================================== M9-07/08 drivers

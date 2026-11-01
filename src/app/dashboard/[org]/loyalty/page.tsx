@@ -1,6 +1,8 @@
 import { ActionForm } from '@/components/forms/action-form';
+import Form from 'next/form';
+import { SubmitButton } from '@/components/forms/submit-button';
 import { InlineAction } from '@/components/forms/inline-action';
-import { Badge, Button, Card, CardBody, CardHeader, Checkbox, Disclosure, EmptyState, Field, FilterChip, Icon, Input, PageHeader, Select, humanize } from '@/components/ui';
+import { Badge, Card, CardBody, CardHeader, Checkbox, Disclosure, EmptyState, Field, FilterChip, Icon, Input, PageHeader, Select, humanize } from '@/components/ui';
 import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
 import { loyaltyMembers, rewardText } from '@/server/services/loyalty';
@@ -35,11 +37,11 @@ export default async function LoyaltyPage({ params, searchParams }: { params: Pr
             title={`Members (${members.length})`}
           />
           <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
-            <form className="relative flex min-w-0 flex-1 basis-56 items-center gap-2" role="search">
+            <Form action="" prefetch={false} className="relative flex min-w-0 flex-1 basis-56 items-center gap-2" role="search">
               <Icon name="search" className="pointer-events-none absolute start-3 text-muted" />
               <Input name="q" type="search" defaultValue={sp.q ?? ''} placeholder="Phone or name" className="min-w-0 flex-1 ps-9" aria-label="Search members" data-testid="member-search" />
-              <Button type="submit" variant="secondary">Search</Button>
-            </form>
+              <SubmitButton variant="secondary" pendingLabel="Searching…">Search</SubmitButton>
+            </Form>
             <FilterChip href={sp.birthdays ? `/dashboard/${ctx.org.slug}/loyalty` : `/dashboard/${ctx.org.slug}/loyalty?birthdays=1`} active={!!sp.birthdays} count={sp.birthdays ? undefined : birthdayCount} data-testid="birthdays-filter">
               {sp.birthdays ? 'All members' : 'Birthdays this month'}
             </FilterChip>

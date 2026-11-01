@@ -2,7 +2,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { FeedbackCategoryCode, LanguageCode } from '@/generated/prisma/enums';
 import { LANGUAGES } from '@/i18n/config';
-import { audit } from '../audit';
+import { audit, logError } from '../audit';
 import { hashToken } from '../crypto';
 import { db } from '../db';
 import { assertModule } from '../modules';
@@ -64,7 +64,7 @@ export async function submitFeedback(input: unknown, client: string | ClientIden
   const { org, location, order } = target;
   if (org.settings && !org.settings.feedbackEnabled) throw new UserFacingError('feedback_disabled', 422);
   await assertModule(org.id, 'feedback');
-  await limitPublic(`feedback:${location.id}`, asIdentity(client), { guest: [5, 3600], ip: [60, 3600], scope: { key: 'location', limit: [300, 3600] } });
+  const countForLocation = await limitPublic(`feedback:${location.id}`, asIdentity(client), { guest: [5, 3600], ip: [60, 3600], scope: { key: 'location', limit: [300, 3600] } });
   if (order && (await db.customerFeedback.findFirst({ where: { orderId: order.id } }))) throw new UserFacingError('already_submitted', 409);
   const settings = await db.reviewSettings.findUnique({ where: { locationId: location.id } });
   const fb = await db.customerFeedback.create({
@@ -87,6 +87,7 @@ export async function submitFeedback(input: unknown, client: string | ClientIden
       data: { organizationId: org.id, locationId: location.id, type: 'LOW_RATING', title: `${d.rating}★ feedback${d.wantsFollowUp ? ' — guest asks to be contacted' : ''}`, body: d.comment?.slice(0, 200) ?? null, entityId: fb.id },
     });
   }
+  await countForLocation().catch((e) => logError('rate-limit-count', e));
   // Same response shape for every rating: the Google link does not depend on the score.
   return { id: fb.id, googleReviewUrl: await googleReviewLinkFor(location.id) };
 }

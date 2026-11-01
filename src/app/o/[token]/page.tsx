@@ -22,7 +22,7 @@ export default async function OrderTrackingPage({ params }: { params: Promise<{ 
   const org = await db.restaurantOrganization.findUniqueOrThrow({ where: { slug: order.location.organization.slug }, include: { branding: true } });
   const lang = await resolveGuestLanguage(org, order.language);
   const m = getMessages(lang);
-  const tableToken = order.table?.qrTokens[0]?.token;
+  const tableToken = order.tableSession?.status === 'OPEN' ? order.table?.qrTokens[0]?.token : undefined;
   const loyalty = order.status === 'CANCELLED' ? null : await loyaltyForOrder(token, lang);
   return (
     <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={order.location.name} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>

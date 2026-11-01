@@ -24,10 +24,40 @@ export async function limitPublic(
   prefix: string,
   identity: { guest: string; ip: string | null },
   limits: { guest: Limit; ip?: Limit; scope?: { key: string; limit: Limit } },
-) {
+): Promise<() => Promise<void>> {
   await rateLimit(`${prefix}:g:${identity.guest}`, ...limits.guest);
   if (identity.ip && limits.ip) await rateLimit(`${prefix}:ip:${identity.ip}`, ...limits.ip, true);
-  if (limits.scope) await rateLimit(`${prefix}:all:${limits.scope.key}`, ...limits.scope.limit, true);
+  if (!limits.scope) return async () => {};
+  const key = `${prefix}:all:${limits.scope.key}`;
+  const [limit, windowSeconds] = limits.scope.limit;
+  await assertBelowLimit(key, limit, windowSeconds);
+  return () => countSuccess(key, limit, windowSeconds);
+}
+
+/**
+ * Shared caps (a whole location or table) count only what succeeded. The caller checks the cap
+ * before the work and calls `countSuccess` once something was really created: refused or failed
+ * attempts (unavailable dishes, wrong table codes, junk) must never let one client use up the
+ * allowance of every guest of a restaurant. Per-guest and per-IP limits still count every attempt.
+ */
+export async function assertBelowLimit(key: string, limit: number, windowSeconds: number) {
+  if (await isRateLimited(key, limit, windowSeconds)) {
+    const now = Date.now();
+    const windowEnd = (Math.floor(now / (windowSeconds * 1000)) + 1) * windowSeconds * 1000;
+    throw new RateLimitError(Math.max(Math.ceil((windowEnd - now) / 1000), 1));
+  }
+}
+export async function countSuccess(key: string, limit: number, windowSeconds: number) {
+  // The thing is already created: going over the cap here only blocks the next attempts.
+  await rateLimit(key, limit, windowSeconds, true).catch((e) => {
+    if (!(e instanceof RateLimitError)) throw e;
+  });
+}
+
+/** Gives back one attempt in the current window (e.g. a sign-in that turned out to be correct). */
+export async function releaseRateLimit(key: string, windowSeconds: number) {
+  const windowStart = new Date(Math.floor(Date.now() / (windowSeconds * 1000)) * windowSeconds * 1000);
+  await db.$executeRaw`UPDATE "RateLimitBucket" SET "count" = GREATEST("count" - 1, 0) WHERE "key" = ${key} AND "windowStart" = ${windowStart}`;
 }
 
 export async function rateLimit(key: string, limit: number, windowSeconds: number, reportAbuse = false): Promise<void> {

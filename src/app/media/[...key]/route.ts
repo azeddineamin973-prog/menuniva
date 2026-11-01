@@ -12,6 +12,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ key: str
   const joined = key.join('/');
   if (!MEDIA_KEY.test(joined)) return new Response('Not found', { status: 404 });
   const q = new URL(req.url).searchParams;
+  // Only `w` and `f`, once each: CDNs cache by the full address, so any extra parameter would
+  // create a new uncached address for the same image (and new work for the server) at will.
+  if ([...q.keys()].some((k) => k !== 'w' && k !== 'f') || q.getAll('w').length > 1 || q.getAll('f').length > 1) return new Response('Unknown image size', { status: 400, headers: { 'Cache-Control': 'no-store' } });
   const wanted = q.has('w') || q.has('f');
   const width = Number(q.get('w'));
   const format = q.get('f');
@@ -28,7 +31,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ key: str
     await logError('media-read', e, { key: joined });
     return new Response('Temporarily unavailable', { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '30' } });
   }
-  if (!found) return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  // Keys are random and only become known once the file exists, so "not found" is final: shared
+  // caches may keep it for 10 minutes instead of asking storage again for every repeat.
+  if (!found) return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'public, max-age=60, s-maxage=600' } });
   return new Response(new Uint8Array(found.body), {
     headers: {
       'Content-Type': found.contentType,

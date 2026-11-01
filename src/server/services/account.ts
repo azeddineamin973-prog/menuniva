@@ -7,6 +7,21 @@ import { audit } from '../audit';
 import { hashPassword, passwordSchema, verifyPassword } from '../auth/password';
 import { db } from '../db';
 import { UserFacingError } from '../errors';
+import { rateLimit, RateLimitError } from '../rate-limit';
+
+/**
+ * Throttles checks of the current password (password change, account deletion): someone holding a
+ * stolen session must not be able to guess the real password at full speed.
+ */
+async function checkCurrentPassword(userId: string, passwordHash: string, password: string) {
+  try {
+    await rateLimit(`pwcheck:${userId}`, 10, 900);
+  } catch (e) {
+    if (e instanceof RateLimitError) throw new UserFacingError('Too many attempts. Please wait 15 minutes and try again.');
+    throw e;
+  }
+  return verifyPassword(passwordHash, password);
+}
 
 /** Self-service for staff/owner accounts: profile, password, GDPR export and deletion. */
 
@@ -20,11 +35,12 @@ export async function updateProfile(userId: string, input: unknown) {
 /** Changes the password and signs out every other device (the current session is kept). */
 export async function changePassword(userId: string, current: string, next: string, keepSessionTokenHash?: string) {
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (!(await verifyPassword(user.passwordHash, current))) throw new UserFacingError('The current password is not correct.');
+  if (!(await checkCurrentPassword(userId, user.passwordHash, current))) throw new UserFacingError('The current password is not correct.');
   const parsed = passwordSchema.safeParse(next);
   if (!parsed.success) throw new UserFacingError('The new password must have at least 10 characters.');
   await db.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(parsed.data) } });
   await db.session.deleteMany({ where: { userId, ...(keepSessionTokenHash ? { tokenHash: { not: keepSessionTokenHash } } : {}) } });
+  await db.passwordResetToken.deleteMany({ where: { userId, usedAt: null } });
   await audit({ actorUserId: userId, action: 'user.password_changed', entityType: 'User', entityId: userId });
 }
 
@@ -48,7 +64,7 @@ export async function exportMyData(userId: string) {
 export async function deleteMyAccount(userId: string, password: string, confirmation: string) {
   if (confirmation.trim().toUpperCase() !== 'DELETE') throw new UserFacingError('Type DELETE to confirm.');
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (!(await verifyPassword(user.passwordHash, password))) throw new UserFacingError('The password is not correct.');
+  if (!(await checkCurrentPassword(userId, user.passwordHash, password))) throw new UserFacingError('The password is not correct.');
   const owned = await db.restaurantMembership.findMany({ where: { userId, role: 'RESTAURANT_OWNER', status: 'ACTIVE' }, select: { organizationId: true, organization: { select: { name: true } } } });
   for (const o of owned) {
     const others = await db.restaurantMembership.count({ where: { organizationId: o.organizationId, role: 'RESTAURANT_OWNER', status: 'ACTIVE', userId: { not: userId } } });

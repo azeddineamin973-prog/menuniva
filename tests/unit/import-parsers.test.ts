@@ -129,9 +129,20 @@ describe('M5-10 SSRF protection', () => {
   it.each(['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1'])('treats %s as private', (ip) => {
     expect(isPrivateAddress(ip)).toBe(true);
   });
+  // IPv4 inside IPv6 in every notation, including the hex form URL parsing produces
+  // (new URL('https://[::ffff:127.0.0.1]/').hostname is [::ffff:7f00:1]); special IPv6 ranges.
+  it.each(['::ffff:7f00:1', '::ffff:a9fe:a9fe', '::ffff:0a00:0001', '::7f00:1', '::127.0.0.1', '64:ff9b::a00:1', '64:ff9b::10.0.0.1', '0:0:0:0:0:ffff:7f00:1', '::', '2001:db8::1', '2001::1', '2002:7f00:1::1', 'fec0::1', '100::1', '::ffff:0:7f00:1'])('treats %s as private', (ip) => {
+    expect(isPrivateAddress(ip)).toBe(true);
+  });
+  it('rejects private IPv4 written as IPv6 in a URL', () => {
+    for (const u of ['https://[::ffff:127.0.0.1]/', 'https://[::ffff:169.254.169.254]/latest/meta-data', 'https://[::127.0.0.1]/', 'https://[64:ff9b::10.0.0.1]/']) expect(() => validatePublicUrl(u), u).toThrow(UnsafeUrlError);
+  });
   it('treats public addresses as public', () => {
     expect(isPrivateAddress('8.8.8.8')).toBe(false);
     expect(isPrivateAddress('2a00:1450:4003::1')).toBe(false);
+    expect(isPrivateAddress('::ffff:8.8.8.8')).toBe(false);
+    expect(isPrivateAddress('::ffff:808:808')).toBe(false);
+    expect(isPrivateAddress('2606:4700:4700::1111')).toBe(false);
   });
   it.each(['http://example.com/menu', 'https://127.0.0.1/', 'https://169.254.169.254/latest/meta-data', 'https://localhost/', 'https://user:pw@example.com/', 'https://example.com:8443/', 'file:///etc/passwd', 'not a url'])(
     'rejects %s',

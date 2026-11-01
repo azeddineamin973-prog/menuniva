@@ -110,7 +110,9 @@ describe.runIf(storage.driver === 'supabase')('Supabase Storage (live bucket)', 
     // Uploading without the secret key is refused as well
     const anonUpload = await fetch(`${base}/${BUCKET}/${PREFIX}${A.org.id}/branding/AAAAAAAAAAAAAAAAAAAAAA.png`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(PNG) });
     expect(anonUpload.ok).toBe(false);
-    // Bucket settings: private, 5 MB, images only (AVIF for the resized copies, docs/DEPLOYMENT.md)
+  });
+
+  it('bucket settings match docs/DEPLOYMENT.md: private, 5 MB, PNG/JPEG/WebP uploads plus AVIF copies', async () => {
     const bucket = await (await fetch(`${SB_URL}/storage/v1/bucket/${BUCKET}`, { headers: { apikey: SB_KEY } })).json();
     expect(bucket).toMatchObject({ public: false, file_size_limit: 5242880 });
     expect([...bucket.allowed_mime_types].sort()).toEqual(['image/avif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -198,7 +200,8 @@ describe('restaurant images: upload, display, replace, delete', () => {
   it('a storage outage while deleting never fails the change (logged instead)', async () => {
     await uploadProductImage(A.ctx, A.dish.id, file(PNG, 'dish.png', 'image/png'), true);
     const img = await db.productImage.findFirstOrThrow({ where: { productId: A.dish.id } });
-    const del = vi.spyOn(storage, 'delete').mockRejectedValueOnce(new Error('storage down'));
+    // A photo goes with its resized copies in one request (deleteMany), for both drivers.
+    const del = vi.spyOn(storage, 'deleteMany').mockRejectedValueOnce(new Error('storage down'));
     await removeProductImage(A.ctx, img.id);
     del.mockRestore();
     expect(await db.productImage.count({ where: { id: img.id } })).toBe(0);

@@ -71,10 +71,15 @@ export async function closeTableSession(ctx: TenantContext, input: unknown) {
   const d = closeSessionSchema.parse(input);
   const session = await ownedSession(ctx, d.sessionId);
   if (session.status !== 'OPEN') throw new UserFacingError('This table is already closed.');
-  const bill = await getSessionBill(ctx, session.id);
-  if (bill.orders.some((o) => ACTIVE.includes(o.status) && o.status !== 'READY' && o.status !== 'DELIVERED')) throw new UserFacingError('Some orders are still being prepared. Complete or cancel them first.');
-  if (bill.balanceCents > 0 && !d.note) throw new UserFacingError(`There is an unpaid balance of ${(bill.balanceCents / 100).toFixed(2)} €. Record the payment, or give a reason to close anyway.`);
   await db.$transaction(async (tx) => {
+    // Same table lock as guest ordering: an order placed while the table is being closed either
+    // counts in the checks below or waits and starts a new session, never lands on a closed one.
+    await lockTable(tx, session.tableId);
+    const orders = await tx.order.findMany({ where: { tableSessionId: session.id, organizationId: ctx.org.id, status: { not: 'CANCELLED' } }, select: { status: true, totalCents: true, paidCents: true } });
+    if (orders.some((o) => ACTIVE.includes(o.status) && o.status !== 'READY' && o.status !== 'DELIVERED')) throw new UserFacingError('Some orders are still being prepared. Complete or cancel them first.');
+    const balanceCents = orders.reduce((s, o) => s + o.totalCents - o.paidCents, 0);
+    if (balanceCents > 0 && !d.note) throw new UserFacingError(`There is an unpaid balance of ${(balanceCents / 100).toFixed(2)} €. Record the payment, or give a reason to close anyway.`);
+    const bill = { balanceCents };
     const r = await tx.tableSession.updateMany({ where: { id: session.id, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: new Date(), closedById: ctx.userId, closeNote: d.note ?? null } });
     if (r.count !== 1) throw new UserFacingError('This table is already closed.');
     await tx.staffTask.updateMany({ where: { tableSessionId: session.id, status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, data: { status: 'DONE', doneAt: new Date() } });
@@ -230,7 +235,10 @@ export async function recordPayment(ctx: TenantContext, input: unknown) {
       orders = [o];
     }
     await lockOrders(tx, orders.map((o) => o.id));
-    orders = await tx.order.findMany({ where: { id: { in: orders.map((o) => o.id) } }, orderBy: { createdAt: 'asc' } });
+    const locked = await tx.order.findMany({ where: { id: { in: orders.map((o) => o.id) } }, orderBy: { createdAt: 'asc' } });
+    // An order cancelled while this payment was being recorded takes no money.
+    if (d.orderId && locked.some((o) => o.status === 'CANCELLED')) throw new UserFacingError('This order was cancelled.');
+    orders = locked.filter((o) => o.status !== 'CANCELLED');
     const created: string[] = [];
 
     if (d.itemIds?.length) {

@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import Form from 'next/form';
+import { SubmitButton } from '@/components/forms/submit-button';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { SetupStepNav } from '@/components/dashboard/setup-nav';
-import { Alert, Badge, Button, ButtonLink, Card, CardBody, CardHeader, Checkbox, Input, PageHeader, Select, Stat, statGrid } from '@/components/ui';
+import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Checkbox, Input, PageHeader, Select, Stat, statGrid } from '@/components/ui';
 import { LANGUAGE_NATIVE_NAME, dirOf } from '@/i18n/config';
 import { translationPlan } from '@/server/services/ai-translate';
 import { getTranslationGrid } from '@/server/services/translations';
@@ -105,7 +107,7 @@ export default async function TranslationsPage({ params, searchParams }: { param
                   </ButtonLink>
                 ))}
               </div>
-              <form className="flex flex-wrap items-end gap-2" action={`${base}/menu/translations`}>
+              <Form className="flex flex-wrap items-end gap-2" action={`${base}/menu/translations`} prefetch={false}>
                 <input type="hidden" name="filter" value={filter} />
                 <Input name="q" defaultValue={sp.q ?? ''} placeholder="Search a dish…" aria-label="Search a dish" className="w-48" data-testid="tr-search" />
                 <Select name="language" defaultValue={sp.language ?? ''} aria-label="Language" className="w-40">
@@ -116,10 +118,10 @@ export default async function TranslationsPage({ params, searchParams }: { param
                     </option>
                   ))}
                 </Select>
-                <Button type="submit" variant="secondary">
+                <SubmitButton variant="secondary" pendingLabel="Filtering…">
                   Filter
-                </Button>
-              </form>
+                </SubmitButton>
+              </Form>
               <p className="ms-auto text-sm text-muted" data-testid="tr-count">
                 {grid.matched} of {grid.total} shown
               </p>

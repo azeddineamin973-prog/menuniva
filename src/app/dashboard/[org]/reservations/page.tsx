@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import Form from 'next/form';
+import { SubmitButton } from '@/components/forms/submit-button';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { OpeningHoursEditor } from '@/components/forms/opening-hours-editor';
-import { Alert, Badge, Button, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Icon, Input, Label, PageHeader, Select, humanize } from '@/components/ui';
+import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, EmptyState, Field, Icon, Input, Label, PageHeader, Select, humanize } from '@/components/ui';
 import { getMessages, LANGUAGE_TAG } from '@/i18n';
 import type { OpeningHours } from '@/lib/opening-hours';
 import { formatTimeInZone, zonedParts } from '@/lib/time';
@@ -52,10 +54,10 @@ export default async function ReservationsPage({ params, searchParams }: { param
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <ButtonLink href={`${base}?date=${shift(date, -1)}`} variant="secondary" size="sm" aria-label="Previous day" title="Previous day" icon="chevronLeft" className="px-2 rtl:[&_svg]:rotate-180" />
-            <form className="flex items-center gap-2">
-              <Input type="date" name="date" defaultValue={date} className="w-40 min-w-0" aria-label="Date" />
-              <Button type="submit" variant="secondary" size="sm">Go</Button>
-            </form>
+            <Form action="" prefetch={false} className="flex items-center gap-2">
+              <Input key={date} type="date" name="date" defaultValue={date} className="w-40 min-w-0" aria-label="Date" />
+              <SubmitButton variant="secondary" size="sm" pendingLabel="Go">Go</SubmitButton>
+            </Form>
             <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm" aria-label="Next day" title="Next day" icon="chevronRight" className="px-2 rtl:[&_svg]:rotate-180" />
             {date !== today && <ButtonLink href={base} variant="ghost" size="sm">Today</ButtonLink>}
           </div>

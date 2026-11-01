@@ -5,6 +5,7 @@ import { getMessages } from '@/i18n';
 import { zonedParts } from '@/lib/time';
 import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
+import { availability } from '@/server/services/reservations';
 import { canPreviewOrg, resolveGuestLanguage } from '@/server/services/storefront';
 import { PreviewBanner } from '@/components/storefront/preview-banner';
 import { ReserveForm } from './reserve-form';
@@ -26,6 +27,11 @@ export default async function ReservePage({ params, searchParams }: { params: Pr
   const m = getMessages(lang);
   const p = zonedParts(new Date(), location.timeZone);
   const today = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+  // Today's times are part of the page (no layout shift when they arrive, one round trip less).
+  const maxParty = location.reservationSettings?.maxPartySize ?? 8;
+  const party = Math.min(2, maxParty);
+  const av = await availability(db, location, location.reservationSettings, today, party);
+  const initial = { date: today, party, slots: av.slots.map((s) => ({ time: s.time, available: s.available })), reason: av.reason };
   return (
     <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={m.reservation.title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
       {isPreview && <PreviewBanner />}
@@ -37,7 +43,7 @@ export default async function ReservePage({ params, searchParams }: { params: Pr
           </p>
         )}
         <fieldset disabled={isPreview} className="min-w-0 disabled:opacity-60">
-          <ReserveForm org={org.slug} l={sp.l} lang={lang} today={today} maxParty={location.reservationSettings?.maxPartySize ?? 8} m={{ reservation: m.reservation, validation: m.validation, common: m.common }} />
+          <ReserveForm org={org.slug} l={sp.l} lang={lang} today={today} maxParty={maxParty} initial={initial} sendingLabel={m.customer.submitting} m={{ reservation: m.reservation, validation: m.validation, common: m.common }} />
         </fieldset>
       </div>
     </StorefrontShell>

@@ -2,7 +2,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import { GET as mediaRoute } from '@/app/media/[...key]/route';
 import { deleteTenantMedia } from '@/server/media';
-import { storage, StorageServiceError, variantKey } from '@/server/storage';
+import { storage, StorageServiceError, storeTenantImage, variantKey } from '@/server/storage';
+
+const UPLOAD_LIMIT = 5 * 1024 * 1024;
 
 /**
  * Right-sized AVIF/WebP copies served by /media (local storage driver, test upload folder).
@@ -92,6 +94,27 @@ describe('photo variants on /media', () => {
     expect(r.body.equals(broken)).toBe(true);
     expect(await storage.get(variantKey(bad, 320, 'avif'))).toBeNull(); // nothing stored for it
     expect((await get(`${ORG}/products/${token()}.jpg`, '?w=320&f=webp')).status).toBe(404);
+  });
+
+  it('only w and f, once each: other parameters cannot create new uncached addresses; misses are cacheable', async () => {
+    const key = await put(await photo(800, 600), 'jpg');
+    for (const q of ['?w=320&f=webp&cb=1', '?w=320&w=480&f=webp', '?w=320&f=webp&f=avif', '?v=2']) expect((await get(key, q)).status, q).toBe(400);
+    expect((await get(key, '?w=320&f=webp')).status).toBe(200);
+    const missing = await get(`${ORG}/products/${token()}.jpg`, '?w=320&f=webp');
+    expect(missing.status).toBe(404);
+    expect(missing.cache).toBe('public, max-age=60, s-maxage=600');
+  });
+
+  it('a picture with too many pixels is refused at upload and never decoded when it is already stored', async () => {
+    // 8200 × 8200 = 67 megapixels in a small file (one colour compresses to almost nothing).
+    const bomb = await sharp({ create: { width: 8200, height: 8200, channels: 3, background: '#c33' } }).png({ compressionLevel: 9 }).toBuffer();
+    expect(bomb.length).toBeLessThan(UPLOAD_LIMIT);
+    await expect(storeTenantImage(ORG, new File([new Uint8Array(bomb)], 'bomb.png', { type: 'image/png' }), 'products')).rejects.toMatchObject({ message: 'image_dimensions' });
+    const key = await put(bomb, 'png');
+    const r = await get(key, '?w=640&f=webp');
+    expect(r.status).toBe(200);
+    expect(r.type).toBe('image/png'); // the original, as uploaded
+    expect(await storage.get(variantKey(key, 640, 'webp'))).toBeNull();
   });
 
   it('a deleted photo is not served at any size', async () => {

@@ -23,7 +23,8 @@ export function proxy(request: NextRequest) {
     res.cookies.set(GUEST_COOKIE, newGuestId(), {
       httpOnly: true,
       sameSite: 'lax',
-      secure: (process.env.APP_BASE_URL ?? '').startsWith('https://'),
+      // Secure whenever the page itself is https (also on Vercel when APP_BASE_URL is left unset).
+      secure: request.nextUrl.protocol === 'https:' || (process.env.APP_BASE_URL ?? '').startsWith('https://'),
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     });

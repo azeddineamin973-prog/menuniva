@@ -4,6 +4,7 @@ import path from 'node:path';
 import { MEDIA_FORMATS, MEDIA_WIDTHS, type MediaFormat, type MediaWidth } from '@/lib/media';
 import { newPublicToken } from './crypto';
 import { env } from './env';
+import { imagePixels, MAX_INPUT_PIXELS } from './image-lib';
 
 /**
  * File storage for restaurant images (logos, covers, dish photos).
@@ -172,6 +173,12 @@ export function sniffImage(buf: Buffer): ImageKind | null {
 
 export class UploadError extends Error {}
 
+/** True for a picture with more than MAX_INPUT_PIXELS (see image-lib.ts); unknown sizes pass. */
+export async function isOversizedPicture(buf: Buffer) {
+  const px = await imagePixels(buf);
+  return px !== null && px > MAX_INPUT_PIXELS;
+}
+
 /** Validates and stores an uploaded image for a tenant. Returns the media path saved in the database. */
 export async function storeTenantImage(organizationId: string, file: File, folder: 'branding' | 'products'): Promise<string> {
   if (!(file instanceof File) || file.size === 0) throw new UploadError('no_file');
@@ -179,6 +186,7 @@ export async function storeTenantImage(organizationId: string, file: File, folde
   const buf = Buffer.from(await file.arrayBuffer());
   const kind = sniffImage(buf);
   if (!kind) throw new UploadError('unsupported_type');
+  if (await isOversizedPicture(buf)) throw new UploadError('image_dimensions');
   if (!/^[a-z0-9]+$/i.test(organizationId)) throw new UploadError('invalid_tenant');
   const key = `${organizationId}/${folder}/${newPublicToken()}.${kind.ext}`;
   await storage.put(key, buf, kind.contentType);

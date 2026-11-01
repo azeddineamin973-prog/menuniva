@@ -8,8 +8,11 @@ const URL_ = 'postgresql://u:p@aws-1-eu-central-1.pooler.supabase.com:6543/postg
 
 describe('database connection settings for hosts like Vercel', () => {
   it('without DATABASE_CA_CERT the URL is used unchanged (local development)', () => {
-    expect(databasePoolConfig(URL_, undefined, 10)).toEqual({ connectionString: URL_, max: 10 });
-    expect(databasePoolConfig(URL_, '  ', 10)).toEqual({ connectionString: URL_, max: 10 });
+    // Requests never wait forever for a connection (pool exhausted, database or pooler down).
+    const timeouts = { connectionTimeoutMillis: 10_000, idleTimeoutMillis: 10_000 };
+    expect(databasePoolConfig(URL_, undefined, 10)).toEqual({ connectionString: URL_, max: 10, ...timeouts });
+    expect(databasePoolConfig(URL_, '  ', 10)).toEqual({ connectionString: URL_, max: 10, ...timeouts });
+    expect(databasePoolConfig(URL_, PEM, 3)).toMatchObject(timeouts);
   });
   it('with DATABASE_CA_CERT: verified TLS with that CA, and URL TLS options cannot override it', () => {
     for (const ca of [PEM, Buffer.from(PEM).toString('base64'), PEM.replace(/\n/g, '\\n')]) {

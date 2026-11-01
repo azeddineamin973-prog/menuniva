@@ -17,6 +17,8 @@ export function zodFieldErrors(issues: { path: PropertyKey[]; message: string }[
 /** Only allow same-site relative redirect targets (prevents open redirects). */
 export function safeNextPath(next: unknown, fallback = '/dashboard'): string {
   if (typeof next !== 'string') return fallback;
-  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback;
+  // Browsers drop tabs and line breaks inside addresses, so "/\t/evil.example" would become
+  // "//evil.example" (another site): control characters and backslashes are refused outright.
+  if (!next.startsWith('/') || next.startsWith('//') || /[\u0000-\u001f\u007f\\]/.test(next)) return fallback;
   return next;
 }

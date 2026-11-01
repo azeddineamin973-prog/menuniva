@@ -1,6 +1,7 @@
 import 'server-only';
 import type { MediaFormat, MediaWidth } from '@/lib/media';
 import { logError } from './audit';
+import { loadSharp, MAX_INPUT_PIXELS } from './image-lib';
 import { CONTENT_TYPES, storage, variantKey } from './storage';
 
 /**
@@ -16,25 +17,11 @@ import { CONTENT_TYPES, storage, variantKey } from './storage';
  *   480 px AVIF copy is about a fifth of the original download.
  * - `sharp` is loaded lazily: if it is unavailable on a platform, variant requests fall back to
  *   the original image and plain /media requests are not affected at all.
+ * - Cost bounds: at most MAX_ENCODES photos are decoded at once per process (a menu's first view
+ *   asks for dozens of copies at the same moment), pictures above MAX_INPUT_PIXELS are never
+ *   decoded, and a copy that is not worth keeping is remembered so it is not encoded again.
  */
 const QUALITY = { webp: { quality: 82, effort: 4 }, avif: { quality: 62, effort: 3 } } as const;
-
-type Sharp = (typeof import('sharp'))['default'];
-let sharpModule: Promise<Sharp | null> | null = null;
-function loadSharp() {
-  sharpModule ??= import('sharp')
-    .then((m) => {
-      const sharp = m.default;
-      // Every photo is different: libvips' operation cache would only hold memory.
-      sharp.cache(false);
-      return sharp;
-    })
-    .catch(async (e) => {
-      await logError('media-variant-sharp', e);
-      return null;
-    });
-  return sharpModule;
-}
 
 export type MediaBody = { body: Buffer; contentType: string };
 
@@ -42,6 +29,36 @@ export type MediaBody = { body: Buffer; contentType: string };
 const inflight = new Map<string, Promise<MediaBody | null>>();
 /** Unexpected failures are logged once per process, not once per image request. */
 const reported = new Set<string>();
+
+/**
+ * Encodes running at once in this process; the others wait their turn. Each one holds a decoded
+ * photo and the encoder's buffers (tens to hundreds of MB): unbounded, a first view of a menu with
+ * many new photos could exhaust a 2 GB serverless instance.
+ */
+const MAX_ENCODES = 2;
+let encoding = 0;
+const queue: (() => void)[] = [];
+async function withEncodeSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (encoding < MAX_ENCODES) encoding++;
+  else await new Promise<void>((resolve) => queue.push(resolve)); // the finishing encode hands over its slot
+  try {
+    return await fn();
+  } finally {
+    const next = queue.shift();
+    if (next) next();
+    else encoding--;
+  }
+}
+
+/**
+ * Copies that are not worth making: no smaller than the original, or the original cannot be
+ * decoded (too large, damaged). The original is served for them without encoding again.
+ */
+const useOriginal = new Set<string>();
+function rememberOriginal(vkey: string) {
+  if (useOriginal.size >= 20_000) useOriginal.clear();
+  useOriginal.add(vkey);
+}
 
 /**
  * Set when storage refused an AVIF file because of its type (a Supabase bucket that only allows
@@ -73,15 +90,18 @@ async function makeVariant(key: string, vkey: string, width: MediaWidth, format:
   const original = await storage.get(key);
   if (!original) return null;
   const fallback = { body: original, contentType: CONTENT_TYPES[key.split('.').pop()!] };
+  if (useOriginal.has(vkey)) return fallback;
   const sharp = await loadSharp();
   if (!sharp) return fallback;
   let body: Buffer;
   try {
-    const pipeline = sharp(original, { failOn: 'error' })
-      .rotate()
-      .resize({ width, withoutEnlargement: true })
-      .timeout({ seconds: 20 });
-    body = await (format === 'avif' ? pipeline.avif(QUALITY.avif) : pipeline.webp(QUALITY.webp)).toBuffer();
+    body = await withEncodeSlot(() => {
+      const pipeline = sharp(original, { failOn: 'error', limitInputPixels: MAX_INPUT_PIXELS })
+        .rotate()
+        .resize({ width, withoutEnlargement: true })
+        .timeout({ seconds: 20 });
+      return (format === 'avif' ? pipeline.avif(QUALITY.avif) : pipeline.webp(QUALITY.webp)).toBuffer();
+    });
   } catch (e) {
     // A file the library cannot decode is served as it is (browsers may still show it).
     const msg = e instanceof Error ? e.message : String(e);
@@ -89,10 +109,14 @@ async function makeVariant(key: string, vkey: string, width: MediaWidth, format:
       reported.add(msg);
       await logError('media-variant-encode', e, { key });
     }
+    rememberOriginal(vkey);
     return fallback;
   }
   // A copy bigger than the original (tiny or already well-compressed images) is not worth it.
-  if (body.length >= original.length) return fallback;
+  if (body.length >= original.length) {
+    rememberOriginal(vkey);
+    return fallback;
+  }
   try {
     await storage.put(vkey, body, CONTENT_TYPES[format]);
   } catch (e) {

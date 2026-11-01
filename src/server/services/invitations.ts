@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { MembershipRole } from '@/generated/prisma/enums';
 import { assignableRoles } from '@/lib/permissions';
 import { audit } from '../audit';
+import { createPasswordResetLink } from '../auth/reset';
 import { hashToken, newSecretToken } from '../crypto';
 import { db } from '../db';
 import { env } from '../env';
@@ -40,13 +41,22 @@ export async function createInvitationRecord(params: {
   return `${env.APP_BASE_URL}/invite/${token}`;
 }
 
+/**
+ * Locations a member may be given: existing locations of this restaurant, and for a manager
+ * restricted to some locations only those (never "all locations", which would be wider than theirs).
+ */
+async function assertAssignableLocations(ctx: TenantContext, locationIds: string[]) {
+  if (ctx.locationIds.length && (!locationIds.length || locationIds.some((l) => !ctx.locationIds.includes(l)))) throw new UserFacingError('You can only give access to your own locations.');
+  if (locationIds.length) {
+    const count = await db.restaurantLocation.count({ where: { id: { in: [...new Set(locationIds)] }, organizationId: ctx.org.id } });
+    if (count !== new Set(locationIds).size) throw new UserFacingError('Invalid location.');
+  }
+}
+
 export async function inviteStaff(ctx: TenantContext, input: unknown) {
   const data = inviteSchema.parse(input);
   if (!assignableRoles(ctx.role).includes(data.role)) throw new UserFacingError('You cannot assign this role.');
-  if (data.locationIds.length) {
-    const count = await db.restaurantLocation.count({ where: { id: { in: data.locationIds }, organizationId: ctx.org.id } });
-    if (count !== data.locationIds.length) throw new UserFacingError('Invalid location.');
-  }
+  await assertAssignableLocations(ctx, data.locationIds);
   const existingMember = await db.restaurantMembership.findFirst({ where: { organizationId: ctx.org.id, user: { email: data.email } } });
   if (existingMember) throw new UserFacingError('This person is already a member of this restaurant.');
   await enforceStaffLimit(ctx.org.id);
@@ -104,13 +114,17 @@ export async function updateMember(ctx: TenantContext, input: unknown) {
   if (!member) throw new UserFacingError('Staff member not found.');
   const allowed = assignableRoles(ctx.role);
   if (!allowed.includes(member.role) || !allowed.includes(data.role)) throw new UserFacingError('You cannot change this staff member.');
+  // A manager restricted to some locations only manages staff of those locations.
+  if (ctx.locationIds.length && !member.locationIds.some((l) => ctx.locationIds.includes(l))) throw new UserFacingError('You cannot change this staff member.');
+  await assertAssignableLocations(ctx, data.locationIds);
   if (member.id === ctx.membershipId && data.status === 'DISABLED') throw new UserFacingError('You cannot disable your own account.');
   if (member.role === 'RESTAURANT_OWNER' && (data.role !== 'RESTAURANT_OWNER' || data.status === 'DISABLED')) {
     const owners = await db.restaurantMembership.count({ where: { organizationId: ctx.org.id, role: 'RESTAURANT_OWNER', status: 'ACTIVE' } });
     if (owners <= 1) throw new UserFacingError('A restaurant must keep at least one active owner.');
   }
+  // Access ends immediately: every request re-reads the membership (resolveTenantAccess), so a
+  // disabled member is refused on their next click without signing them out of other restaurants.
   await db.restaurantMembership.update({ where: { id: member.id }, data: { role: data.role, status: data.status, locationIds: data.locationIds } });
-  if (data.status === 'DISABLED') await db.session.deleteMany({ where: { userId: member.userId, activeOrganizationId: ctx.org.id } });
   await audit({
     organizationId: ctx.org.id,
     actorUserId: ctx.userId,
@@ -124,4 +138,22 @@ export async function updateMember(ctx: TenantContext, input: unknown) {
 export async function revokeInvitation(ctx: TenantContext, invitationId: string) {
   const res = await db.invitation.updateMany({ where: { id: invitationId, organizationId: ctx.org.id, acceptedAt: null }, data: { revokedAt: new Date() } });
   if (res.count) await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'staff.invitation_revoked', entityType: 'Invitation', entityId: invitationId });
+}
+
+/**
+ * Single-use reset link for a staff member of THIS restaurant, made by an owner or manager.
+ * Never for the caller, a MenuNiva administrator (that would hand over the whole platform), another
+ * owner, someone who also works for another restaurant, or (for a manager limited to some
+ * locations) staff of other locations: those go through MenuNiva support.
+ */
+export async function createStaffResetLink(ctx: TenantContext, membershipId: string) {
+  const member = await db.restaurantMembership.findFirst({ where: { id: membershipId, organizationId: ctx.org.id }, include: { user: { select: { platformRole: true } } } });
+  if (!member || !assignableRoles(ctx.role).includes(member.role) || member.userId === ctx.userId) throw new UserFacingError('You cannot reset this password.');
+  if (member.user.platformRole !== 'USER' || member.role === 'RESTAURANT_OWNER') throw new UserFacingError('Ask MenuNiva support to reset this password.');
+  if (ctx.locationIds.length && !member.locationIds.some((l) => ctx.locationIds.includes(l))) throw new UserFacingError('You cannot reset this password.');
+  const otherOrgs = await db.restaurantMembership.count({ where: { userId: member.userId, organizationId: { not: ctx.org.id } } });
+  if (otherOrgs > 0) throw new UserFacingError('This person also works for another restaurant. Ask MenuNiva support to reset the password.');
+  const link = await createPasswordResetLink(member.userId);
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'staff.reset_link_created', entityType: 'RestaurantMembership', entityId: member.id });
+  return link;
 }

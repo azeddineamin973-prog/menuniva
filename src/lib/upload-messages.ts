@@ -6,11 +6,12 @@
  */
 export const DEFAULT_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 type Lang = 'pt' | 'en' | 'fr' | 'ar' | 'es';
-export type UploadMessageCode = 'image_too_large' | 'file_too_large' | 'unsupported_type' | 'no_file' | 'request_failed';
+export type UploadMessageCode = 'image_too_large' | 'image_dimensions' | 'file_too_large' | 'unsupported_type' | 'no_file' | 'request_failed';
 
 const T: Record<Lang, Record<UploadMessageCode, (mb: string) => string>> = {
   pt: {
     image_too_large: (mb) => `Imagem demasiado grande. O tamanho máximo permitido é ${mb} MB.`,
+    image_dimensions: () => 'Esta imagem tem demasiados píxeis (mais de 64 megapíxeis). Guarde-a num tamanho menor e tente novamente.',
     file_too_large: (mb) => `Ficheiro demasiado grande. O tamanho máximo permitido é ${mb} MB.`,
     unsupported_type: () => 'Só são aceites imagens PNG, JPEG ou WebP.',
     no_file: () => 'Escolha um ficheiro.',
@@ -18,6 +19,7 @@ const T: Record<Lang, Record<UploadMessageCode, (mb: string) => string>> = {
   },
   en: {
     image_too_large: (mb) => `Image too large. Maximum allowed size is ${mb} MB.`,
+    image_dimensions: () => 'This picture has too many pixels (over 64 megapixels). Save it at a smaller size and try again.',
     file_too_large: (mb) => `File too large. Maximum allowed size is ${mb} MB.`,
     unsupported_type: () => 'Only PNG, JPEG or WebP images are accepted.',
     no_file: () => 'Please choose a file.',
@@ -25,6 +27,7 @@ const T: Record<Lang, Record<UploadMessageCode, (mb: string) => string>> = {
   },
   fr: {
     image_too_large: (mb) => `Image trop volumineuse. La taille maximale autorisée est de ${mb} Mo.`,
+    image_dimensions: () => 'Cette image a trop de pixels (plus de 64 mégapixels). Enregistrez-la dans une taille plus petite et réessayez.',
     file_too_large: (mb) => `Fichier trop volumineux. La taille maximale autorisée est de ${mb} Mo.`,
     unsupported_type: () => 'Seules les images PNG, JPEG ou WebP sont acceptées.',
     no_file: () => 'Choisissez un fichier.',
@@ -32,6 +35,7 @@ const T: Record<Lang, Record<UploadMessageCode, (mb: string) => string>> = {
   },
   es: {
     image_too_large: (mb) => `Imagen demasiado grande. El tamaño máximo permitido es de ${mb} MB.`,
+    image_dimensions: () => 'Esta imagen tiene demasiados píxeles (más de 64 megapíxeles). Guárdela en un tamaño menor e inténtelo de nuevo.',
     file_too_large: (mb) => `Archivo demasiado grande. El tamaño máximo permitido es de ${mb} MB.`,
     unsupported_type: () => 'Solo se aceptan imágenes PNG, JPEG o WebP.',
     no_file: () => 'Elija un archivo.',
@@ -39,6 +43,7 @@ const T: Record<Lang, Record<UploadMessageCode, (mb: string) => string>> = {
   },
   ar: {
     image_too_large: (mb) => `الصورة كبيرة جدًا. الحد الأقصى المسموح به هو ${mb} ميغابايت.`,
+    image_dimensions: () => 'تحتوي هذه الصورة على عدد كبير جدًا من البكسلات (أكثر من 64 ميغابكسل). احفظها بحجم أصغر وحاول مرة أخرى.',
     file_too_large: (mb) => `الملف كبير جدًا. الحد الأقصى المسموح به هو ${mb} ميغابايت.`,
     unsupported_type: () => 'تُقبل فقط صور PNG أو JPEG أو WebP.',
     no_file: () => 'اختر ملفًا.',

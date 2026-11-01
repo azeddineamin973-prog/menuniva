@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Logo } from '@/components/brand/logo';
-import { Alert, Button, ButtonLink, Card, CardBody } from '@/components/ui';
+import { SubmitButton } from '@/components/forms/submit-button';
+import { Alert, ButtonLink, Card, CardBody } from '@/components/ui';
 import { getCurrentUser } from '@/server/auth/session';
 import { acceptInvitation, findInvitation } from '@/server/services/invitations';
 import { UserFacingError } from '@/server/errors';
@@ -54,7 +55,9 @@ export default async function InvitePage({ params, searchParams }: { params: Pro
               {error && <Alert tone="danger">{error}</Alert>}
               {user ? (
                 <form action={accept}>
-                  <Button type="submit" size="lg" className="w-full">Accept invitation</Button>
+                  <SubmitButton size="lg" className="w-full" pendingLabel="Joining…" data-testid="accept-invitation">
+                    Accept invitation
+                  </SubmitButton>
                   <p className="mt-2 text-xs text-muted">Signed in as {user.email}</p>
                 </form>
               ) : (

@@ -40,7 +40,7 @@ export async function toActionError(e: unknown): Promise<{ ok: false; error: str
   if (e instanceof UserFacingError) return { ok: false, error: e.code };
   if (e instanceof UploadError) {
     // Localized in the browser (ActionForm) in the staff member's language (audit BUG-06).
-    const code = e.message === 'file_too_large' ? 'image_too_large' : e.message === 'unsupported_type' || e.message === 'no_file' ? e.message : null;
+    const code = e.message === 'file_too_large' ? 'image_too_large' : e.message === 'unsupported_type' || e.message === 'no_file' || e.message === 'image_dimensions' ? e.message : null;
     return { ok: false, error: code ? uploadErrorCode(code, env.UPLOAD_MAX_BYTES) : 'Upload failed.' };
   }
   if (e instanceof RateLimitError) return { ok: false, error: 'Too many requests. Please wait a moment.' };
