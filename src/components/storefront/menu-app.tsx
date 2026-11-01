@@ -12,6 +12,7 @@ import { buildWhatsAppText } from '@/lib/whatsapp';
 import type { PublicCategory, PublicProduct } from '@/server/services/public-menu';
 import { Icon } from '@/components/ui/icons';
 import { DishCard, lowestPrice, NoPhoto } from './dish-card';
+import { MediaImage } from '@/components/ui/media-image';
 
 export type CartLine = {
   lineId: string;
@@ -288,7 +289,8 @@ export function MenuApp({
               >
                 <span className="relative block">
                   {p.imageUrl ? (
-                    <img src={p.imageUrl} alt="" className="aspect-[4/3] w-full bg-sf-accent/10 object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" width={288} height={216} />
+                    // The 640 px copy is at least 2.2× the card on every screen; larger ones would only cost bandwidth.
+                    <MediaImage src={p.imageUrl} sizes="(min-width: 640px) 288px, 256px" widths={[320, 480, 640]} className="aspect-[4/3] w-full bg-sf-accent/10 object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" width={288} height={216} />
                   ) : (
                     <NoPhoto className="aspect-[4/3] w-full" />
                   )}
@@ -390,7 +392,7 @@ function UpsellBox({ suggestions, m, money, onAdd, onDismiss }: { suggestions: {
       <ul className="space-y-2">
         {suggestions.map((s) => (
           <li key={s.ruleId} className="flex items-center gap-3" data-testid="upsell-item">
-            {s.product.imageUrl && <img src={s.product.imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />}
+            {s.product.imageUrl && <MediaImage src={s.product.imageUrl} sizes="48px" widths={[160]} className="h-12 w-12 rounded-lg object-cover" loading="lazy" decoding="async" width={48} height={48} />}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">{s.product.name}</span>
               <span className="block text-xs tabular-nums opacity-70">{money(s.product.priceCents)}</span>
@@ -536,7 +538,7 @@ function ProductSheet({
         <CloseButton onClick={onClose} label={m.common.close} className="absolute end-3 top-3" />
       </div>
       {p.imageUrl ? (
-        <img src={p.imageUrl} alt="" className="aspect-[4/3] max-h-[22rem] w-full bg-sf-accent/10 object-cover sm:aspect-[16/10]" decoding="async" />
+        <MediaImage src={p.imageUrl} sizes="(min-width: 640px) 576px, min(100vw, 512px)" widths={[480, 640, 960, 1280, 1920]} phoneWidths={[480, 640, 960]} className="aspect-[4/3] max-h-[22rem] w-full bg-sf-accent/10 object-cover sm:aspect-[16/10]" decoding="async" />
       ) : (
         <div className="h-6" aria-hidden />
       )}
@@ -887,7 +889,7 @@ function CartSheet({
               <li key={l.lineId} className={cn('rounded-2xl bg-sf-card p-3 shadow-sm ring-1', issue ? 'ring-red-300' : 'ring-sf-text/5')} data-testid="cart-line">
                 <div className="flex items-start gap-3">
                   {images?.get(l.productId) ? (
-                    <img src={images.get(l.productId)!} alt="" className="size-14 shrink-0 rounded-xl bg-sf-accent/10 object-cover" loading="lazy" decoding="async" width={56} height={56} />
+                    <MediaImage src={images.get(l.productId)!} sizes="56px" widths={[160]} className="size-14 shrink-0 rounded-xl bg-sf-accent/10 object-cover" loading="lazy" decoding="async" width={56} height={56} />
                   ) : (
                     <NoPhoto className="size-14 rounded-xl [&_svg]:size-6" />
                   )}

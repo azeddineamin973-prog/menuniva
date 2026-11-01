@@ -7,6 +7,7 @@ import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { saveBrandingAction } from '../actions';
 import { SettingsTabs } from '../tabs';
 import { BrandingPresetPicker } from './preset-picker';
+import { MediaImage } from '@/components/ui/media-image';
 
 export default async function BrandingPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
@@ -26,12 +27,12 @@ export default async function BrandingPage({ params }: { params: Promise<{ org: 
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-4">
                 <Field label="Logo" htmlFor="logo" hint="PNG, JPEG or WebP, up to 5 MB. Square logos look best.">
-                  {b?.logoUrl && <img src={b.logoUrl} alt="Current logo" className="mb-2 h-16 w-16 rounded-xl border border-line object-contain" />}
+                  {b?.logoUrl && <MediaImage src={b.logoUrl} alt="Current logo" sizes="64px" widths={[160, 320]} className="mb-2 h-16 w-16 rounded-xl border border-line object-contain" width={64} height={64} />}
                   <Input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" data-max-bytes={env.UPLOAD_MAX_BYTES} className="pt-2" />
                   {b?.logoUrl && <Checkbox name="removeLogo" label="Remove the current logo" />}
                 </Field>
                 <Field label="Cover photo" htmlFor="cover" hint="Wide photo of your restaurant. Only upload photos you have the right to publish.">
-                  {b?.coverUrl && <img src={b.coverUrl} alt="Current cover" className="mb-2 h-24 w-full rounded-xl border border-line object-cover" />}
+                  {b?.coverUrl && <MediaImage src={b.coverUrl} alt="Current cover" sizes="(min-width: 1024px) 480px, 90vw" widths={[480, 640, 960, 1280]} className="mb-2 h-24 w-full rounded-xl border border-line object-cover" />}
                   <Input id="cover" name="cover" type="file" accept="image/png,image/jpeg,image/webp" data-max-bytes={env.UPLOAD_MAX_BYTES} className="pt-2" />
                   {b?.coverUrl && <Checkbox name="removeCover" label="Remove the current cover photo" />}
                 </Field>

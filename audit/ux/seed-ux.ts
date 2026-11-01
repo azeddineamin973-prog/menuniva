@@ -15,6 +15,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
 import pg from 'pg';
+import sharp from 'sharp';
 
 const URL_ = process.env.UX_DATABASE_URL ?? '';
 if (!/\/menuniva_test_ux(\?|$)/.test(URL_)) {
@@ -58,11 +59,27 @@ function gradientPng(w: number, h: number, a: [number, number, number], b: [numb
   }
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }
-function storeImage(orgId: string, folder: 'products' | 'branding', png: Buffer) {
-  const key = `${orgId}/${folder}/${randomBytes(16).toString('base64url')}.png`;
+/**
+ * Photo-like JPEG (blurred colour noise over a two-colour gradient), so image weights are
+ * realistic: development dish photos are about 1000 × 1000 px and 140 KB. A plain gradient PNG
+ * compresses to a few KB and would make image measurements meaningless.
+ */
+async function photoJpeg(w: number, h: number, a: [number, number, number], b: [number, number, number]): Promise<Buffer> {
+  const base = sharp(gradientPng(w, h, a, b));
+  let seed = (a[0] * 31 + b[1] * 17 + w) >>> 0;
+  const noise = Buffer.alloc(w * h * 3);
+  for (let i = 0; i < noise.length; i++) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    noise[i] = seed >>> 24;
+  }
+  const texture = await sharp(noise, { raw: { width: w, height: h, channels: 3 } }).blur(1.2).png().toBuffer();
+  return base.composite([{ input: texture, blend: 'overlay' }]).jpeg({ quality: 84 }).toBuffer();
+}
+function storeImage(orgId: string, folder: 'products' | 'branding', data: Buffer, ext: 'png' | 'jpg' = 'png') {
+  const key = `${orgId}/${folder}/${randomBytes(16).toString('base64url')}.${ext}`;
   const full = path.resolve('storage/ux-uploads', key);
   mkdirSync(path.dirname(full), { recursive: true });
-  writeFileSync(full, png);
+  writeFileSync(full, data);
   return `/media/${key}`;
 }
 
@@ -105,7 +122,7 @@ async function main() {
   const slug = 'casa-aurora';
 
   const logo = storeImage(org.id, 'branding', gradientPng(256, 256, [31, 92, 74], [184, 151, 90]));
-  const cover = storeImage(org.id, 'branding', gradientPng(1600, 600, [24, 60, 50], [214, 170, 100]));
+  const cover = storeImage(org.id, 'branding', await photoJpeg(1600, 900, [24, 60, 50], [214, 170, 100]), 'jpg');
   await db.restaurantBranding.update({ where: { organizationId: org.id }, data: { themePreset: 'moroccan', logoUrl: logo, coverUrl: cover, tagline: 'Sabores do Mediterrâneo no centro histórico de Braga' } });
 
   const kitchen = await db.kitchenStation.create({ data: { organizationId: org.id, locationId: location.id, name: 'Cozinha principal', type: 'KITCHEN', sortOrder: 0 } });
@@ -198,7 +215,7 @@ async function main() {
         ...(d.allergens ? { allergens: { create: d.allergens.map((a) => ({ allergen: a as never, presence: 'CONTAINS' as const, verifiedAt: new Date(), verifiedById: owner.id })) } } : {}),
       },
     });
-    if (d.photo) await db.productImage.create({ data: { productId: p.id, url: storeImage(org.id, 'products', gradientPng(800, 600, d.photo[0], d.photo[1])), rightsConfirmed: true, sortOrder: 0 } });
+    if (d.photo) await db.productImage.create({ data: { productId: p.id, url: storeImage(org.id, 'products', await photoJpeg(1000, 1000, d.photo[0], d.photo[1]), 'jpg'), rightsConfirmed: true, sortOrder: 0 } });
     ids.push(p.id);
   }
   const P = (name: string) => ids[D.findIndex((d) => d.names.pt === name)];

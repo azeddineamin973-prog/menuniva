@@ -4,6 +4,7 @@ import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Icon } from '@/components/ui';
 import { arrangeProductImageAction, removeProductImageAction, uploadProductImageAction } from '../actions';
+import { MediaImage } from '@/components/ui/media-image';
 
 export type ManagedPhoto = { id: string; url: string; origin: string };
 
@@ -31,8 +32,7 @@ export function PhotoManager({ org, productId, photos, maxPhotos, maxBytes }: { 
             {photos.map((p, i) => (
               <li key={p.id} className={`flex flex-col rounded-xl border p-2 ${i === 0 ? 'border-graphite ring-1 ring-graphite dark:border-lime dark:ring-lime' : 'border-line'}`} data-testid="managed-photo">
                 <div className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.url} alt="" className="aspect-square w-full rounded-lg bg-surface-2 object-cover" />
+                  <MediaImage src={p.url} sizes="(min-width: 640px) 200px, 45vw" widths={[320, 480, 640]} className="aspect-square w-full rounded-lg bg-surface-2 object-cover" loading="lazy" decoding="async" />
                   {p.origin === 'IMPORTED' && <span className="absolute end-1.5 top-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">Imported</span>}
                 </div>
                 <div className="mt-2">

@@ -1,4 +1,5 @@
-import { DAY_KEYS, openingHoursSchema, type DayKey, type OpeningHours } from '@/lib/opening-hours';
+import { DAY_KEYS, type DayKey, type OpeningHours } from '@/lib/opening-hours';
+import { openingHoursSchema } from '@/lib/opening-hours-schema';
 
 /**
  * Reads weekly opening hours from the shapes restaurants actually publish:

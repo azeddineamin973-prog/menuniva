@@ -3,6 +3,7 @@
 import { Icon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
 import type { PublicProduct } from '@/server/services/public-menu';
+import { MediaImage } from '@/components/ui/media-image';
 
 type Labels = { from: string; soldOut: string; unavailable: string; popular: string; add: string };
 
@@ -35,9 +36,13 @@ export function DishCard({ p, money, labels, canOrder, onOpen, priority = false 
       {/* Photo: side tile on phones, top of the card from sm. */}
       <span className="relative order-last shrink-0 sm:order-first">
         {p.imageUrl ? (
-          <img
+          <MediaImage
             src={p.imageUrl}
-            alt=""
+            // Phones: a 112 px tile. Tablets: half the width. Desktop: a third of the 1024 px column.
+            sizes="(min-width: 1024px) 320px, (min-width: 640px) 45vw, 112px"
+            widths={[160, 320, 480, 640, 960]}
+            // 320 px is 2.9× the phone tile: 3× phones skip the 480 px copy (twice the bytes).
+            phoneWidths={[160, 320]}
             className={cn('size-28 rounded-xl bg-sf-accent/10 object-cover sm:aspect-[4/3] sm:h-auto sm:w-full sm:rounded-none', blocked && 'grayscale-[60%]')}
             loading={priority ? 'eager' : 'lazy'}
             decoding="async"

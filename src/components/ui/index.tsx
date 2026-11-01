@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Icon, type IconName } from './icons';
+import { LinkIcon, LinkPendingBar } from './link-pending';
 
 export { Icon, type IconName } from './icons';
 
@@ -68,11 +69,16 @@ export function Button({ variant = 'primary', size = 'md', className, icon, icon
 }
 
 export function ButtonLink({ variant = 'primary', size = 'md', className, icon, iconEnd, children, ...props }: ComponentProps<typeof Link> & Omit<ButtonExtras, 'loading'>) {
+  // While the next page loads, the icon turns into a spinner (or, without an icon, a line pulses
+  // under the label): on a slow connection the tap is acknowledged at once.
+  // Downloads, API routes and new tabs are not page navigations: no pending state for them.
+  const navigates = !props.target && !('download' in props) && !(typeof props.href === 'string' && /^(\/api\/|[a-z]+:)/.test(props.href));
   return (
-    <Link className={buttonClass(variant, size, className)} {...props}>
-      {icon && <Icon name={icon} />}
+    <Link className={buttonClass(variant, size, cn('relative', className))} {...props}>
+      {icon && (navigates ? <LinkIcon icon={icon} /> : <Icon name={icon} />)}
       {children}
       {iconEnd && <Icon name={iconEnd} />}
+      {!icon && navigates && <LinkPendingBar />}
     </Link>
   );
 }

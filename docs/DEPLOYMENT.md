@@ -107,13 +107,22 @@ How the Supabase driver works:
   (`RestaurantBranding.logoUrl` / `coverUrl`, `ProductImage.url`), identical for both drivers.
 - Guests load images from `/media/<key>` on the MenuNiva domain; the app reads the private bucket.
   Responses are `immutable` (keys never change), so browsers/CDNs cache them.
+- Pages ask for right-sized copies (`/media/<key>?w=<width>&f=avif|webp`, `src/lib/media.ts`). The
+  server makes a copy the first time it is requested (sharp), stores it next to the original as
+  `<key>.w<width>.<avif|webp>` and serves it from then on; the original is never changed. A photo
+  therefore gets up to 14 small extra objects over time, deleted together with it. If the bucket
+  refuses AVIF files, the app logs it once (source `media-variant-store`) and answers AVIF
+  requests with the WebP copy.
 - Replacing or removing an image deletes the old object after the database change is committed, only
   under the restaurant's own prefix and only if no row still references it. A failed save deletes the
   file it just uploaded. Storage errors on delete are logged (source `media-delete`), never shown to staff.
 
 Supabase setup:
 1. Storage → bucket `restaurant-media`, **Public off**, no storage policies (the server key bypasses them;
-   the publishable key then has no access). Restrict the bucket to 5 MB and `image/png, image/jpeg, image/webp`.
+   the publishable key then has no access). Restrict the bucket to 5 MB and
+   `image/png, image/jpeg, image/webp, image/avif` (AVIF for the resized copies; uploads by staff are
+   still limited to PNG/JPEG/WebP by the app). An existing bucket: Storage → bucket → Edit → add
+   `image/avif` to the allowed MIME types.
 2. `.env` on the server: `STORAGE_DRIVER=supabase`, `SUPABASE_URL=https://<project-ref>.supabase.co`,
    `SUPABASE_SECRET_KEY=sb_secret_…` (Project Settings → API Keys → Secret keys; create one named e.g.
    `menuniva-server`), optionally `SUPABASE_STORAGE_BUCKET`. The app refuses to start with a missing key,

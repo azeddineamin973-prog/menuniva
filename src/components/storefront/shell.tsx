@@ -4,6 +4,7 @@ import { dirOf, LANGUAGE_TAG } from '@/i18n/config';
 import { cn } from '@/lib/cn';
 import { LanguageCookieSwitcher } from '@/components/language-cookie-switcher';
 import { storefrontPalette } from '@/lib/color';
+import { MediaImage } from '@/components/ui/media-image';
 
 export type Branding = {
   logoUrl: string | null;
@@ -68,12 +69,14 @@ export function StorefrontShell({
       <header className={cn('relative overflow-hidden', cover ? 'bg-[#111] text-white' : 'bg-sf-primary text-sf-on-primary')}>
         <div className={cn('relative z-10 mx-auto flex max-w-5xl gap-3 px-4 sm:px-6', compactHeader ? 'items-center py-3' : cover ? 'min-h-48 items-end pt-14 pb-5 sm:min-h-56' : 'items-center pt-6 pb-5')}>
           {branding?.logoUrl && (
-            <img
+            <MediaImage
               src={branding.logoUrl}
-              alt=""
+              sizes={compactHeader ? '40px' : '64px'}
+              widths={[160, 320]}
               className={cn('shrink-0 rounded-2xl bg-white object-contain p-1 shadow-md ring-1 ring-black/10', compactHeader ? 'h-10 w-10' : 'h-16 w-16')}
               width={compactHeader ? 40 : 64}
               height={compactHeader ? 40 : 64}
+              decoding="async"
             />
           )}
           <div className="min-w-0 flex-1">
@@ -105,7 +108,9 @@ export function StorefrontShell({
         {cover && (
           <>
             {/* Placed after the title in the DOM (logo stays the first image). Full-strength photo with a gradient behind the text: readable on any image. */}
-            <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" fetchPriority="high" decoding="async" />
+            {/* The largest image of the page: requested first, at the screen's width (100vw).
+                Phones get at most the 960 px copy (2.5× a 390 px screen, under a dark gradient). */}
+            <MediaImage src={cover} sizes="100vw" widths={[640, 960, 1280, 1920]} phoneWidths={[640, 960]} className="absolute inset-0 h-full w-full object-cover" fetchPriority="high" decoding="async" />
             <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
           </>
         )}

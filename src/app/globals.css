@@ -132,6 +132,9 @@
 @keyframes mn-fade-in {
   from { opacity: 0; }
 }
+@keyframes mn-fade-out {
+  to { opacity: 0; }
+}
 @keyframes mn-pop-in {
   from { opacity: 0; transform: translateY(-4px) scale(0.98); }
 }

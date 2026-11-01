@@ -110,9 +110,10 @@ describe.runIf(storage.driver === 'supabase')('Supabase Storage (live bucket)', 
     // Uploading without the secret key is refused as well
     const anonUpload = await fetch(`${base}/${BUCKET}/${PREFIX}${A.org.id}/branding/AAAAAAAAAAAAAAAAAAAAAA.png`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(PNG) });
     expect(anonUpload.ok).toBe(false);
-    // Bucket settings: private, 5 MB, images only
+    // Bucket settings: private, 5 MB, images only (AVIF for the resized copies, docs/DEPLOYMENT.md)
     const bucket = await (await fetch(`${SB_URL}/storage/v1/bucket/${BUCKET}`, { headers: { apikey: SB_KEY } })).json();
-    expect(bucket).toMatchObject({ public: false, file_size_limit: 5242880, allowed_mime_types: ['image/png', 'image/jpeg', 'image/webp'] });
+    expect(bucket).toMatchObject({ public: false, file_size_limit: 5242880 });
+    expect([...bucket.allowed_mime_types].sort()).toEqual(['image/avif', 'image/jpeg', 'image/png', 'image/webp']);
   });
 });
 

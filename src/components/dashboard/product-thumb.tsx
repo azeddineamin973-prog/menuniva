@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { displayImageUrl, THUMBNAIL_WIDTH } from '@/lib/image-url';
+import { MediaImage } from '@/components/ui/media-image';
 
 const SIZES = { sm: 'size-10', md: 'size-12', lg: 'size-20' } as const;
+const PX = { sm: 40, md: 48, lg: 80 } as const;
 
 /**
  * A product photo thumbnail. The photo is shown straight from where the import found it; nothing
@@ -43,17 +45,20 @@ export function ProductThumb({ src, size = 'md', className }: { src: string | nu
     );
   }
   return (
-    // Plain <img>: photos come from the platform's CDN, which next/image would need configured per host.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    // Own photos get a right-sized AVIF/WebP copy; platform photos (Glovo's CDN) are already
+    // resized by their CDN through `url` and are shown as a plain image.
+    <MediaImage
       ref={ref}
       src={url}
-      alt=""
+      sizes={`${PX[size]}px`}
+      widths={size === 'lg' ? [160, 320] : [160]}
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={cn(SIZES[size], 'shrink-0 rounded-xl border border-line bg-surface-2 object-cover', className)}
+      width={PX[size]}
+      height={PX[size]}
       data-testid="product-thumb"
     />
   );

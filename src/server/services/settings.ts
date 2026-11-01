@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { THEME_KEYS } from '@/lib/storefront-themes';
 import type { CountryCode } from '@/generated/prisma/enums';
 import { LANGUAGES } from '@/i18n/config';
-import { openingHoursSchema } from '@/lib/opening-hours';
+import { openingHoursSchema } from '@/lib/opening-hours-schema';
 import { isValidPostalCode, normalizePostalCode } from '@/lib/postal';
 import { audit } from '../audit';
 import { UserFacingError } from '../errors';

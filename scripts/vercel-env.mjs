@@ -50,6 +50,10 @@ const storage = await fetch(`${vars.SUPABASE_URL}/storage/v1/bucket/${vars.SUPAB
 if (!storage.ok) throw new Error(`Supabase Storage refused the secret key (HTTP ${storage.status})`);
 const bucket = await storage.json();
 if (bucket.public) throw new Error('bucket is public; make it private first');
+// Resized photo copies are stored as AVIF and WebP (docs/DEPLOYMENT.md). Without AVIF the app
+// still works and serves WebP copies; say so instead of failing.
+if (bucket.allowed_mime_types && !bucket.allowed_mime_types.includes('image/avif'))
+  console.warn('warning: the bucket does not allow image/avif; add it in Supabase (Storage → bucket → Edit) so AVIF photo copies can be stored');
 
 writeFileSync(OUT, Object.entries(vars).map(([k, v]) => `${k}=${v}`).join('\n') + '\n', { mode: 0o600 });
 console.log(`database via ${POOLER_HOST}:6543 OK (verified TLS, ${rows[0].n} migrations applied); storage bucket private OK`);

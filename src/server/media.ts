@@ -1,7 +1,7 @@
 import 'server-only';
 import { logError } from './audit';
 import { db } from './db';
-import { mediaKeyFromPath, storage, storeTenantImage } from './storage';
+import { mediaKeyFromPath, storage, storeTenantImage, variantKeys } from './storage';
 
 /**
  * Lifecycle of tenant images (logos, covers, dish photos) around database changes.
@@ -48,7 +48,8 @@ export async function deleteTenantMedia(organizationId: string, mediaPaths: (str
     if (!key || !key.startsWith(`${organizationId}/`)) continue;
     try {
       if (!opts.force && (await isReferenced(p!))) continue;
-      await storage.delete(key);
+      // The resized copies go with it, so a removed photo is not served at any size.
+      await storage.deleteMany([key, ...variantKeys(key)]);
       deleted.push(key);
     } catch (e) {
       await logError('media-delete', e, { organizationId, key });

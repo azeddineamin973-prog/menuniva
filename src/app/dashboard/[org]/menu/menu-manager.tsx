@@ -11,6 +11,7 @@ import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { formatCents } from '@/lib/money';
 import { bulkAvailabilityAction, bulkVisibilityAction, deleteCategoryAction, moveCategoryAction, moveProductAction, toggleSoldOutAction } from './actions';
+import { MediaImage } from '@/components/ui/media-image';
 
 export type MenuDish = {
   id: string;
@@ -418,8 +419,7 @@ function DishRow({
           data-testid="menu-photo-link"
         >
           {p.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.image} alt="" className="size-11 object-cover" loading="lazy" decoding="async" />
+            <MediaImage src={p.image} sizes="44px" widths={[160]} className="size-11 object-cover" loading="lazy" decoding="async" width={44} height={44} />
           ) : (
             <span className="flex size-11 items-center justify-center text-muted/70">
               <Icon name="photo" />
@@ -428,8 +428,7 @@ function DishRow({
           <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-[10px] font-semibold text-white group-hover:flex group-focus-visible:flex">{p.image ? 'Change' : 'Add'}</span>
         </Link>
       ) : p.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={p.image} alt="" className="size-11 rounded-lg object-cover" loading="lazy" />
+        <MediaImage src={p.image} sizes="44px" widths={[160]} className="size-11 rounded-lg object-cover" loading="lazy" decoding="async" width={44} height={44} />
       ) : (
         <span className="size-11 rounded-lg bg-surface-2" aria-hidden />
       )}

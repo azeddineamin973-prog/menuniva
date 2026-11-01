@@ -1,6 +1,7 @@
 import 'server-only';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { MEDIA_FORMATS, MEDIA_WIDTHS, type MediaFormat, type MediaWidth } from '@/lib/media';
 import { newPublicToken } from './crypto';
 import { env } from './env';
 
@@ -21,10 +22,25 @@ export interface FileStorage {
   get(key: string): Promise<Buffer | null>;
   /** Idempotent: deleting a missing object succeeds. */
   delete(key: string): Promise<void>;
+  /** Deletes several objects (one request where the driver allows it). Missing ones are fine. */
+  deleteMany(keys: string[]): Promise<void>;
 }
 
 /** Shape of every key MenuNiva creates. Anything else is refused by every driver and by /media. */
 export const MEDIA_KEY = /^[a-z0-9]+\/(branding|products)\/[A-Za-z0-9_-]{22}\.(png|jpg|webp)$/;
+/**
+ * A resized copy of an original: `<original key>.w<width>.<avif|webp>`, stored next to it. Only
+ * the server creates these (see media-variants.ts); /media never accepts them as a path.
+ */
+export const VARIANT_KEY = new RegExp(`^[a-z0-9]+\\/(branding|products)\\/[A-Za-z0-9_-]{22}\\.(png|jpg|webp)\\.w(${MEDIA_WIDTHS.join('|')})\\.(${MEDIA_FORMATS.join('|')})$`);
+export function variantKey(key: string, width: MediaWidth, format: MediaFormat) {
+  return `${key}.w${width}.${format}`;
+}
+/** Every variant key an original can have (for deleting them with it). */
+export function variantKeys(key: string) {
+  return MEDIA_WIDTHS.flatMap((w) => MEDIA_FORMATS.map((f) => variantKey(key, w, f)));
+}
+const isStorageKey = (key: string) => MEDIA_KEY.test(key) || VARIANT_KEY.test(key);
 
 class LocalDiskStorage implements FileStorage {
   readonly driver = 'local' as const;
@@ -53,6 +69,9 @@ class LocalDiskStorage implements FileStorage {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     }
   }
+  async deleteMany(keys: string[]) {
+    for (const key of keys) await this.delete(key);
+  }
 }
 
 export class StorageServiceError extends Error {}
@@ -73,7 +92,7 @@ export class SupabaseStorage implements FileStorage {
   }
   /** Name of the object inside the bucket. */
   objectName(key: string) {
-    if (!MEDIA_KEY.test(key)) throw new Error('Invalid storage key');
+    if (!isStorageKey(key)) throw new Error('Invalid storage key');
     return `${this.prefix}${key}`;
   }
   private headers(extra: Record<string, string> = {}) {
@@ -101,7 +120,7 @@ export class SupabaseStorage implements FileStorage {
     if (!res.ok) await this.fail('upload', res);
   }
   async get(key: string) {
-    if (!MEDIA_KEY.test(key)) return null;
+    if (!isStorageKey(key)) return null;
     const res = await this.fetchImpl(`${this.base}/authenticated/${this.objectPath(key)}`, {
       headers: this.headers(),
       signal: AbortSignal.timeout(15_000),
@@ -117,11 +136,15 @@ export class SupabaseStorage implements FileStorage {
     return this.fail('download', res);
   }
   async delete(key: string) {
-    const name = this.objectName(key); // validates the key
+    await this.deleteMany([key]);
+  }
+  async deleteMany(keys: string[]) {
+    if (keys.length === 0) return;
+    const names = keys.map((k) => this.objectName(k)); // validates every key
     const res = await this.fetchImpl(`${this.base}/${encodeURIComponent(this.bucket)}`, {
       method: 'DELETE',
       headers: this.headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ prefixes: [name] }),
+      body: JSON.stringify({ prefixes: names }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) await this.fail('delete', res);
@@ -169,4 +192,4 @@ export function mediaKeyFromPath(mediaPath: string | null | undefined): string |
   return MEDIA_KEY.test(key) ? key : null;
 }
 
-export const CONTENT_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
+export const CONTENT_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', avif: 'image/avif' };

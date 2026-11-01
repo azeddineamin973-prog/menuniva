@@ -1,12 +1,8 @@
-import { z } from 'zod';
-
+// No validation library here: the browser's opening-hours editor imports this file, and zod
+// would add about 30 KB to every page with the editor. The schema is in opening-hours-schema.ts.
 export const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type DayKey = (typeof DAY_KEYS)[number];
-
-const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
-const range = z.object({ open: hhmm, close: hhmm });
-export const openingHoursSchema = z.partialRecord(z.enum(DAY_KEYS), z.array(range).max(3));
-export type OpeningHours = z.infer<typeof openingHoursSchema>;
+export type OpeningHours = Partial<Record<DayKey, { open: string; close: string }[]>>;
 
 /** JS getDay() (0 = Sunday) → key */
 export function dayKeyFromIndex(i: number): DayKey {

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Icon, type IconName } from '@/components/ui/icons';
+import { LinkIcon } from '@/components/ui/link-pending';
 import { cn } from '@/lib/cn';
 
 export type OrderMode = { key: string; label: string; href: string; icon: IconName; external?: boolean; active?: boolean };
@@ -28,8 +29,9 @@ export function OrderModeBar({ modes, label, className }: { modes: OrderMode[]; 
                   <span className="sr-only">(opens another website)</span>
                 </a>
               ) : (
-                <Link href={m.href} aria-current={m.active ? 'page' : undefined} className={cls} data-mode={m.key}>
-                  <Icon name={m.icon} className="size-[18px] shrink-0" />
+                <Link href={m.href} aria-current={m.active ? 'page' : undefined} className={cn(cls, 'relative')} data-mode={m.key}>
+                  {/* Spinner in place of the icon until the ordering page has loaded. */}
+                  <LinkIcon icon={m.icon} className="size-[18px] shrink-0" />
                   {m.label}
                 </Link>
               )}
