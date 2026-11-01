@@ -108,3 +108,18 @@ export function storefrontPalette(
   const text = contrast(wanted, bg) >= 4.5 && contrast(wanted, card) >= 4.5 ? wanted : readableOn(card);
   return { primary, secondary, accent, bg, text, onPrimary: readableOn(primary), onSecondary: readableOn(secondary), primaryInk: ensureContrast(primary, card), card, dark };
 }
+
+/** The storefront CSS variables of a palette, for any element that should look like the guest pages. */
+export function paletteVars(p: StorefrontPalette): Record<`--sf-${string}`, string> {
+  return {
+    '--sf-primary': p.primary,
+    '--sf-accent': p.accent,
+    '--sf-bg': p.bg,
+    '--sf-text': p.text,
+    '--sf-on-primary': p.onPrimary,
+    '--sf-primary-ink': p.primaryInk,
+    '--sf-card': p.card,
+    '--sf-secondary': p.secondary,
+    '--sf-on-secondary': p.onSecondary,
+  };
+}

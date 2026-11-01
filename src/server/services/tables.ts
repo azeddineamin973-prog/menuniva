@@ -54,10 +54,11 @@ export async function saveArea(ctx: TenantContext, input: unknown) {
     const a = await db.diningArea.findFirst({ where: { id: d.id, organizationId: ctx.org.id } });
     if (!a) throw new UserFacingError('Area not found.', 404);
     await db.diningArea.update({ where: { id: a.id }, data: { name: d.name, floor: d.floor || null } });
-  } else {
-    const max = await db.diningArea.aggregate({ where: { locationId: d.locationId }, _max: { sortOrder: true } });
-    await db.diningArea.create({ data: { organizationId: ctx.org.id, locationId: d.locationId, name: d.name, floor: d.floor || null, sortOrder: (max._max.sortOrder ?? 0) + 1 } });
+    return { id: a.id };
   }
+  const max = await db.diningArea.aggregate({ where: { locationId: d.locationId }, _max: { sortOrder: true } });
+  const created = await db.diningArea.create({ data: { organizationId: ctx.org.id, locationId: d.locationId, name: d.name, floor: d.floor || null, sortOrder: (max._max.sortOrder ?? 0) + 1 }, select: { id: true } });
+  return { id: created.id };
 }
 
 export const tablesInput = z.object({

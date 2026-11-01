@@ -58,6 +58,7 @@ const ROUTES = [
   ['owner', `${org}/kitchen/${seed.kitchenStationId}`],
   ['owner', `${org}/kitchen/tickets/${ids.ticketId}/print`],
   ['owner', `${org}/tables`],
+  ['owner', `${org}/tables/floor-plan`],
   ['owner', `${org}/tables/print`],
   ['owner', `${org}/bills`],
   ['owner', `${org}/bills/${ids.sessionId}`],

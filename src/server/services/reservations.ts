@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { LanguageCode, ReservationStatus } from '@/generated/prisma/enums';
 import { Prisma } from '@/generated/prisma/client';
 import { LANGUAGES } from '@/i18n/config';
+import type { TableStatus } from '@/lib/floor-plan';
 import { rangesFor, type OpeningHours } from '@/lib/opening-hours';
 import { openingHoursSchema } from '@/lib/opening-hours-schema';
 import { zonedParts, zonedTimeToUtc } from '@/lib/time';
@@ -26,8 +27,8 @@ const TRANSITIONS: Partial<Record<ReservationStatus, ReservationStatus[]>> = {
   ARRIVED: ['COMPLETED'],
 };
 
-type Settings = { slotMinutes: number; durationMinutes: number; bufferMinutes: number; maxPartySize: number; maxCoversPerSlot: number; minNoticeMinutes: number; maxDaysAhead: number; bookableHours: unknown };
-const DEFAULTS: Settings = { slotMinutes: 30, durationMinutes: 90, bufferMinutes: 15, maxPartySize: 8, maxCoversPerSlot: 20, minNoticeMinutes: 60, maxDaysAhead: 60, bookableHours: null };
+type Settings = { slotMinutes: number; durationMinutes: number; bufferMinutes: number; maxPartySize: number; maxCoversPerSlot: number; minNoticeMinutes: number; maxDaysAhead: number; bookableHours: unknown; guestTableChoice?: boolean };
+const DEFAULTS: Settings = { slotMinutes: 30, durationMinutes: 90, bufferMinutes: 15, maxPartySize: 8, maxCoversPerSlot: 20, minNoticeMinutes: 60, maxDaysAhead: 60, bookableHours: null, guestTableChoice: false };
 
 // ------------------------------------------------------------------ settings (M10-05)
 
@@ -51,6 +52,15 @@ export async function updateReservationSettings(ctx: TenantContext, input: unkno
   const data = { ...rest, bookableHours: bookableHours ?? Prisma.DbNull };
   await db.reservationSettings.upsert({ where: { locationId }, update: data, create: { locationId, ...data } });
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'reservations.settings_updated', entityType: 'RestaurantLocation', entityId: locationId, metadata: rest });
+}
+
+/** Lets guests pick a free table (floor plan) with their request. Off by default. */
+export async function updateGuestTableChoice(ctx: TenantContext, input: unknown) {
+  await assertModule(ctx.org.id, 'reservations');
+  const d = z.object({ locationId: z.string().min(1), enabled: z.boolean() }).parse(input);
+  await assertLocationAccess(ctx, d.locationId);
+  await db.reservationSettings.upsert({ where: { locationId: d.locationId }, update: { guestTableChoice: d.enabled }, create: { locationId: d.locationId, guestTableChoice: d.enabled } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'reservations.guest_table_choice', entityType: 'RestaurantLocation', entityId: d.locationId, metadata: { enabled: d.enabled } });
 }
 
 // ------------------------------------------------------------------ availability (M10-06)
@@ -106,6 +116,29 @@ export async function availability(
   return { slots, reason: 'ok' };
 }
 
+/**
+ * What each table offers a guest at one start time (the booking floor plan). A table is free when no
+ * requested, confirmed or arrived reservation holds it during the visit plus the table buffer (the
+ * same window staff assignment checks). When the time itself is full, no table is offered. Tables
+ * without a seat count are never offered online: MenuNiva does not guess capacities.
+ */
+export async function tableStatuses(location: { id: string; timeZone: string; openingHours: unknown }, settings: Settings | null, dateStr: string, time: string, partySize: number, now = new Date()) {
+  const s = settings ?? DEFAULTS;
+  const [av, tables] = await Promise.all([
+    availability(db, location, settings, dateStr, partySize, now),
+    db.restaurantTable.findMany({ where: { locationId: location.id, isActive: true, OR: [{ areaId: null }, { area: { isActive: true } }] }, select: { id: true, seats: true } }),
+  ]);
+  const slot = av.reason === 'ok' ? av.slots.find((x) => x.time === time) : undefined;
+  const fixed = (t: { seats: number | null }): TableStatus | null => (t.seats === null ? 'not_bookable' : t.seats < partySize ? 'too_small' : null);
+  if (!slot?.available) return { slotAvailable: false, tables: tables.map((t) => ({ id: t.id, status: fixed(t) ?? ('booked' as TableStatus) })) };
+  const start = new Date(slot.startsAt);
+  const end = new Date(start.getTime() + (s.durationMinutes + s.bufferMinutes) * 60_000);
+  const busy = new Set(
+    (await db.reservationTableAssignment.findMany({ where: { tableId: { in: tables.map((t) => t.id) }, reservation: { status: { in: HOLDING } }, startsAt: { lt: end }, endsAt: { gt: start } }, select: { tableId: true } })).map((b) => b.tableId),
+  );
+  return { slotAvailable: true, tables: tables.map((t) => ({ id: t.id, status: fixed(t) ?? ((busy.has(t.id) ? 'booked' : 'available') as TableStatus) })) };
+}
+
 // ------------------------------------------------------------------ guest request (M10-07)
 
 export const reservationRequestSchema = z.object({
@@ -120,6 +153,8 @@ export const reservationRequestSchema = z.object({
   specialRequest: z.string().trim().max(500).optional(),
   idempotencyKey: z.string().uuid(),
   language: z.enum(LANGUAGES as [LanguageCode, ...LanguageCode[]]),
+  /** A table the guest chose on the floor plan (only when the restaurant allows it). */
+  tableId: z.string().min(1).max(40).optional(),
 });
 
 export function reservationTokenFor(locationId: string, key: string) {
@@ -160,6 +195,21 @@ export async function requestReservation(input: unknown, client: string | Client
     const slot = av.slots.find((x) => x.time === d.time);
     if (!slot || !slot.available) throw new ReservationRejectedError('slot_unavailable');
     const startsAt = new Date(slot.startsAt);
+    // A table chosen on the floor plan is held with the request (same window and lock as staff
+    // assignment), so two guests cannot pick the same table for overlapping visits. It is still a
+    // request: staff confirm it, and can move it to another table.
+    let table: { id: string; label: string } | null = null;
+    const tableEnd = new Date(startsAt.getTime() + (s.durationMinutes + s.bufferMinutes) * 60_000);
+    if (d.tableId) {
+      if (!location.reservationSettings?.guestTableChoice) throw new ReservationRejectedError('table_unavailable');
+      const t = await tx.restaurantTable.findFirst({ where: { id: d.tableId, locationId: location.id, isActive: true, OR: [{ areaId: null }, { area: { isActive: true } }] }, select: { id: true, label: true, seats: true } });
+      if (!t || t.seats === null) throw new ReservationRejectedError('table_unavailable');
+      if (t.seats < d.partySize) throw new ReservationRejectedError('table_too_small');
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'table:' + t.id}))`;
+      const clash = await tx.reservationTableAssignment.findFirst({ where: { tableId: t.id, reservation: { status: { in: HOLDING } }, startsAt: { lt: tableEnd }, endsAt: { gt: startsAt } }, select: { id: true } });
+      if (clash) throw new ReservationRejectedError('table_unavailable');
+      table = { id: t.id, label: t.label };
+    }
     const r = await tx.reservation.create({
       data: {
         organizationId: org.id,
@@ -176,7 +226,8 @@ export async function requestReservation(input: unknown, client: string | Client
         idempotencyKey: d.idempotencyKey,
       },
     });
-    await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'RESERVATION_REQUEST', title: `Reservation request: ${d.partySize} guests ${d.date} ${d.time}`, entityId: r.id } });
+    if (table) await tx.reservationTableAssignment.create({ data: { reservationId: r.id, tableId: table.id, startsAt, endsAt: tableEnd } });
+    await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'RESERVATION_REQUEST', title: `Reservation request: ${d.partySize} guests ${d.date} ${d.time}${table ? ` — table ${table.label}` : ''}`, entityId: r.id } });
     return { token, status: r.status, duplicate: false };
   });
   // The request exists: a failure to count it must not turn the guest's success into an error.
@@ -191,7 +242,7 @@ export async function trackReservation(token: string) {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
   return db.reservation.findUnique({
     where: { trackingTokenHash: hashToken(token) },
-    select: { startsAt: true, partySize: true, status: true, language: true, location: { select: { name: true, timeZone: true, phone: true, organization: { select: { name: true, slug: true } } } } },
+    select: { startsAt: true, partySize: true, status: true, language: true, assignments: { select: { table: { select: { label: true } } } }, location: { select: { name: true, timeZone: true, phone: true, organization: { select: { name: true, slug: true } } } } },
   });
 }
 

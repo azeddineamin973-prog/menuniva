@@ -60,6 +60,11 @@ export default async function ReservationsPage({ params, searchParams }: { param
             </Form>
             <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm" aria-label="Next day" title="Next day" icon="chevronRight" className="px-2 rtl:[&_svg]:rotate-180" />
             {date !== today && <ButtonLink href={base} variant="ghost" size="sm">Today</ButtonLink>}
+            {ctx.can('tables.view') && (
+              <ButtonLink href={`/dashboard/${ctx.org.slug}/tables/floor-plan`} variant="secondary" size="sm" icon="tables" title={settings?.guestTableChoice ? 'Guests choose their table on this plan' : 'Arrange your tables; optionally let guests choose one'} data-testid="open-floor-plan">
+                Floor plan
+              </ButtonLink>
+            )}
           </div>
         }
       />

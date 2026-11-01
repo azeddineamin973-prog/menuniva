@@ -2,6 +2,7 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
+import { saveFloorPlan } from '@/server/services/floor-plan';
 import { createTables, expandTableLabels, rotateTableQr, saveArea, saveStation, routeProducts, updateTable } from '@/server/services/tables';
 import { assignCategoryStations, createStations } from '@/server/services/station-assign';
 
@@ -42,6 +43,23 @@ export async function updateTableAction(_p: ActionResult, form: FormData) {
   );
 }
 
+/** Saves the plan of one dining area (positions, shapes and seats of the tables drawn on it). */
+export async function saveFloorPlanAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'tables.manage',
+    (ctx) => {
+      let layout: { placed?: unknown; removed?: unknown } = {};
+      try {
+        layout = JSON.parse(String(form.get('layout') ?? '{}'));
+      } catch {
+        // invalid JSON: the schema below reports it as a validation error
+      }
+      return saveFloorPlan(ctx, { locationId: form.get('locationId'), areaId: form.get('areaId'), placed: layout.placed, removed: layout.removed });
+    },
+    { ...R, successMessage: 'Floor plan saved' },
+  );
+}
 export async function rotateQrAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'tables.manage', (ctx) => rotateTableQr(ctx, String(form.get('tableId'))), R);
 }

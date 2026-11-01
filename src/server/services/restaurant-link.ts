@@ -54,9 +54,9 @@ export async function previewPages(ctx: TenantContext, link: RestaurantLink) {
   const r = `/r/${ctx.org.slug}`;
   const l = count > 1 ? `?l=${encodeURIComponent(loc.slug)}` : '';
   const pages = [{ key: 'menu', label: 'Menu', path: link.path }];
-  if (loc.takeawayEnabled && modules.has('takeaway')) pages.push({ key: 'pickup', label: 'Pickup ordering', path: `${r}/order/pickup${l}` });
-  if (loc.deliveryEnabled && modules.has('delivery')) pages.push({ key: 'delivery', label: 'Delivery ordering', path: `${r}/order/delivery${l}` });
-  if (loc.whatsappOrderingEnabled && loc.whatsappNumber) pages.push({ key: 'whatsapp', label: 'WhatsApp order', path: `${r}/order/whatsapp${l}` });
-  if (loc.reservationsEnabled && modules.has('reservations')) pages.push({ key: 'reserve', label: 'Table reservation', path: `${r}/reserve${l}` });
+  if (loc.takeawayEnabled && modules.has('takeaway')) pages.push({ key: 'pickup', label: 'Pickup', path: `${r}/order/pickup${l}` });
+  if (loc.deliveryEnabled && modules.has('delivery')) pages.push({ key: 'delivery', label: 'Delivery', path: `${r}/order/delivery${l}` });
+  if (loc.whatsappOrderingEnabled && loc.whatsappNumber) pages.push({ key: 'whatsapp', label: 'WhatsApp', path: `${r}/order/whatsapp${l}` });
+  if (loc.reservationsEnabled && modules.has('reservations')) pages.push({ key: 'reserve', label: 'Reservations', path: `${r}/reserve${l}` });
   return pages;
 }

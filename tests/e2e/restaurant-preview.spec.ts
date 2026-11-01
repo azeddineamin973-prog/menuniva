@@ -58,9 +58,15 @@ test('owner: Preview my restaurant shows the real draft menu in a phone, tablet 
   await expect(f.getByTestId('storefront')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByTestId('preview-language')).toHaveValue('ar');
   await page.getByTestId('preview-language').selectOption('en');
+  // The frame changes language in place (the page it shows stays the same).
+  await expect(f.getByTestId('storefront')).toHaveAttribute('lang', /^en/);
 
   // Device sizes: the page inside really is phone / tablet / desktop wide.
-  const width = () => f.locator('body').evaluate(() => window.innerWidth);
+  const width = () =>
+    f
+      .locator('body')
+      .evaluate(() => window.innerWidth)
+      .catch(() => -1); // the frame was between two pages: ask again
   await expect.poll(width).toBe(390);
   await screenshot(page, 'preview-phone');
   await page.getByTestId('preview-device-tablet').click();
@@ -73,7 +79,9 @@ test('owner: Preview my restaurant shows the real draft menu in a phone, tablet 
   await expect.poll(width).toBe(390);
 
   // Ordering options are previewable too, with ordering switched off.
-  await page.getByTestId('preview-page').selectOption('pickup');
+  await expect(page.getByTestId('preview-mode-note')).toContainText('ordering and booking are switched off');
+  await page.getByTestId('preview-page-pickup').click();
+  await expect(page.getByTestId('preview-page-pickup')).toHaveAttribute('aria-pressed', 'true');
   await expect(f.getByTestId('preview-banner')).toBeVisible();
   await expect(f.getByTestId('order-mode')).toBeVisible();
   await expect(f.getByText('Nothing you do here creates a real order.')).toBeVisible();
@@ -82,7 +90,7 @@ test('owner: Preview my restaurant shows the real draft menu in a phone, tablet 
   // Your restaurant link: draft status, the real public address, and what remains.
   const card = page.getByTestId('restaurant-link-card');
   await expect(card).toHaveAttribute('data-status', 'draft');
-  await expect(card.getByTestId('link-status')).toHaveText('Draft · not public');
+  await expect(page.getByTestId('link-status')).toHaveText('Draft · not public'); // next to the restaurant name
   const url = (await card.getByTestId('restaurant-url').getAttribute('data-url'))!;
   expect(url).toBe(`http://localhost:3100/r/${s.orgSlug}`); // APP_BASE_URL of the test server + tenant slug
   await expect(card.getByTestId('link-local-warning')).toBeVisible(); // localhost is labelled, not presented as shareable
@@ -116,7 +124,9 @@ test('published: the link card opens the live menu, and the preview shows it wit
   await page.goto(`/dashboard/${s.orgSlug}/preview`);
   const card = page.getByTestId('restaurant-link-card');
   await expect(card).toHaveAttribute('data-status', 'published');
-  await expect(card.getByTestId('link-status')).toHaveText('Published');
+  await expect(page.getByTestId('link-status')).toHaveText('Published');
+  // Live pages: the studio says so, because orders and bookings made in them are real.
+  await expect(page.getByTestId('preview-mode-note')).toContainText('real');
   await expect(card.getByTestId('publish-remaining')).toHaveCount(0);
   await expect(frame(page).getByTestId('customer-product').first()).toBeVisible();
   await expect(frame(page).getByTestId('preview-banner')).toHaveCount(0);
@@ -139,6 +149,59 @@ test('published: the link card opens the live menu, and the preview shows it wit
   await expect(guest).toHaveURL(/lang=ar/);
   await expect(guest.getByTestId('storefront')).toHaveAttribute('dir', 'rtl');
   await guest.close();
+});
+
+test('studio: the whole device fits the stage, zooms, opens pages in place, and Back still leaves the studio', async ({ page }) => {
+  await login(page, s.owner, s.password);
+  await page.goto(`/dashboard/${s.orgSlug}`);
+  await page.goto(`/dashboard/${s.orgSlug}/preview`);
+  const studio = page.getByTestId('restaurant-preview');
+  await expect(frame(page).getByTestId('customer-product').first()).toBeVisible();
+
+  // Fit: the device (frame included) is entirely inside the stage, for every device.
+  const fits = () =>
+    page.evaluate(() => {
+      const area = document.querySelector('[data-testid=preview-area]')!.getBoundingClientRect();
+      const device = document.querySelector('[data-testid=preview-area] > div:last-child')!.getBoundingClientRect();
+      return device.width > 200 && device.left >= area.left - 1 && device.right <= area.right + 1 && device.top >= area.top - 1 && device.bottom <= area.bottom + 1;
+    });
+  for (const d of ['tablet', 'desktop', 'phone']) {
+    await page.getByTestId(`preview-device-${d}`).click();
+    await expect(studio).toHaveAttribute('data-device', d);
+    await expect.poll(fits, { message: d }).toBe(true);
+  }
+  // The controls sit beside the preview, which gets most of the width.
+  const [controls, stage] = await Promise.all([studio.locator('> div').first().boundingBox(), page.getByTestId('preview-stage').boundingBox()]);
+  expect(stage!.x).toBeGreaterThan(controls!.x + controls!.width);
+  expect(stage!.width).toBeGreaterThan(controls!.width * 1.8);
+
+  // Zoom in: bigger than the screen allows, so the stage scrolls; Fit brings the whole device back.
+  const level = page.getByTestId('preview-zoom-level');
+  const fitLevel = await level.textContent();
+  await page.getByTestId('preview-device-desktop').click();
+  await page.getByTestId('preview-zoom-in').click();
+  await page.getByTestId('preview-zoom-in').click();
+  await expect(studio).toHaveAttribute('data-zoom', /^[\d.]+$/);
+  expect(await page.getByTestId('preview-area').evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await page.getByTestId('preview-zoom-fit').click();
+  await expect(studio).toHaveAttribute('data-zoom', 'fit');
+  await expect.poll(fits).toBe(true);
+  await page.getByTestId('preview-device-phone').click();
+  await expect(level).toHaveText(fitLevel!);
+
+  // Pages open inside the frame without adding history: Back leaves the studio.
+  await page.getByTestId('preview-page-pickup').click();
+  await expect(frame(page).getByTestId('order-mode')).toBeVisible();
+  await page.getByTestId('preview-page-menu').click();
+  await expect(page.getByTestId('preview-page-menu')).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame(page).getByTestId('customer-product').first()).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/dashboard/${s.orgSlug}$`));
+
+  // Deep link (used by "Preview as guest"): the studio opens on that page.
+  await page.goto(`/dashboard/${s.orgSlug}/preview?page=pickup`);
+  await expect(studio).toHaveAttribute('data-page', 'pickup');
+  await expect(frame(page).getByTestId('order-mode')).toBeVisible();
 });
 
 test('the preview page fits a 360 px phone even before its script has measured the screen', async ({ browser }) => {

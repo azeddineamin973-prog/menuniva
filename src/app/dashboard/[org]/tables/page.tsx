@@ -168,6 +168,11 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
       <PageHeader
         title="Tables & QR codes"
         description="Each table has its own QR code. Guests scan it to order, with no app or login. Staff still accept every order."
+        meta={
+          <ButtonLink href={`/dashboard/${ctx.org.slug}/tables/floor-plan`} variant="secondary" size="sm" icon="layers" data-testid="open-floor-plan">
+            Floor plan
+          </ButtonLink>
+        }
         actions={
           tables.length > 0 && (
             <>

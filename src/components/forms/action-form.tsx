@@ -1,7 +1,7 @@
 'use client';
 
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
-import { createContext, useActionState, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useActionState, useContext, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Alert, Button, wrapButtonClass, Icon } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
@@ -107,17 +107,20 @@ export function ActionForm({
     return null;
   };
   const submit = keepValuesOnSubmit(formAction);
+  // Once per result: callers pass inline callbacks, which must not re-run the effect (a new
+  // function each render would call onSuccess again after every re-render, e.g. router.refresh()).
+  const succeeded = useEffectEvent((data: unknown) => onSuccess?.(data));
   useEffect(() => {
     if (state === initialActionState) return;
     setShown(state);
     setShownLang(uiLang());
     if (state.ok) {
       if (resetOnSuccess) ref.current?.reset();
-      onSuccess?.(state.data);
+      succeeded(state.data);
       const t = setTimeout(() => setShown(null), 4000);
       return () => clearTimeout(t);
     }
-  }, [state, resetOnSuccess, onSuccess]);
+  }, [state, resetOnSuccess]);
   const fieldErrors = !state.ok && state.fieldErrors ? state.fieldErrors : {};
   return (
     <FieldErrorsContext.Provider value={fieldErrors}>

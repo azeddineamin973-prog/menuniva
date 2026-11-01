@@ -5,6 +5,7 @@ import { getMessages } from '@/i18n';
 import { zonedParts } from '@/lib/time';
 import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
+import { guestFloorPlan } from '@/server/services/floor-plan';
 import { availability } from '@/server/services/reservations';
 import { canPreviewOrg, resolveGuestLanguage } from '@/server/services/storefront';
 import { PreviewBanner } from '@/components/storefront/preview-banner';
@@ -32,10 +33,13 @@ export default async function ReservePage({ params, searchParams }: { params: Pr
   const party = Math.min(2, maxParty);
   const av = await availability(db, location, location.reservationSettings, today, party);
   const initial = { date: today, party, slots: av.slots.map((s) => ({ time: s.time, available: s.available })), reason: av.reason };
+  // The floor plan only when the restaurant lets guests choose their table (Tables → Floor plan).
+  const plan = location.reservationSettings?.guestTableChoice ? await guestFloorPlan(location.id) : null;
+  const wide = !!plan && (plan.areas.length > 0 || plan.unplaced.length > 0);
   return (
     <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={m.reservation.title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
       {isPreview && <PreviewBanner />}
-      <div className="mx-auto max-w-lg px-4 py-6">
+      <div className={wide ? 'mx-auto max-w-5xl px-4 py-6 sm:px-6' : 'mx-auto max-w-lg px-4 py-6'}>
         <h2 className="mb-4 font-serif text-2xl">{m.reservation.title}</h2>
         {isPreview && (
           <p className="mb-4 rounded-2xl border border-sf-accent/40 bg-sf-card/70 p-3 text-sm" role="status">
@@ -43,7 +47,7 @@ export default async function ReservePage({ params, searchParams }: { params: Pr
           </p>
         )}
         <fieldset disabled={isPreview} className="min-w-0 disabled:opacity-60">
-          <ReserveForm org={org.slug} l={sp.l} lang={lang} today={today} maxParty={maxParty} initial={initial} sendingLabel={m.customer.submitting} m={{ reservation: m.reservation, validation: m.validation, common: m.common }} />
+          <ReserveForm org={org.slug} l={sp.l} lang={lang} today={today} maxParty={maxParty} initial={initial} sendingLabel={m.customer.submitting} plan={plan} preview={isPreview} m={{ reservation: m.reservation, validation: m.validation, common: m.common }} />
         </fieldset>
       </div>
     </StorefrontShell>
