@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { fmt } from '@/i18n/config';
 import { cn } from '@/lib/cn';
-import { chairPositions, planViewBox, tableSize, type PlanArea, type PlanTable, type TableStatus } from '@/lib/floor-plan';
+import { chairPositions, DEFAULT_ROOM, labelSize, planViewBox, tableSize, type PlanArea, type PlanTable, type TableStatus } from '@/lib/floor-plan';
 
 export type FloorPlanLabels = {
   floorPlan: string;
@@ -50,7 +50,7 @@ export function FloorPlan({
   const [areaId, setAreaId] = useState(() => areas.find((a) => a.tables.some((t) => t.id === selectedId))?.id ?? areas[0]?.id);
   const area = areas.find((a) => a.id === areaId) ?? areas[0];
   const titleId = useId();
-  const box = useMemo(() => planViewBox(area?.tables ?? []), [area]);
+  const box = useMemo(() => planViewBox(area?.tables ?? [], area?.labels ?? [], { w: area?.width ?? DEFAULT_ROOM.w, h: area?.height ?? DEFAULT_ROOM.h }), [area]);
   if (!area) return null;
   const stateOf = (t: PlanTable) => (t.id === selectedId ? 'selected' : !status ? 'unknown' : status[t.id] === 'available' ? 'available' : 'unavailable');
   const selectable = (t: PlanTable) => !disabled && !!status && status[t.id] === 'available';
@@ -110,7 +110,19 @@ export function FloorPlan({
               <circle cx="2" cy="2" r="1.6" fill="color-mix(in srgb, var(--sf-text) 12%, transparent)" />
             </pattern>
           </defs>
-          <rect x={box.x} y={box.y} width={box.w} height={box.h} fill={`url(#${titleId}-dots)`} />
+          {/* The room as the restaurant drew it: its walls, then its labels (entrance, bar…). */}
+          <rect x={0} y={0} width={area.width} height={area.height} rx="14" fill={`url(#${titleId}-dots)`} stroke="color-mix(in srgb, var(--sf-text) 22%, transparent)" strokeWidth="4" data-testid="plan-room" />
+          {area.labels.map((l) => {
+            const s = labelSize(l.text);
+            return (
+              <g key={l.id} transform={`translate(${l.x} ${l.y})`} data-testid="plan-label">
+                <rect x={-s.w / 2} y={-s.h / 2} width={s.w} height={s.h} rx="8" fill="color-mix(in srgb, var(--sf-text) 6%, var(--sf-card))" />
+                <text y="6" textAnchor="middle" fontSize="17" fontWeight="600" fill="var(--sf-text)" opacity="0.7">
+                  {l.text}
+                </text>
+              </g>
+            );
+          })}
           {area.tables.map((t) => {
             const look = LOOK[stateOf(t)];
             const { w, h } = tableSize(t.shape, t.seats, t.rotation);

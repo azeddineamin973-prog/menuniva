@@ -234,6 +234,13 @@ enum TableShape {
   RECTANGLE
 }
 
+/// Who put a table on a reservation: staff, the guest (floor plan) or automatic assignment.
+enum TableAssignmentSource {
+  STAFF
+  GUEST
+  AUTOMATIC
+}
+
 enum ReservationStatus {
   REQUESTED
   CONFIRMED
@@ -938,6 +945,11 @@ model DiningArea {
   sortOrder      Int      @default(0)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
+  // Floor plan of this room, set by the restaurant: its size in plan units (about 1 cm each) and
+  // its labels (entrance, bar, window…) as [{ id, text, x, y }].
+  planWidth      Int      @default(1000)
+  planHeight     Int      @default(640)
+  planLabels     Json?
 
   location RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
   tables   RestaurantTable[]
@@ -1372,6 +1384,7 @@ model ReservationSettings {
   maxDaysAhead     Int     @default(60)
   bookableHours    Json? // null = use opening hours
   guestTableChoice Boolean @default(false) // guests may pick a free table (floor plan) with their request
+  autoAssignTables Boolean @default(false) // a request without a chosen table gets the smallest free table that fits
 
   location RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 }
@@ -1403,11 +1416,12 @@ model Reservation {
 }
 
 model ReservationTableAssignment {
-  id            String   @id @default(cuid())
+  id            String                @id @default(cuid())
   reservationId String
   tableId       String
   startsAt      DateTime
   endsAt        DateTime // includes buffer
+  source        TableAssignmentSource @default(STAFF)
 
   reservation Reservation     @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   table       RestaurantTable @relation(fields: [tableId], references: [id], onDelete: Cascade)

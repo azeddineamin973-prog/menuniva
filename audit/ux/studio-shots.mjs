@@ -44,7 +44,13 @@ async function seedStudio() {
     [`rs${Date.now()}`, s.locationId, hours],
   );
   const areas = { sala: `fa${Date.now()}s`, terrace: `fa${Date.now()}t` };
-  await sql(`INSERT INTO "DiningArea" (id, "organizationId", "locationId", name, "sortOrder") VALUES ($1, $3, $4, 'Sala', 1), ($2, $3, $4, 'Esplanada', 2)`, [areas.sala, areas.terrace, s.orgId, s.locationId]);
+  const salaLabels = JSON.stringify([{ id: 'door', text: 'Entrada', x: 500, y: 610 }, { id: 'bar', text: 'Balcão', x: 900, y: 40 }]);
+  const terraceLabels = JSON.stringify([{ id: 'street', text: 'Rua', x: 600, y: 470 }]);
+  await sql(
+    `INSERT INTO "DiningArea" (id, "organizationId", "locationId", name, "sortOrder", "planWidth", "planHeight", "planLabels") VALUES
+     ($1, $3, $4, 'Sala', 1, 1000, 640, $5::jsonb), ($2, $3, $4, 'Esplanada', 2, 1200, 500, $6::jsonb)`,
+    [areas.sala, areas.terrace, s.orgId, s.locationId, salaLabels, terraceLabels],
+  );
   const tables = [
     ['1', 2, 'ROUND', 0, 140, 130, areas.sala],
     ['2', 2, 'ROUND', 0, 300, 130, areas.sala],
@@ -76,7 +82,18 @@ async function seedStudio() {
     `INSERT INTO "ReservationTableAssignment" (id, "reservationId", "tableId", "startsAt", "endsAt") SELECT $1, r.id, $3, r."startsAt", r."startsAt" + interval '105 minutes' FROM "Reservation" r WHERE r.id = $2`,
     [`fra${Date.now()}`, resId, ids['3']],
   );
-  return { ...s, tomorrow, tables: ids };
+  // A second, unrelated fictional restaurant: its own room and tables, automatic assignment, so its
+  // guests get the simple form (no map).
+  const out2 = execFileSync('npx', ['tsx', '--conditions=react-server', 'tests/e2e/seed.ts', `beta${Date.now()}`], { env: { ...process.env, APP_ENV: 'test', DATABASE_URL: TEST_DB }, encoding: 'utf8' });
+  const b = JSON.parse(out2.trim().split('\n').reverse().find((l) => l.startsWith('{')));
+  await sql(`UPDATE "RestaurantLocation" SET "reservationsEnabled" = true, "openingHours" = $2::jsonb WHERE id = $1`, [b.locationId, hours]);
+  await sql(`INSERT INTO "ReservationSettings" (id, "locationId", "bookableHours", "autoAssignTables") VALUES ($1, $2, $3::jsonb, true) ON CONFLICT ("locationId") DO UPDATE SET "bookableHours" = $3::jsonb, "autoAssignTables" = true`, [`rsb${Date.now()}`, b.locationId, hours]);
+  const salao = `fb${Date.now()}`;
+  await sql(`INSERT INTO "DiningArea" (id, "organizationId", "locationId", name, "planWidth", "planHeight") VALUES ($1, $2, $3, 'Salão', 800, 600)`, [salao, b.orgId, b.locationId]);
+  for (const [label, seats, x, y] of [['B1', 2, 150, 150], ['B2', 4, 400, 150], ['B3', 4, 650, 150], ['B4', 6, 400, 420]]) {
+    await sql(`INSERT INTO "RestaurantTable" (id, "organizationId", "locationId", "areaId", label, seats, "planX", "planY") VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [`fb${Date.now()}${label}`, b.orgId, b.locationId, salao, label, seats, x, y]);
+  }
+  return { ...s, tomorrow, tables: ids, beta: { orgSlug: b.orgSlug, owner: b.owner, password: b.password } };
 }
 
 const seed = !FRESH && existsSync(SEED_FILE) ? JSON.parse(readFileSync(SEED_FILE, 'utf8')) : await seedStudio();
@@ -176,8 +193,8 @@ for (const [w, h] of [[1440, 900], [390, 844]]) {
   await ctx.close();
 }
 
-// Owner floor plan editor.
-for (const [w, h] of [[1440, 900], [390, 844]]) {
+// Owner floor plan builder: as saved, a table selected, a template, a label selected, guest view.
+for (const [w, h] of [[1440, 900], [1024, 768], [390, 844]]) {
   const { ctx, page } = await open(w, h);
   await page.goto(`${BASE}${org}/tables/floor-plan`);
   await page.waitForLoadState('networkidle');
@@ -185,8 +202,40 @@ for (const [w, h] of [[1440, 900], [390, 844]]) {
   await page.locator('[data-testid=editor-table][data-table="5"]').click();
   await page.waitForTimeout(200);
   await page.screenshot({ path: `${OUT}/editor-${w}-selected.png`, fullPage: true });
-  report.push([`editor ${w}`, await overflow(page, w), '']);
+  await page.getByTestId('template-walls').click();
+  await page.waitForTimeout(200);
+  await page.getByTestId('editor-canvas').screenshot({ path: `${OUT}/editor-${w}-walls.png` });
+  const overlaps = await page.locator('[data-testid=editor-table][data-overlap]').count();
+  await page.locator('[data-testid=editor-label][data-label="Entrada"]').click();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `${OUT}/editor-${w}-label.png`, fullPage: true });
+  await page.getByTestId('editor-view-guest').click();
+  await page.waitForTimeout(200);
+  await page.getByTestId('editor-guest-view').screenshot({ path: `${OUT}/editor-${w}-guest-view.png` });
+  report.push([`editor ${w}`, await overflow(page, w), `overlapping after template: ${overlaps}`]);
   await ctx.close();
+}
+// The second restaurant: its own builder, and guests get the simple form (automatic assignment).
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/login`);
+  await page.getByTestId('login-form').locator('input[name=email]').fill(seed.beta.owner);
+  await page.getByTestId('login-form').locator('input[name=password]').fill(seed.beta.password);
+  await page.getByTestId('login-form').locator('button[type=submit]').click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'));
+  await page.goto(`${BASE}/dashboard/${seed.beta.orgSlug}/tables/floor-plan`);
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${OUT}/beta-editor-1440.png`, fullPage: true });
+  const own = await page.locator('[data-testid=editor-table]').evaluateAll((els) => els.map((e) => e.getAttribute('data-table')).join(' '));
+  const other = await page.goto(`${BASE}${org}/tables/floor-plan`);
+  report.push(['beta builder', `tables ${own}`, `other restaurant's builder → HTTP ${other?.status()}`]);
+  await ctx.close();
+  const g = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await g.goto(`${BASE}/r/${seed.beta.orgSlug}/reserve?lang=en`);
+  await g.screenshot({ path: `${OUT}/beta-guest-390.png`, fullPage: true });
+  report.push(['beta guest form', (await g.getByTestId('table-choice').count()) === 0 ? 'simple form, no map' : 'MAP SHOWN', await overflow(g, 390)]);
+  await g.close();
 }
 await browser.close();
 for (const r of report) console.log(r.filter(Boolean).join(' · '));

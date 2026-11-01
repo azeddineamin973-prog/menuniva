@@ -2,7 +2,7 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
-import { saveFloorPlan } from '@/server/services/floor-plan';
+import { removeDiningArea, saveFloorPlan } from '@/server/services/floor-plan';
 import { createTables, expandTableLabels, rotateTableQr, saveArea, saveStation, routeProducts, updateTable } from '@/server/services/tables';
 import { assignCategoryStations, createStations } from '@/server/services/station-assign';
 
@@ -49,15 +49,38 @@ export async function saveFloorPlanAction(_p: ActionResult, form: FormData) {
     form.get('org'),
     'tables.manage',
     (ctx) => {
-      let layout: { placed?: unknown; removed?: unknown } = {};
+      let layout: { placed?: unknown; removed?: unknown; room?: unknown; labels?: unknown } = {};
       try {
         layout = JSON.parse(String(form.get('layout') ?? '{}'));
       } catch {
         // invalid JSON: the schema below reports it as a validation error
       }
-      return saveFloorPlan(ctx, { locationId: form.get('locationId'), areaId: form.get('areaId'), placed: layout.placed, removed: layout.removed });
+      return saveFloorPlan(ctx, { locationId: form.get('locationId'), areaId: form.get('areaId'), placed: layout.placed, removed: layout.removed, room: layout.room, labels: layout.labels });
     },
     { ...R, successMessage: 'Floor plan saved' },
+  );
+}
+
+/** Removes a dining area from the floor plan; its tables are kept and stay bookable. */
+export async function removeAreaAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'tables.manage', (ctx) => removeDiningArea(ctx, { locationId: form.get('locationId'), areaId: form.get('areaId') }), R);
+}
+
+/** Floor plan builder: creates tables (labels or a range) and draws them on the area right away. */
+export async function addPlanTablesAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'tables.manage',
+    (ctx) =>
+      createTables(ctx, {
+        locationId: form.get('locationId'),
+        areaId: form.get('areaId') || null,
+        labels: expandTableLabels(String(form.get('labels') ?? '')),
+        seats: form.get('seats') ? Number(form.get('seats')) : null,
+        shape: form.get('shape') || undefined,
+        place: true,
+      }),
+    { ...R, successMessage: 'Tables added' },
   );
 }
 export async function rotateQrAction(_p: ActionResult, form: FormData) {

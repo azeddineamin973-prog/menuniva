@@ -2,7 +2,7 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
-import { assignReservationTable, changeReservationStatus, unassignReservationTable, updateGuestTableChoice, updateReservationSettings } from '@/server/services/reservations';
+import { assignReservationTable, changeReservationStatus, unassignReservationTable, updateReservationSettings, updateTableAssignment } from '@/server/services/reservations';
 
 const R = { revalidate: '/dashboard/[org]' };
 
@@ -18,9 +18,14 @@ export async function unassignTableAction(_p: ActionResult, form: FormData) {
   return runTenantAction(form.get('org'), 'reservations.manage', (ctx) => unassignReservationTable(ctx, String(form.get('reservationId')), String(form.get('tableId'))), R);
 }
 
-/** Shows (or hides) the floor plan to guests when they request a reservation. */
-export async function guestTableChoiceAction(_p: ActionResult, form: FormData) {
-  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => updateGuestTableChoice(ctx, { locationId: form.get('locationId'), enabled: form.get('enabled') === 'on' }), R);
+/** How tables get onto online requests: staff assign, automatic, or guests choose on the floor plan. */
+export async function tableAssignmentAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(
+    form.get('org'),
+    'settings.manage',
+    (ctx) => updateTableAssignment(ctx, { locationId: form.get('locationId'), mode: form.get('mode'), autoFallback: form.get('autoFallback') === 'on' }),
+    { ...R, successMessage: 'Table assignment saved' },
+  );
 }
 export async function saveReservationSettingsAction(_p: ActionResult, form: FormData) {
   return runTenantAction(

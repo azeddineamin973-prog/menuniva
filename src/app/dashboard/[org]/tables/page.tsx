@@ -19,7 +19,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
   const location = await currentLocation(ctx);
   if (!location) return <Alert tone="warning">No location.</Alert>;
   const [areas, tables] = await Promise.all([
-    db.diningArea.findMany({ where: { locationId: location.id, organizationId: ctx.org.id }, orderBy: { sortOrder: 'asc' } }),
+    db.diningArea.findMany({ where: { locationId: location.id, organizationId: ctx.org.id, isActive: true }, orderBy: { sortOrder: 'asc' } }),
     listTablesForLocation(ctx, location.id),
   ]);
   const base = `/dashboard/${ctx.org.slug}`;

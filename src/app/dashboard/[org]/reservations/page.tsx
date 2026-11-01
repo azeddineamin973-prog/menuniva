@@ -10,7 +10,7 @@ import type { OpeningHours } from '@/lib/opening-hours';
 import { formatTimeInZone, zonedParts } from '@/lib/time';
 import { currentLocation } from '@/server/current-location';
 import { db } from '@/server/db';
-import { reservationsForDay } from '@/server/services/reservations';
+import { reservationsForDay, tableAssignmentMode } from '@/server/services/reservations';
 import { requireModulePage } from '@/server/module-page';
 import { requireTenantPage } from '@/server/tenant';
 import { assignTableAction, reservationStatusAction, saveReservationSettingsAction, unassignTableAction } from './actions';
@@ -61,7 +61,14 @@ export default async function ReservationsPage({ params, searchParams }: { param
             <ButtonLink href={`${base}?date=${shift(date, 1)}`} variant="secondary" size="sm" aria-label="Next day" title="Next day" icon="chevronRight" className="px-2 rtl:[&_svg]:rotate-180" />
             {date !== today && <ButtonLink href={base} variant="ghost" size="sm">Today</ButtonLink>}
             {ctx.can('tables.view') && (
-              <ButtonLink href={`/dashboard/${ctx.org.slug}/tables/floor-plan`} variant="secondary" size="sm" icon="tables" title={settings?.guestTableChoice ? 'Guests choose their table on this plan' : 'Arrange your tables; optionally let guests choose one'} data-testid="open-floor-plan">
+              <ButtonLink
+                href={`/dashboard/${ctx.org.slug}/tables/floor-plan`}
+                variant="secondary"
+                size="sm"
+                icon="tables"
+                title={{ guest: 'Guests choose their table on the floor plan', automatic: 'Tables are assigned automatically', staff: 'Arrange your tables and choose how they are assigned' }[tableAssignmentMode(settings)]}
+                data-testid="open-floor-plan"
+              >
                 Floor plan
               </ButtonLink>
             )}
@@ -89,6 +96,11 @@ export default async function ReservationsPage({ params, searchParams }: { param
                     {r.assignments.map((a) => (
                       <span key={a.id} className="flex items-center gap-1">
                         <Badge tone="dark" data-testid="assigned-table">Table {a.table.label}</Badge>
+                        {a.source !== 'STAFF' && (
+                          <span className="text-xs text-muted" data-testid="assignment-source" data-source={a.source}>
+                            {a.source === 'GUEST' ? "guest's choice" : 'automatic'}
+                          </span>
+                        )}
                         <InlineAction action={unassignTableAction} fields={{ org: ctx.org.slug, reservationId: r.id, tableId: a.table.id }} label={<><Icon name="x" className="size-3.5" /><span className="sr-only">Remove table {a.table.label}</span></>} title="Remove table" variant="ghost" />
                       </span>
                     ))}

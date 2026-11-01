@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { LanguageCode, ReservationStatus } from '@/generated/prisma/enums';
 import { Prisma } from '@/generated/prisma/client';
 import { LANGUAGES } from '@/i18n/config';
-import type { TableStatus } from '@/lib/floor-plan';
+import { naturalCompare, type TableStatus } from '@/lib/floor-plan';
 import { rangesFor, type OpeningHours } from '@/lib/opening-hours';
 import { openingHoursSchema } from '@/lib/opening-hours-schema';
 import { zonedParts, zonedTimeToUtc } from '@/lib/time';
@@ -27,8 +27,19 @@ const TRANSITIONS: Partial<Record<ReservationStatus, ReservationStatus[]>> = {
   ARRIVED: ['COMPLETED'],
 };
 
-type Settings = { slotMinutes: number; durationMinutes: number; bufferMinutes: number; maxPartySize: number; maxCoversPerSlot: number; minNoticeMinutes: number; maxDaysAhead: number; bookableHours: unknown; guestTableChoice?: boolean };
-const DEFAULTS: Settings = { slotMinutes: 30, durationMinutes: 90, bufferMinutes: 15, maxPartySize: 8, maxCoversPerSlot: 20, minNoticeMinutes: 60, maxDaysAhead: 60, bookableHours: null, guestTableChoice: false };
+type Settings = {
+  slotMinutes: number;
+  durationMinutes: number;
+  bufferMinutes: number;
+  maxPartySize: number;
+  maxCoversPerSlot: number;
+  minNoticeMinutes: number;
+  maxDaysAhead: number;
+  bookableHours: unknown;
+  guestTableChoice?: boolean;
+  autoAssignTables?: boolean;
+};
+const DEFAULTS: Settings = { slotMinutes: 30, durationMinutes: 90, bufferMinutes: 15, maxPartySize: 8, maxCoversPerSlot: 20, minNoticeMinutes: 60, maxDaysAhead: 60, bookableHours: null, guestTableChoice: false, autoAssignTables: false };
 
 // ------------------------------------------------------------------ settings (M10-05)
 
@@ -54,13 +65,28 @@ export async function updateReservationSettings(ctx: TenantContext, input: unkno
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'reservations.settings_updated', entityType: 'RestaurantLocation', entityId: locationId, metadata: rest });
 }
 
-/** Lets guests pick a free table (floor plan) with their request. Off by default. */
-export async function updateGuestTableChoice(ctx: TenantContext, input: unknown) {
+/**
+ * How tables get onto online requests, per location:
+ * - `staff` (default): guests choose a time; staff assign tables.
+ * - `automatic`: each request holds the smallest free table that fits, until staff confirm or change it.
+ * - `guest`: guests may pick a free table on the floor plan; a request without a pick is assigned
+ *   automatically when `autoFallback` is on, otherwise by staff.
+ * Every request stays a request: the restaurant confirms it.
+ */
+export const TABLE_ASSIGNMENT_MODES = ['staff', 'automatic', 'guest'] as const;
+export type TableAssignmentMode = (typeof TABLE_ASSIGNMENT_MODES)[number];
+export function tableAssignmentMode(s: { guestTableChoice?: boolean; autoAssignTables?: boolean } | null | undefined): TableAssignmentMode {
+  return s?.guestTableChoice ? 'guest' : s?.autoAssignTables ? 'automatic' : 'staff';
+}
+
+export async function updateTableAssignment(ctx: TenantContext, input: unknown) {
   await assertModule(ctx.org.id, 'reservations');
-  const d = z.object({ locationId: z.string().min(1), enabled: z.boolean() }).parse(input);
+  const d = z.object({ locationId: z.string().min(1), mode: z.enum(TABLE_ASSIGNMENT_MODES), autoFallback: z.boolean().default(true) }).parse(input);
   await assertLocationAccess(ctx, d.locationId);
-  await db.reservationSettings.upsert({ where: { locationId: d.locationId }, update: { guestTableChoice: d.enabled }, create: { locationId: d.locationId, guestTableChoice: d.enabled } });
-  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'reservations.guest_table_choice', entityType: 'RestaurantLocation', entityId: d.locationId, metadata: { enabled: d.enabled } });
+  const data = { guestTableChoice: d.mode === 'guest', autoAssignTables: d.mode === 'automatic' || (d.mode === 'guest' && d.autoFallback) };
+  await db.reservationSettings.upsert({ where: { locationId: d.locationId }, update: data, create: { locationId: d.locationId, ...data } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'reservations.table_assignment', entityType: 'RestaurantLocation', entityId: d.locationId, metadata: { mode: d.mode, ...data } });
+  return { mode: d.mode, ...data };
 }
 
 // ------------------------------------------------------------------ availability (M10-06)
@@ -124,19 +150,45 @@ export async function availability(
  */
 export async function tableStatuses(location: { id: string; timeZone: string; openingHours: unknown }, settings: Settings | null, dateStr: string, time: string, partySize: number, now = new Date()) {
   const s = settings ?? DEFAULTS;
-  const [av, tables] = await Promise.all([
-    availability(db, location, settings, dateStr, partySize, now),
-    db.restaurantTable.findMany({ where: { locationId: location.id, isActive: true, OR: [{ areaId: null }, { area: { isActive: true } }] }, select: { id: true, seats: true } }),
-  ]);
+  const [av, tables] = await Promise.all([availability(db, location, settings, dateStr, partySize, now), db.restaurantTable.findMany({ where: bookableTables(location.id), select: { id: true, seats: true } })]);
   const slot = av.reason === 'ok' ? av.slots.find((x) => x.time === time) : undefined;
   const fixed = (t: { seats: number | null }): TableStatus | null => (t.seats === null ? 'not_bookable' : t.seats < partySize ? 'too_small' : null);
   if (!slot?.available) return { slotAvailable: false, tables: tables.map((t) => ({ id: t.id, status: fixed(t) ?? ('booked' as TableStatus) })) };
   const start = new Date(slot.startsAt);
   const end = new Date(start.getTime() + (s.durationMinutes + s.bufferMinutes) * 60_000);
-  const busy = new Set(
-    (await db.reservationTableAssignment.findMany({ where: { tableId: { in: tables.map((t) => t.id) }, reservation: { status: { in: HOLDING } }, startsAt: { lt: end }, endsAt: { gt: start } }, select: { tableId: true } })).map((b) => b.tableId),
-  );
+  const busy = await busyTables(db, tables.map((t) => t.id), start, end);
+  // Only the table and whether it can be booked: never who booked it, for how many, or when.
   return { slotAvailable: true, tables: tables.map((t) => ({ id: t.id, status: fixed(t) ?? ((busy.has(t.id) ? 'booked' : 'available') as TableStatus) })) };
+}
+
+/** Tables a location can take reservations on: active, and not in a removed dining area. */
+const bookableTables = (locationId: string) => ({ locationId, isActive: true, OR: [{ areaId: null }, { area: { isActive: true } }] });
+
+/** Tables held by a requested, confirmed or arrived reservation during [start, end). */
+async function busyTables(client: Tx | typeof db, tableIds: string[], start: Date, end: Date) {
+  if (!tableIds.length) return new Set<string>();
+  const rows = await client.reservationTableAssignment.findMany({ where: { tableId: { in: tableIds }, reservation: { status: { in: HOLDING } }, startsAt: { lt: end }, endsAt: { gt: start } }, select: { tableId: true } });
+  return new Set(rows.map((r) => r.tableId));
+}
+
+/**
+ * Automatic assignment: the smallest free table that seats the party (then by dining area and
+ * table order), checked again under the table's lock so staff assigning at the same moment cannot
+ * double-book it. Tables without a seat count are never picked. Null when nothing fits.
+ */
+async function pickFreeTable(tx: Tx, locationId: string, partySize: number, start: Date, end: Date) {
+  const candidates = await tx.restaurantTable.findMany({
+    where: { ...bookableTables(locationId), seats: { gte: partySize } },
+    select: { id: true, label: true, seats: true, sortOrder: true, area: { select: { sortOrder: true } } },
+  });
+  candidates.sort((a, b) => a.seats! - b.seats! || (a.area?.sortOrder ?? 1e6) - (b.area?.sortOrder ?? 1e6) || a.sortOrder - b.sortOrder || naturalCompare(a.label, b.label));
+  const busy = await busyTables(tx, candidates.map((c) => c.id), start, end);
+  for (const t of candidates) {
+    if (busy.has(t.id)) continue;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'table:' + t.id}))`;
+    if (!(await busyTables(tx, [t.id], start, end)).has(t.id)) return { id: t.id, label: t.label };
+  }
+  return null;
 }
 
 // ------------------------------------------------------------------ guest request (M10-07)
@@ -195,20 +247,22 @@ export async function requestReservation(input: unknown, client: string | Client
     const slot = av.slots.find((x) => x.time === d.time);
     if (!slot || !slot.available) throw new ReservationRejectedError('slot_unavailable');
     const startsAt = new Date(slot.startsAt);
-    // A table chosen on the floor plan is held with the request (same window and lock as staff
-    // assignment), so two guests cannot pick the same table for overlapping visits. It is still a
-    // request: staff confirm it, and can move it to another table.
-    let table: { id: string; label: string } | null = null;
+    // A table chosen on the floor plan (or picked automatically) is held with the request, in the
+    // same window and under the same lock as staff assignment, so two requests cannot hold one
+    // table for overlapping visits. It is still a request: staff confirm it, and can change the table.
+    let table: { id: string; label: string; source: 'GUEST' | 'AUTOMATIC' } | null = null;
     const tableEnd = new Date(startsAt.getTime() + (s.durationMinutes + s.bufferMinutes) * 60_000);
     if (d.tableId) {
       if (!location.reservationSettings?.guestTableChoice) throw new ReservationRejectedError('table_unavailable');
-      const t = await tx.restaurantTable.findFirst({ where: { id: d.tableId, locationId: location.id, isActive: true, OR: [{ areaId: null }, { area: { isActive: true } }] }, select: { id: true, label: true, seats: true } });
+      const t = await tx.restaurantTable.findFirst({ where: { id: d.tableId, ...bookableTables(location.id) }, select: { id: true, label: true, seats: true } });
       if (!t || t.seats === null) throw new ReservationRejectedError('table_unavailable');
       if (t.seats < d.partySize) throw new ReservationRejectedError('table_too_small');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'table:' + t.id}))`;
-      const clash = await tx.reservationTableAssignment.findFirst({ where: { tableId: t.id, reservation: { status: { in: HOLDING } }, startsAt: { lt: tableEnd }, endsAt: { gt: startsAt } }, select: { id: true } });
-      if (clash) throw new ReservationRejectedError('table_unavailable');
-      table = { id: t.id, label: t.label };
+      if ((await busyTables(tx, [t.id], startsAt, tableEnd)).has(t.id)) throw new ReservationRejectedError('table_unavailable');
+      table = { id: t.id, label: t.label, source: 'GUEST' };
+    } else if (location.reservationSettings?.autoAssignTables) {
+      const t = await pickFreeTable(tx, location.id, d.partySize, startsAt, tableEnd);
+      if (t) table = { ...t, source: 'AUTOMATIC' };
     }
     const r = await tx.reservation.create({
       data: {
@@ -226,8 +280,9 @@ export async function requestReservation(input: unknown, client: string | Client
         idempotencyKey: d.idempotencyKey,
       },
     });
-    if (table) await tx.reservationTableAssignment.create({ data: { reservationId: r.id, tableId: table.id, startsAt, endsAt: tableEnd } });
-    await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'RESERVATION_REQUEST', title: `Reservation request: ${d.partySize} guests ${d.date} ${d.time}${table ? ` — table ${table.label}` : ''}`, entityId: r.id } });
+    if (table) await tx.reservationTableAssignment.create({ data: { reservationId: r.id, tableId: table.id, startsAt, endsAt: tableEnd, source: table.source } });
+    const tableNote = table ? ` — table ${table.label} (${table.source === 'GUEST' ? "guest's choice" : 'automatic'})` : location.reservationSettings?.autoAssignTables ? ' — no free table fits, assign one' : '';
+    await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'RESERVATION_REQUEST', title: `Reservation request: ${d.partySize} guests ${d.date} ${d.time}${tableNote}`, entityId: r.id } });
     return { token, status: r.status, duplicate: false };
   });
   // The request exists: a failure to count it must not turn the guest's success into an error.
@@ -240,10 +295,22 @@ export const RESERVATION_LIMITS = { ipPerDay: 10, phonePerDay: 3 } as const;
 
 export async function trackReservation(token: string) {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-  return db.reservation.findUnique({
+  const r = await db.reservation.findUnique({
     where: { trackingTokenHash: hashToken(token) },
-    select: { startsAt: true, partySize: true, status: true, language: true, assignments: { select: { table: { select: { label: true } } } }, location: { select: { name: true, timeZone: true, phone: true, organization: { select: { name: true, slug: true } } } } },
+    select: {
+      startsAt: true,
+      partySize: true,
+      status: true,
+      language: true,
+      assignments: { select: { source: true, table: { select: { label: true } } } },
+      location: { select: { name: true, timeZone: true, phone: true, organization: { select: { name: true, slug: true } } } },
+    },
   });
+  if (!r) return null;
+  // The guest sees the table they picked themselves at once; a table the restaurant (or automatic
+  // assignment) holds only once the reservation is confirmed, since it may still change.
+  const settled = r.status === 'CONFIRMED' || r.status === 'ARRIVED' || r.status === 'COMPLETED';
+  return { ...r, assignments: r.assignments.filter((a) => settled || (a.source === 'GUEST' && r.status === 'REQUESTED')).map((a) => ({ table: a.table })) };
 }
 
 /** How close to the booking a guest may still cancel online. Inside this, they must call. */

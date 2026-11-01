@@ -1,6 +1,7 @@
 import 'server-only';
 import QRCode from 'qrcode';
 import { z } from 'zod';
+import { freeSpot, TABLE_SHAPES } from '@/lib/floor-plan';
 import { audit } from '../audit';
 import { newPublicToken } from '../crypto';
 import { db } from '../db';
@@ -51,9 +52,10 @@ export async function saveArea(ctx: TenantContext, input: unknown) {
   const d = areaInput.parse(input);
   await assertLocationAccess(ctx, d.locationId);
   if (d.id) {
-    const a = await db.diningArea.findFirst({ where: { id: d.id, organizationId: ctx.org.id } });
+    const a = await db.diningArea.findFirst({ where: { id: d.id, organizationId: ctx.org.id, locationId: d.locationId, isActive: true } });
     if (!a) throw new UserFacingError('Area not found.', 404);
-    await db.diningArea.update({ where: { id: a.id }, data: { name: d.name, floor: d.floor || null } });
+    await db.diningArea.update({ where: { id: a.id }, data: { name: d.name, ...(d.floor !== undefined ? { floor: d.floor || null } : {}) } });
+    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'tables.area_renamed', entityType: 'DiningArea', entityId: a.id, metadata: { from: a.name, to: d.name } });
     return { id: a.id };
   }
   const max = await db.diningArea.aggregate({ where: { locationId: d.locationId }, _max: { sortOrder: true } });
@@ -66,6 +68,9 @@ export const tablesInput = z.object({
   areaId: z.string().nullable().optional(),
   labels: z.array(z.string().trim().min(1).max(20)).min(1).max(200),
   seats: z.number().int().min(1).max(50).nullable().optional(),
+  /** Floor plan builder: draw the new tables on the area's plan right away, in free spots. */
+  place: z.boolean().optional(),
+  shape: z.enum(TABLE_SHAPES).optional(),
 });
 
 /** "1-10" → ["01".."10"], "A1, A2, Terraço 3" → as typed. */
@@ -88,10 +93,9 @@ export function expandTableLabels(input: string): string[] {
 export async function createTables(ctx: TenantContext, input: unknown) {
   const d = tablesInput.parse(input);
   await assertLocationAccess(ctx, d.locationId);
-  if (d.areaId) {
-    const area = await db.diningArea.findFirst({ where: { id: d.areaId, locationId: d.locationId, organizationId: ctx.org.id } });
-    if (!area) throw new UserFacingError('Invalid area.');
-  }
+  const area = d.areaId ? await db.diningArea.findFirst({ where: { id: d.areaId, locationId: d.locationId, organizationId: ctx.org.id, isActive: true }, select: { id: true, planWidth: true, planHeight: true } }) : null;
+  if (d.areaId && !area) throw new UserFacingError('Invalid area.');
+  if (d.place && !area) throw new UserFacingError('Choose the dining area to draw the tables on.');
   await db.$transaction(async (tx) => {
     // Limit and label checks inside the transaction, serialised per restaurant, so two parallel
     // bulk creations cannot exceed the plan's table limit together (audit GAP-05).
@@ -104,8 +108,25 @@ export async function createTables(ctx: TenantContext, input: unknown) {
     if (existing.length) throw new UserFacingError(`These table labels already exist: ${existing.map((e) => e.label).join(', ')}`);
     const max = await tx.restaurantTable.aggregate({ where: { locationId: d.locationId }, _max: { sortOrder: true } });
     let order = max._max.sortOrder ?? 0;
+    // Placed next to the tables already drawn on this area, never on top of them.
+    const shape = d.shape ?? 'ROUND';
+    const room = area ? { w: area.planWidth, h: area.planHeight } : null;
+    const drawn =
+      d.place && area
+        ? (await tx.restaurantTable.findMany({ where: { areaId: area.id, isActive: true, planX: { not: null }, planY: { not: null } }, select: { planX: true, planY: true, planShape: true, planRotation: true, seats: true } })).map((t) => ({
+            x: t.planX!,
+            y: t.planY!,
+            shape: t.planShape,
+            rotation: t.planRotation,
+            seats: t.seats,
+          }))
+        : [];
     for (const label of d.labels) {
-      const t = await tx.restaurantTable.create({ data: { organizationId: ctx.org.id, locationId: d.locationId, areaId: d.areaId ?? null, label, seats: d.seats ?? null, sortOrder: ++order } });
+      const spot = d.place && room ? freeSpot(drawn, shape, d.seats ?? null, 0, room) : null;
+      const t = await tx.restaurantTable.create({
+        data: { organizationId: ctx.org.id, locationId: d.locationId, areaId: d.areaId ?? null, label, seats: d.seats ?? null, sortOrder: ++order, ...(spot ? { planX: spot.x, planY: spot.y, planShape: shape } : {}) },
+      });
+      if (spot) drawn.push({ ...spot, shape, rotation: 0, seats: d.seats ?? null });
       await tx.tableQRToken.create({ data: { tableId: t.id, token: newPublicToken() } });
     }
     await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'tables.created', entityType: 'RestaurantTable', metadata: { labels: d.labels } }, tx);
@@ -134,7 +155,7 @@ export async function updateTable(ctx: TenantContext, input: unknown) {
   const d = z.object({ tableId: z.string(), label: z.string().trim().min(1).max(20), seats: z.number().int().min(1).max(50).nullable(), areaId: z.string().nullable(), isActive: z.boolean() }).parse(input);
   const t = await assertTable(ctx, d.tableId);
   if (d.areaId) {
-    const area = await db.diningArea.findFirst({ where: { id: d.areaId, locationId: t.locationId } });
+    const area = await db.diningArea.findFirst({ where: { id: d.areaId, locationId: t.locationId, organizationId: ctx.org.id, isActive: true } });
     if (!area) throw new UserFacingError('Invalid area.');
   }
   const clash = await db.restaurantTable.findFirst({ where: { locationId: t.locationId, label: d.label, id: { not: t.id } } });
