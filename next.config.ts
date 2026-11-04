@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@node-rs/argon2', 'pg', '@prisma/adapter-pg'],
   experimental: {
     serverActions: { bodySizeLimit: '6mb' },
+    // Off: in `next dev` the MCP server writes every browser console line to .next/dev/logs, the
+    // file watcher picks that write up, recompiles and reloads the page, which logs again: the
+    // sign-in pages reloaded several times a second and could not be submitted.
+    mcpServer: false,
   },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];

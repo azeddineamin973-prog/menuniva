@@ -20,6 +20,8 @@
     "db:studio": "prisma studio",
     "setup:admin-token": "tsx --conditions=react-server scripts/create-setup-token.ts",
     "setup:casa": "tsx --conditions=react-server scripts/bootstrap-casa-de-marrocos.ts",
+    "reset-link": "tsx --conditions=react-server scripts/create-reset-link.ts",
+    "set-temp-password": "tsx --conditions=react-server scripts/set-temp-password.ts",
     "demo:seed": "tsx --conditions=react-server scripts/seed-demo.ts",
     "retention": "tsx --conditions=react-server scripts/retention.ts",
     "backup": "node scripts/backup.mjs",
