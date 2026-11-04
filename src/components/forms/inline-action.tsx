@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
+import { useUiText } from '@/components/ui-text';
 import { Button, buttonClass } from '@/components/ui';
 import { Dialog } from '@/components/ui/dialog';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
@@ -37,17 +38,18 @@ export function InlineAction({
   testId?: string;
 }) {
   const [state, formAction, pending] = useActionState<ActionResult<unknown>, FormData>(action, initialActionState);
+  const ui = useUiText();
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const confirmed = useRef(false);
   useEffect(() => {
     if (state !== initialActionState && !state.ok && state.error) {
-      setError(friendlyError(state.error));
+      setError(friendlyError(state.error, null, ui));
       const t = setTimeout(() => setError(null), 6000);
       return () => clearTimeout(t);
     }
-  }, [state]);
+  }, [state, ui]);
   return (
     <form
       ref={formRef}
@@ -77,7 +79,7 @@ export function InlineAction({
           footer={
             <>
               <Button type="button" variant="secondary" onClick={() => setAsking(false)}>
-                Cancel
+                {ui.cancel}
               </Button>
               <Button
                 type="button"
@@ -89,7 +91,7 @@ export function InlineAction({
                 }}
                 data-testid="confirm-action"
               >
-                {typeof label === 'string' ? label : 'Confirm'}
+                {typeof label === 'string' ? label : ui.confirm}
               </Button>
             </>
           }

@@ -1,13 +1,16 @@
 import { Tabs } from '@/components/ui';
+import { getDashText } from '@/i18n/dash';
+import { getCurrentUser } from '@/server/auth/session';
 
-export function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' | 'alerts' | 'tax' | 'privacy' }) {
+export async function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' | 'alerts' | 'tax' | 'privacy' }) {
+  const t = getDashText((await getCurrentUser())?.preferredLanguage ?? 'en').settingsTabs;
   const tabs = [
-    { key: 'details', label: 'Details & languages', href: `${base}/settings`, icon: 'building' },
-    { key: 'branding', label: 'Branding', href: `${base}/settings/branding`, icon: 'sparkles' },
-    { key: 'channels', label: 'Ordering channels & links', href: `${base}/settings/channels`, icon: 'bag' },
-    { key: 'alerts', label: 'Alerts & timings', href: `${base}/settings/alerts`, icon: 'bell' },
-    { key: 'tax', label: 'Tax (IVA)', href: `${base}/settings/tax`, icon: 'bill' },
-    { key: 'privacy', label: 'Privacy (GDPR)', href: `${base}/settings/privacy`, icon: 'shield' },
+    { key: 'details', label: t.details, href: `${base}/settings`, icon: 'building' },
+    { key: 'branding', label: t.branding, href: `${base}/settings/branding`, icon: 'sparkles' },
+    { key: 'channels', label: t.channels, href: `${base}/settings/channels`, icon: 'bag' },
+    { key: 'alerts', label: t.alerts, href: `${base}/settings/alerts`, icon: 'bell' },
+    { key: 'tax', label: t.tax, href: `${base}/settings/tax`, icon: 'bill' },
+    { key: 'privacy', label: t.privacy, href: `${base}/settings/privacy`, icon: 'shield' },
   ] as const;
-  return <Tabs label="Settings" className="mb-6" items={tabs.map((t) => ({ href: t.href, label: t.label, icon: t.icon, active: t.key === active }))} />;
+  return <Tabs label={t.label} className="mb-6" items={tabs.map((x) => ({ href: x.href, label: x.label, icon: x.icon, active: x.key === active }))} />;
 }

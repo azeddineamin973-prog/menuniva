@@ -357,3 +357,10 @@ picture > source { display: none; }
 .sf-root select:focus-visible {
   outline: none;
 }
+
+/* Right-to-left pages (Arabic): web links, emails and phone numbers are always written left to
+   right, otherwise "https://…" is shown as "/https://…". They stay aligned with the Arabic text. */
+[dir='rtl'] input:is([type='url'], [type='email'], [type='tel']) {
+  direction: ltr;
+  text-align: right;
+}

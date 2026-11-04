@@ -3,7 +3,10 @@ import { cookies } from 'next/headers';
 import { AppShell, type ShellAlert, type SidebarLink } from '@/components/dashboard/sidebar';
 import { Badge, Icon } from '@/components/ui';
 import { ToastProvider } from '@/components/ui/toast';
+import { UiTextProvider } from '@/components/ui-text';
 import { dirOf, getMessages, LANGUAGE_TAG } from '@/i18n';
+import { getUiText } from '@/i18n/ui';
+import { getDashText } from '@/i18n/dash';
 import { NAV_ITEMS } from '@/lib/nav';
 import { navStatus } from '@/server/services/nav-counts';
 import { listUserOrganizations } from '@/server/services/organizations';
@@ -46,19 +49,19 @@ export default async function DashboardLayout({ children, params }: { children: 
   const accountLinks = visible.filter((i) => i.placement === 'account' || (i.placement === 'setup' && setupDone)).map(toLink);
   // The bell lists the attention items (orders, tickets, table and booking requests) and, besides
   // them, what is not operational work. Keys match the counts so the shell keeps them live.
-  const alerts: ShellAlert[] = [{ key: 'reviews', label: 'Low ratings to follow up', count: status.reviews, href: `${base}/reviews`, icon: 'star' }];
-
   const lang = ctx.user.preferredLanguage;
+  const d = getDashText(lang);
+  const alerts: ShellAlert[] = [{ key: 'reviews', label: d.layout.lowRatings, count: status.reviews, href: `${base}/reviews`, icon: 'star' }];
   const role = ctx.role.replace('RESTAURANT_', '').replace('_', ' ').toLowerCase();
   const banners = (
     <>
-      {ctx.org.isDemo && <div className="bg-warning/15 px-4 py-1.5 text-center text-xs font-medium text-warning">DEMO restaurant — all data here is fictitious and for testing only.</div>}
+      {ctx.org.isDemo && <div className="bg-warning/15 px-4 py-1.5 text-center text-xs font-medium text-warning">{d.layout.demoRestaurant}</div>}
       {ctx.org.status === 'ONBOARDING' && ctx.can('settings.manage') && (
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-line bg-accent-soft/60 px-4 py-2 text-[13px]">
-          <Badge tone="lime">Setup</Badge>
-          <span className="text-ink-2">Your restaurant is not published yet.</span>
+          <Badge tone="lime">{d.layout.setupBadge}</Badge>
+          <span className="text-ink-2">{d.layout.notPublished}</span>
           <Link href={`${base}/setup`} className="inline-flex min-h-8 items-center font-medium text-ink underline-offset-4 hover:underline">
-            Continue setup <Icon name="arrowRight" className="ms-0.5 inline size-3.5 align-[-2px]" />
+            {d.layout.continueSetup} <Icon name="arrowRight" className="ms-0.5 inline size-3.5 align-[-2px] rtl:rotate-180" />
           </Link>
         </div>
       )}
@@ -70,6 +73,7 @@ export default async function DashboardLayout({ children, params }: { children: 
       <a href="#main" className="sr-only z-[60] rounded-lg bg-lime px-4 py-2 text-sm font-semibold text-lime-ink focus:not-sr-only focus:fixed focus:start-3 focus:top-3">
         {m.shell.skipToContent}
       </a>
+      <UiTextProvider text={getUiText(lang)}>
       <ToastProvider>
         <AppShell
           links={links}
@@ -87,12 +91,16 @@ export default async function DashboardLayout({ children, params }: { children: 
           attentionLabels={m.shell.attention}
           initialCollapsed={jar.get('mn_sidebar')?.value === 'collapsed'}
           signOutLabel={m.auth.signOut}
-          themeLabels={{ dark: 'Dark mode', light: 'Light mode' }}
+          themeLabels={{ dark: d.layout.darkMode, light: d.layout.lightMode }}
+          text={d.sidebar}
+          lang={lang}
+          languageLabel={d.layout.language}
           banners={banners}
         >
           {children}
         </AppShell>
       </ToastProvider>
+      </UiTextProvider>
     </div>
   );
 }

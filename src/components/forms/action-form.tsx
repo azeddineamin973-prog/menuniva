@@ -6,36 +6,30 @@ import { Alert, Button, wrapButtonClass, Icon } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/cn';
 import { DEFAULT_UPLOAD_MAX_BYTES, parseUploadErrorCode, uploadMessage } from '@/lib/upload-messages';
+import { useUiText } from '@/components/ui-text';
+import enUi, { type UiText } from '@/i18n/ui/en';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Action = (prev: any, form: FormData) => Promise<ActionResult<any>>;
 
 const FieldErrorsContext = createContext<Record<string, string>>({});
 
-const FRIENDLY: Record<string, string> = {
-  invalid_phone: 'Enter a valid phone number, e.g. +351 935 413 677.',
-  invalid_url: 'Enter a full link starting with https://',
-  https_required: 'The link must start with https://',
-  wrong_domain: 'This link does not belong to the expected website.',
-  invalid_postal_pt: 'Use the Portuguese format 0000-000.',
-  invalid_postal_es: 'Use the Spanish format 00000.',
-  default_must_be_enabled: 'The default language must be one of the enabled languages.',
-  source_must_be_enabled: 'The source language must be one of the enabled languages.',
-};
-
-export function friendlyError(code: string, langTag?: string | null): string {
-  if (FRIENDLY[code]) return FRIENDLY[code];
+/** A known error code in the page's language (`t` from useUiText); unknown text is shown as sent. */
+export function friendlyError(code: string, langTag?: string | null, t: UiText = enUi): string {
+  const known = (t.friendly as Record<string, string>)[code];
+  if (known) return known;
   const upload = parseUploadErrorCode(code);
   if (upload) return uploadMessage(upload.code, langTag, upload.maxBytes);
   if (code === 'request_failed') return uploadMessage('request_failed', langTag);
-  if (/^Too (small|big)|^Invalid|^String must|^Expected/i.test(code)) return 'Please check this value.';
+  if (/^Too (small|big)|^Invalid|^String must|^Expected/i.test(code)) return t.checkValue;
   return code;
 }
 
 export function useFieldError(name: string): string | undefined {
   const errors = useContext(FieldErrorsContext);
+  const t = useUiText();
   const e = errors[name];
-  return e ? friendlyError(e) : undefined;
+  return e ? friendlyError(e, null, t) : undefined;
 }
 
 export function FieldError({ name }: { name: string }) {
@@ -54,10 +48,10 @@ export function FieldError({ name }: { name: string }) {
 export function ActionForm({
   action,
   children,
-  submitLabel = 'Save',
+  submitLabel,
   className,
   resetOnSuccess = false,
-  successText = 'Saved',
+  successText,
   hiddenSubmit = false,
   submitVariant = 'primary',
   testId,
@@ -90,6 +84,7 @@ export function ActionForm({
     }
   };
   const [state, formAction, pending] = useActionState<ActionResult<unknown>, FormData>(safeAction, initialActionState);
+  const t = useUiText();
   const [shown, setShown] = useState<ActionResult<unknown> | null>(null);
   // Language of the page around the form, read when a message is shown (the DOM is needed for it).
   const [shownLang, setShownLang] = useState<string | null>(null);
@@ -154,17 +149,17 @@ export function ActionForm({
           data-testid={stickySubmit ? 'sticky-submit' : undefined}
         >
           <Button type="submit" disabled={pending} variant={submitVariant} className={wrapButtonClass}>
-            {pending ? 'Saving…' : submitLabel}
+            {pending ? t.saving : (submitLabel ?? t.save)}
           </Button>
           {shown?.ok && (
             <span className="animate-fade-in inline-flex items-center gap-1.5 text-sm font-medium text-success" role="status">
-              <Icon name="checkCircle" className="size-4" /> {successText}
+              <Icon name="checkCircle" className="size-4" /> {successText ?? t.saved}
             </span>
           )}
         </div>
         {shown && !shown.ok && shown.error && (
           <Alert tone="danger">
-            {shown.error === 'validation' ? 'Some fields need attention. Please check the highlighted fields.' : friendlyError(shown.error, shownLang)}
+            {shown.error === 'validation' ? t.fieldsNeedAttention : friendlyError(shown.error, shownLang, t)}
           </Alert>
         )}
       </form>

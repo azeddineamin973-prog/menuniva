@@ -1,7 +1,10 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { isLanguage } from '@/i18n/config';
 import { toActionError } from '@/server/action';
+import { setUiLanguageCookie } from '@/server/ui-language';
 import { type ActionResult } from '@/lib/action-result';
 import { currentSessionTokenHash, getCurrentUser } from '@/server/auth/session';
 import { changePassword, deleteMyAccount, updateProfile } from '@/server/services/account';
@@ -17,7 +20,14 @@ async function withUser<T>(fn: (userId: string) => Promise<T>): Promise<ActionRe
 }
 
 export async function updateProfileAction(_p: ActionResult, form: FormData) {
-  return withUser((id) => updateProfile(id, { name: form.get('name'), preferredLanguage: form.get('preferredLanguage') }));
+  const r = await withUser((id) => updateProfile(id, { name: form.get('name'), preferredLanguage: form.get('preferredLanguage') }));
+  // The new language (and its direction) applies at once on every page, not only in the dashboard.
+  const lang = form.get('preferredLanguage');
+  if (r.ok && isLanguage(lang)) {
+    await setUiLanguageCookie(lang);
+    revalidatePath('/', 'layout');
+  }
+  return r;
 }
 
 export async function changePasswordAction(_p: ActionResult, form: FormData) {

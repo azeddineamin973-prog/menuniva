@@ -10,6 +10,7 @@ import { attemptLogin } from '@/server/auth/login';
 import { hashToken } from '@/server/crypto';
 import { db } from '@/server/db';
 import { rateLimit, RateLimitError } from '@/server/rate-limit';
+import { chosenUiLanguage, setUiLanguageCookie } from '@/server/ui-language';
 
 const emailSchema = z.string().trim().toLowerCase().email('invalid_email').max(254);
 
@@ -33,7 +34,9 @@ export async function signupAction(_prev: ActionResult, form: FormData): Promise
   const { name, email, password } = parsed.data;
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) return { ok: false, error: 'email_taken', fieldErrors: { email: 'email_taken' } };
-  const user = await db.user.create({ data: { name, email, passwordHash: await hashPassword(password) } });
+  // The language chosen on the sign-up page becomes the account's dashboard language.
+  const preferredLanguage = (await chosenUiLanguage()) ?? 'en';
+  const user = await db.user.create({ data: { name, email, passwordHash: await hashPassword(password), preferredLanguage } });
   await audit({ actorUserId: user.id, action: 'user.signed_up', entityType: 'User', entityId: user.id });
   await createSession(user.id);
   redirect(safeNextPath(form.get('next'), '/onboarding/new'));
@@ -47,6 +50,9 @@ export async function loginAction(_prev: ActionResult, form: FormData): Promise<
   const r = await attemptLogin(parsed.data.email, parsed.data.password, await clientIp());
   if (!r.ok) return { ok: false, error: r.error };
   await createSession(r.userId);
+  // After sign-in the account's saved language applies everywhere (also on another device).
+  const u = await db.user.findUnique({ where: { id: r.userId }, select: { preferredLanguage: true } });
+  if (u) await setUiLanguageCookie(u.preferredLanguage);
   redirect(safeNextPath(form.get('next'), '/dashboard'));
 }
 

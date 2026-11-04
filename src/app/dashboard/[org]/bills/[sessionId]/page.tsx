@@ -10,6 +10,8 @@ import { InlineAction } from '@/components/forms/inline-action';
 import { sessionAccessSummary } from '@/server/services/table-access';
 import { changeItemAction, closeSessionAction, recordPaymentAction, revokeDeviceAction, transferAction, voidPaymentAction } from '../actions';
 import { TablePinPanel } from '../../tables/table-access-panel';
+import { fmt } from '@/i18n/config';
+import { getDashText } from '@/i18n/dash';
 
 export const METHOD_LABEL: Record<(typeof PAYMENT_METHODS)[number], string> = {
   CASH: 'Cash',
@@ -22,6 +24,9 @@ export const METHOD_LABEL: Record<(typeof PAYMENT_METHODS)[number], string> = {
 export default async function BillPage({ params }: { params: Promise<{ org: string; sessionId: string }> }) {
   const { org, sessionId } = await params;
   const ctx = await requireTenantPage(org, 'payments.record');
+  const d = getDashText(ctx.user.preferredLanguage);
+  const t = d.bill;
+  const methodLabel = (m: (typeof PAYMENT_METHODS)[number]) => t.methods[m] ?? METHOD_LABEL[m];
   let bill;
   try {
     bill = await getSessionBill(ctx, sessionId);
@@ -50,22 +55,22 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
   return (
     <>
       <PageHeader
-        title={`Table ${session.table.label}`}
-        description={`${open ? 'Open' : 'Closed'} since ${time(session.openedAt)}${open && access.policy === 'SESSION_PIN' ? ` · ${activePhones.length === 1 ? '1 phone' : `${activePhones.length} phones`} authorised` : ''}`}
-        actions={<ButtonLink href={`/dashboard/${ctx.org.slug}/bills/${session.id}/receipt`} variant="secondary" target="_blank">Print receipt (not an invoice)</ButtonLink>}
+        title={fmt(t.title, { label: session.table.label })}
+        description={`${fmt(open ? t.openSince : t.closedSince, { time: time(session.openedAt) })}${open && access.policy === 'SESSION_PIN' ? (activePhones.length === 1 ? t.phones1 : fmt(t.phonesN, { n: activePhones.length })) : ''}`}
+        actions={<ButtonLink href={`/dashboard/${ctx.org.slug}/bills/${session.id}/receipt`} variant="secondary" target="_blank">{t.receipt}</ButtonLink>}
       />
       {/* Three figures side by side even on a phone: the waiter sees total, paid and balance at once. */}
       <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-4" data-testid="bill-totals">
-        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">Bill total</p><p className="mt-1 text-lg font-semibold tabular-nums sm:text-2xl" data-testid="bill-total">{formatCents(billedCents)}</p></Card>
-        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">Payments recorded</p><p className="mt-1 text-lg font-semibold tabular-nums sm:text-2xl" data-testid="bill-paid">{formatCents(paidCents)}</p></Card>
-        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">Still to pay</p><p className={`mt-1 text-lg font-semibold tabular-nums sm:text-2xl ${balanceCents > 0 ? 'text-danger' : 'text-success'}`} data-testid="bill-balance">{formatCents(balanceCents)}</p></Card>
+        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">{t.total}</p><p className="mt-1 text-lg font-semibold tabular-nums sm:text-2xl" data-testid="bill-total">{formatCents(billedCents)}</p></Card>
+        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">{t.paid}</p><p className="mt-1 text-lg font-semibold tabular-nums sm:text-2xl" data-testid="bill-paid">{formatCents(paidCents)}</p></Card>
+        <Card className="p-3 sm:p-5"><p className="text-xs text-muted sm:text-sm">{t.balance}</p><p className={`mt-1 text-lg font-semibold tabular-nums sm:text-2xl ${balanceCents > 0 ? 'text-danger' : 'text-success'}`} data-testid="bill-balance">{formatCents(balanceCents)}</p></Card>
       </div>
       <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
         <div className="space-y-6">
           {orders.map((o) => (
             <Card key={o.id}>
               <CardHeader
-                title={`Order #${o.number}`}
+                title={fmt(t.order, { n: o.number })}
                 description={`${o.createdAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })} · ${formatCents(o.totalCents)}`}
                 action={<span className="flex gap-1.5"><Badge>{humanize(o.status)}</Badge><Badge tone={o.paymentStatus === 'PAID' ? 'success' : o.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'neutral'}>{o.paymentStatus.replace('_', ' ').toLowerCase()}</Badge></span>}
               />
@@ -77,22 +82,22 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                       <div className="min-w-0 flex-1">
                         <p className={i.voidedAt ? 'line-through' : 'font-medium'}>{i.quantity} × {i.nameSnapshot}</p>
                         {(i.variantNameSnapshot || i.modifiers.length > 0) && <p className="text-xs text-muted">{[i.variantNameSnapshot, ...i.modifiers.map((x) => x.nameSnapshot)].filter(Boolean).join(' · ')}</p>}
-                        {i.voidedAt && <p className="text-xs text-danger">Removed: {i.voidReason}</p>}
+                        {i.voidedAt && <p className="text-xs text-danger">{fmt(t.removed, { reason: i.voidReason ?? '' })}</p>}
                       </div>
                       <span className="tabular-nums">{formatCents(i.lineTotalCents)}</span>
-                      {bi && (bi.fullyPaid ? <Badge tone="success">paid</Badge> : bi.allocatedCents > 0 ? <Badge tone="warning">part paid</Badge> : null)}
+                      {bi && (bi.fullyPaid ? <Badge tone="success">{t.itemPaid}</Badge> : bi.allocatedCents > 0 ? <Badge tone="warning">{t.itemPartPaid}</Badge> : null)}
                       {canModify && open && !i.voidedAt && !['OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED'].includes(o.status) && (
                         <details className="w-full">
-                          <summary className={disclosureClass}>Reduce or remove</summary>
-                          <ActionForm action={changeItemAction} submitLabel="Apply change" submitVariant="danger" className="mt-2 flex flex-wrap items-end gap-2 space-y-0" testId={`change-item-${i.id}`}>
+                          <summary className={disclosureClass}>{t.reduce}</summary>
+                          <ActionForm action={changeItemAction} submitLabel={t.applyChange} submitVariant="danger" className="mt-2 flex flex-wrap items-end gap-2 space-y-0" testId={`change-item-${i.id}`}>
                             {hiddenFields({ itemId: i.id })}
-                            <Field label="New quantity" htmlFor={`q-${i.id}`}><Input id={`q-${i.id}`} name="quantity" type="number" min={0} max={i.quantity - 1} defaultValue={i.quantity - 1} className="w-24" /></Field>
-                            <Field label="Reason (kept in the audit log)" htmlFor={`r-${i.id}`}><Input id={`r-${i.id}`} name="reason" required minLength={3} className="w-64" /></Field>
+                            <Field label={t.newQuantity} htmlFor={`q-${i.id}`}><Input id={`q-${i.id}`} name="quantity" type="number" min={0} max={i.quantity - 1} defaultValue={i.quantity - 1} className="w-24" /></Field>
+                            <Field label={t.reason} htmlFor={`r-${i.id}`}><Input id={`r-${i.id}`} name="reason" required minLength={3} className="w-64" /></Field>
                             {/* Once a station started or finished the item, the change needs an explicit OK. */}
                             {o.status !== 'NEW' && i.stationId && (i.prepStatus === 'PREPARING' || i.prepStatus === 'READY') && (
-                              <Checkbox name="kitchenNotified" label={i.prepStatus === 'READY' ? 'Already prepared: I told the station' : 'The kitchen started it: I told the station'} />
+                              <Checkbox name="kitchenNotified" label={i.prepStatus === 'READY' ? t.toldReady : t.toldStarted} />
                             )}
-                            {o.status !== 'NEW' && i.stationId && <p className="w-full text-xs text-muted">The station sees this change on its screen.</p>}
+                            {o.status !== 'NEW' && i.stationId && <p className="w-full text-xs text-muted">{t.stationSees}</p>}
                           </ActionForm>
                         </details>
                       )}
@@ -104,25 +109,25 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
           ))}
           <Card>
             <CardHeader
-              title="Payments"
-              description="Only payments recorded by staff, to reconcile with your till. Card payments are taken on your own terminal. This is not a fiscal invoice (fatura or fatura-recibo), and MenuNiva is not certified invoicing or POS software: issue the legal document from your certified system."
+              title={t.payments}
+              description={t.paymentsDesc}
             />
             {payments.length === 0 ? (
-              <CardBody className="text-sm text-muted">No payments yet.</CardBody>
+              <CardBody className="text-sm text-muted">{t.noPayments}</CardBody>
             ) : (
               <ul className="divide-y divide-line">
                 {payments.map((p) => (
                   <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm" data-testid="payment-row">
                     <span>
-                      <span className={p.status === 'VOIDED' ? 'line-through' : 'font-medium'}>{formatCents(p.amountCents)}</span> · {METHOD_LABEL[p.method]} · order #{p.orderNumber}
-                      {p.allocations.length > 0 && <span className="text-xs text-muted"> · {p.allocations.length} item(s)</span>}
-                      {p.status === 'VOIDED' && <Badge tone="danger">voided</Badge>}
-                      {p.status === 'VOIDED' && p.voidReason && <span className="block text-xs text-muted">Voided: {p.voidReason}</span>}
+                      <span className={p.status === 'VOIDED' ? 'line-through' : 'font-medium'}>{formatCents(p.amountCents)}</span> · {methodLabel(p.method)} · {fmt(t.forOrder, { n: p.orderNumber })}
+                      {p.allocations.length > 0 && <span className="text-xs text-muted">{fmt(t.itemsN, { n: p.allocations.length })}</span>}
+                      {p.status === 'VOIDED' && <Badge tone="danger">{t.voided}</Badge>}
+                      {p.status === 'VOIDED' && p.voidReason && <span className="block text-xs text-muted">{fmt(t.voidedReason, { reason: p.voidReason })}</span>}
                     </span>
                     {canModify && p.status === 'RECORDED' && (
-                      <ActionForm action={voidPaymentAction} submitLabel="Void" submitVariant="secondary" className="flex items-center gap-2 space-y-0">
+                      <ActionForm action={voidPaymentAction} submitLabel={t.void} submitVariant="secondary" className="flex items-center gap-2 space-y-0">
                         {hiddenFields({ paymentId: p.id })}
-                        <Input name="reason" required placeholder="Reason" aria-label="Reason for voiding" className="h-8 w-40" />
+                        <Input name="reason" required placeholder={t.voidReason} aria-label={t.voidReasonLabel} className="h-8 w-40" />
                       </ActionForm>
                     )}
                   </li>
@@ -134,18 +139,18 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
         <div className="space-y-6">
           {open && balanceCents > 0 && (
             <Card>
-              <CardHeader title="Record a payment" description="Split by items (each guest pays what they had) or by amount." />
+              <CardHeader title={t.record} description={t.recordDesc} />
               <CardBody>
-                <ActionForm action={recordPaymentAction} submitLabel="Record payment" resetOnSuccess testId="payment-form">
+                <ActionForm action={recordPaymentAction} submitLabel={t.recordButton} resetOnSuccess testId="payment-form">
                   {hiddenFields()}
-                  <Field label="Method" htmlFor="method">
+                  <Field label={t.method} htmlFor="method">
                     <Select id="method" name="method" defaultValue="CASH">
                       {/* Cash on delivery is refused by the server on table bills too. */}
-                      {PAYMENT_METHODS.filter((x) => x !== 'CASH_ON_DELIVERY').map((x) => <option key={x} value={x}>{METHOD_LABEL[x]}</option>)}
+                      {PAYMENT_METHODS.filter((x) => x !== 'CASH_ON_DELIVERY').map((x) => <option key={x} value={x}>{methodLabel(x)}</option>)}
                     </Select>
                   </Field>
                   <fieldset className="space-y-1">
-                    <legend className="mb-1 text-sm font-medium">Pay selected items</legend>
+                    <legend className="mb-1 text-sm font-medium">{t.paySelected}</legend>
                     {items.filter((i) => !i.fullyPaid).map((i) => (
                       <label key={i.id} className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm hover:bg-surface-2">
                         <span className="flex items-center gap-2"><input type="checkbox" name="itemIds" value={i.id} className="size-4 shrink-0 accent-[#7ac70c] pointer-coarse:size-5" />{i.quantity} × {i.nameSnapshot}</span>
@@ -153,7 +158,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                       </label>
                     ))}
                   </fieldset>
-                  <Field label="…or an amount (€)" htmlFor="amount" hint={`Remaining: ${formatCents(balanceCents)}`}>
+                  <Field label={t.amount} htmlFor="amount" hint={fmt(t.remaining, { amount: formatCents(balanceCents) })}>
                     <Input id="amount" name="amount" inputMode="decimal" placeholder="0,00" />
                   </Field>
                 </ActionForm>
@@ -162,23 +167,23 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
           )}
           {open && access.policy === 'SESSION_PIN' && canSessions && (
             <Card data-testid="session-access">
-              <CardHeader title="Guest phones" description="Each phone entered the table PIN once for this seating. Closing the table removes them all." />
+              <CardHeader title={t.phones} description={t.phonesDesc} />
               <CardBody className="space-y-3">
-                <TablePinPanel org={ctx.org.slug} sessionId={session.id} locked={access.locked} failures={access.failures} phones={activePhones.length} testId="bill-pin" />
+                <TablePinPanel org={ctx.org.slug} sessionId={session.id} locked={access.locked} failures={access.failures} phones={activePhones.length} testId="bill-pin" t={d.pin} />
                 {access.devices.length === 0 ? (
-                  <p className="text-sm text-muted">No phone has entered the PIN yet.</p>
+                  <p className="text-sm text-muted">{t.noPhones}</p>
                 ) : (
                   <ul className="divide-y divide-line text-sm" data-testid="session-devices">
-                    {access.devices.map((d) => (
-                      <li key={d.id} className="flex items-center gap-2 py-2" data-testid="session-device">
+                    {access.devices.map((dv) => (
+                      <li key={dv.id} className="flex items-center gap-2 py-2" data-testid="session-device">
                         <span className="min-w-0 flex-1">
-                          <span className="font-medium">Phone {d.n}</span>
-                          <span className="text-muted"> · joined {time(d.enrolledAt)} · {d.orders === 1 ? '1 order' : `${d.orders} orders`}</span>
+                          <span className="font-medium">{fmt(t.phone, { n: dv.n })}</span>
+                          <span className="text-muted">{fmt(t.joined, { time: time(dv.enrolledAt) })}{dv.orders === 1 ? t.orders1 : fmt(t.ordersN, { n: dv.orders })}</span>
                         </span>
-                        {d.active ? (
-                          <InlineAction action={revokeDeviceAction} fields={{ org: ctx.org.slug, deviceId: d.id }} label="Remove" variant="dangerGhost" size="sm" confirm={`Remove phone ${d.n}? It will need the PIN again to order.`} testId="revoke-device" />
+                        {dv.active ? (
+                          <InlineAction action={revokeDeviceAction} fields={{ org: ctx.org.slug, deviceId: dv.id }} label={t.remove} variant="dangerGhost" size="sm" confirm={fmt(t.removeConfirm, { n: dv.n })} testId="revoke-device" />
                         ) : (
-                          <Badge>{d.revokedAt ? 'removed' : 'expired'}</Badge>
+                          <Badge>{dv.revokedAt ? t.removedBadge : t.expired}</Badge>
                         )}
                       </li>
                     ))}
@@ -189,12 +194,12 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
           )}
           {open && freeTables.length > 0 && (
             <Card>
-              <CardHeader title="Move to another table" />
+              <CardHeader title={t.move} />
               <CardBody>
-                <ActionForm action={transferAction} submitLabel="Move guests" submitVariant="secondary" testId="transfer-form">
+                <ActionForm action={transferAction} submitLabel={t.moveButton} submitVariant="secondary" testId="transfer-form">
                   {hiddenFields()}
-                  <Select name="toTableId" aria-label="Target table">
-                    {freeTables.map((t) => <option key={t.id} value={t.id}>Table {t.label}</option>)}
+                  <Select name="toTableId" aria-label={t.targetTable}>
+                    {freeTables.map((ft) => <option key={ft.id} value={ft.id}>{fmt(d.tables.table, { label: ft.label })}</option>)}
                   </Select>
                 </ActionForm>
               </CardBody>
@@ -202,12 +207,12 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
           )}
           {open && (
             <Card>
-              <CardHeader title="Close table" description="Closing frees the table for the next guests, ends this seating's PIN and removes every guest phone. Served orders are completed." />
+              <CardHeader title={t.close} description={t.closeDesc} />
               <CardBody>
-                <ActionForm action={closeSessionAction} submitLabel="Close table" submitVariant="dark" testId="close-form">
+                <ActionForm action={closeSessionAction} submitLabel={t.close} submitVariant="dark" testId="close-form">
                   {hiddenFields()}
                   {balanceCents > 0 && (
-                    <Field label="Reason for closing with an unpaid balance" htmlFor="note" optionalLabel="required if not paid">
+                    <Field label={t.closeReason} htmlFor="note" optionalLabel={t.closeReasonRequired}>
                       <Input id="note" name="note" />
                     </Field>
                   )}
@@ -215,7 +220,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
               </CardBody>
             </Card>
           )}
-          {!open && <Alert tone="info">This table was closed{session.closeNote ? `: ${session.closeNote}` : '.'}</Alert>}
+          {!open && <Alert tone="info">{session.closeNote ? fmt(t.closedNote, { note: session.closeNote }) : t.closed}</Alert>}
         </div>
       </div>
     </>

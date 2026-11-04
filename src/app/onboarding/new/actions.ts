@@ -10,11 +10,12 @@ import { getPlatformConfig } from '@/server/services/platform-config';
 export async function registerRestaurantAction(_prev: ActionResult, form: FormData): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/onboarding/new');
-  if (!(await getPlatformConfig()).signupsOpen) return { ok: false, error: 'New restaurant registrations are paused. Please contact MenuNiva support.' };
+  // Codes, shown in the page language by the form.
+  if (!(await getPlatformConfig()).signupsOpen) return { ok: false, error: 'signups_paused' };
   try {
     await rateLimit(`register-restaurant:${user.id}`, 5, 3600);
   } catch (e) {
-    if (e instanceof RateLimitError) return { ok: false, error: 'Too many restaurants created. Please wait and try again.' };
+    if (e instanceof RateLimitError) return { ok: false, error: 'too_many' };
     throw e;
   }
   const parsed = createRestaurantSchema.safeParse({

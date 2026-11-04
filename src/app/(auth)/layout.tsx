@@ -32,7 +32,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
           <Link href="/" className="lg:invisible">
             <Logo />
           </Link>
-          <LanguageCookieSwitcher current={lang} />
+          <LanguageCookieSwitcher current={lang} saveToAccount label={m.common.language} />
         </div>
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-8 sm:py-10">{children}</div>
       </main>

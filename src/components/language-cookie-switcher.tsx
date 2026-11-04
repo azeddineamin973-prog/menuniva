@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import type { LanguageCode } from '@/generated/prisma/enums';
 import { LANGUAGE_NATIVE_NAME, LANGUAGES, LANG_COOKIE } from '@/i18n/config';
+import { setUiLanguageAction } from '@/app/language-actions';
 /**
  * Stores the visitor's language in a cookie and re-renders server components.
  *
@@ -14,16 +15,21 @@ export function LanguageCookieSwitcher({
   current,
   available = LANGUAGES,
   className,
+  saveToAccount = false,
+  label = 'Language',
 }: {
   current: LanguageCode;
   available?: readonly LanguageCode[];
   className?: string;
+  /** Interface language (sign-in, onboarding, account, dashboard): also saved to the signed-in account. Not for the guest storefront. */
+  saveToAccount?: boolean;
+  label?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <label className={className}>
-      <span className="sr-only">Language</span>
+      <span className="sr-only">{label}</span>
       <select
         value={current}
         disabled={pending}
@@ -38,6 +44,13 @@ export function LanguageCookieSwitcher({
             return;
           }
           document.cookie = `${LANG_COOKIE}=${lang}; path=/; max-age=31536000; samesite=lax`;
+          if (saveToAccount) {
+            start(async () => {
+              await setUiLanguageAction(lang);
+              router.refresh();
+            });
+            return;
+          }
           start(() => router.refresh());
         }}
         className="h-10 max-w-[9.5rem] rounded-xl border border-line bg-surface px-2 text-sm text-ink pointer-coarse:text-base"

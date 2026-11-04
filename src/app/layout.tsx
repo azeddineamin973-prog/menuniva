@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
+import { UiTextProvider } from '@/components/ui-text';
 import { dirOf, isLanguage, LANG_COOKIE, LANGUAGE_TAG } from '@/i18n/config';
+import { getUiText } from '@/i18n/ui';
 import { env } from '@/server/env';
+import { getCurrentUser, SESSION_COOKIE } from '@/server/auth/session';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -23,7 +26,10 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();
   const langCookie = jar.get(LANG_COOKIE)?.value;
-  const lang = isLanguage(langCookie) ? langCookie : 'en';
+  // Signed in: the account's language (also for sessions started before the cookie existed);
+  // otherwise the visitor's choice. getCurrentUser returns at once when there is no session cookie.
+  const user = jar.has(SESSION_COOKIE) ? await getCurrentUser() : null;
+  const lang = user?.preferredLanguage ?? (isLanguage(langCookie) ? langCookie : 'en');
   const dark = jar.get('mn_theme')?.value === 'dark';
   return (
     <html lang={LANGUAGE_TAG[lang]} dir={dirOf(lang)} className={dark ? 'dark' : undefined} suppressHydrationWarning>
@@ -33,7 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             MenuNiva DEMO environment — all restaurants, dishes and orders here are fictitious.
           </div>
         )}
-        {children}
+        <UiTextProvider text={getUiText(lang)}>{children}</UiTextProvider>
       </body>
     </html>
   );

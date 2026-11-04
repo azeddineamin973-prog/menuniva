@@ -10,6 +10,9 @@ import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { createTablesAction, rotateQrAction, saveAreaAction } from './actions';
 import { openTableAction } from '../bills/actions';
 import { TablePinPanel } from './table-access-panel';
+import { fmt } from '@/i18n/config';
+import { getDashText } from '@/i18n/dash';
+import { getUiText } from '@/i18n/ui';
 
 const smallLink =
   'inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-surface px-2 text-xs font-medium text-ink-2 shadow-xs hover:border-line-strong hover:text-ink pointer-coarse:h-10 pointer-coarse:px-3';
@@ -17,8 +20,11 @@ const smallLink =
 export default async function TablesPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'tables.view');
+  const d = getDashText(ctx.user.preferredLanguage);
+  const t = d.tables;
+  const ui = getUiText(ctx.user.preferredLanguage);
   const location = await currentLocation(ctx);
-  if (!location) return <Alert tone="warning">No location.</Alert>;
+  if (!location) return <Alert tone="warning">{t.noLocation}</Alert>;
   const [areas, tables] = await Promise.all([
     db.diningArea.findMany({ where: { locationId: location.id, organizationId: ctx.org.id, isActive: true }, orderBy: { sortOrder: 'asc' } }),
     listTablesForLocation(ctx, location.id),
@@ -38,28 +44,28 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
   // Tables grouped by dining area (in area order), tables without an area last.
   const groups = [
     ...areas.map((a) => ({ key: a.id, name: a.name, list: tables.filter((t) => t.areaId === a.id) })),
-    { key: 'none', name: areas.length ? 'No area' : null, list: tables.filter((t) => !t.areaId) },
+    { key: 'none', name: areas.length ? t.noArea : null, list: tables.filter((t) => !t.areaId) },
   ].filter((g) => g.list.length > 0);
 
   const manage = canManage && (
     <div className="space-y-4 xl:sticky xl:top-20">
       <Card>
-        <CardHeader title="Add tables" icon="plus" description="Labels separated by commas, or a range like 1-12." />
+        <CardHeader title={t.addTables} icon="plus" description={t.addTablesDesc} />
         <CardBody>
-          <ActionForm action={createTablesAction} submitLabel="Create tables" resetOnSuccess successText="Tables created" testId="create-tables-form">
+          <ActionForm action={createTablesAction} submitLabel={t.createTables} resetOnSuccess successText={t.tablesCreated} testId="create-tables-form">
             <input type="hidden" name="org" value={ctx.org.slug} />
             <input type="hidden" name="locationId" value={location.id} />
-            <Field label="Table labels" htmlFor="labels" hint="Examples: 1-10 · T1-T8 · Tenda 1, Tenda 2">
+            <Field label={t.labels} htmlFor="labels" hint={t.labelsHint}>
               <Input id="labels" name="labels" required placeholder="1-10" />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-              <Field label="Dining area" htmlFor="areaId">
+              <Field label={t.diningArea} htmlFor="areaId">
                 <Select id="areaId" name="areaId" defaultValue="">
-                  <option value="">— none —</option>
+                  <option value="">{t.none}</option>
                   {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>
               </Field>
-              <Field label="Seats per table" htmlFor="seats" optionalLabel="optional">
+              <Field label={t.seats} htmlFor="seats" optionalLabel={ui.optional}>
                 <Input id="seats" name="seats" type="number" min={1} max={50} />
               </Field>
             </div>
@@ -67,16 +73,16 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title="Dining areas" icon="layers" description="Rooms, floors or zones (e.g. terrace, tent)." />
+        <CardHeader title={t.areas} icon="layers" description={t.areasDesc} />
         <CardBody className="space-y-3">
           <ul className="flex flex-wrap gap-1.5">
             {areas.map((a) => <li key={a.id}><Badge>{a.name}</Badge></li>)}
-            {areas.length === 0 && <li className="text-sm text-muted">No areas yet.</li>}
+            {areas.length === 0 && <li className="text-sm text-muted">{t.noAreas}</li>}
           </ul>
-          <ActionForm action={saveAreaAction} submitLabel="Add area" submitVariant="secondary" resetOnSuccess className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 space-y-0">
+          <ActionForm action={saveAreaAction} submitLabel={t.addArea} submitVariant="secondary" resetOnSuccess className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 space-y-0">
             <input type="hidden" name="org" value={ctx.org.slug} />
             <input type="hidden" name="locationId" value={location.id} />
-            <Input name="name" required placeholder="New area name" aria-label="New area name" />
+            <Input name="name" required placeholder={t.newArea} aria-label={t.newArea} />
           </ActionForm>
         </CardBody>
       </Card>
@@ -85,11 +91,11 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
 
   const list =
     tables.length === 0 ? (
-      <EmptyState icon="qr" title="No tables yet" description={canManage ? 'Add your tables to generate one QR code per table. Guests scan it to order, with no app or login.' : 'A manager needs to add the tables first.'} />
+      <EmptyState icon="qr" title={t.emptyTitle} description={canManage ? t.emptyManage : t.emptyStaff} />
     ) : (
       <div className="space-y-5">
         {groups.map((g) => (
-          <section key={g.key} aria-label={g.name ?? 'Tables'}>
+          <section key={g.key} aria-label={g.name ?? t.tablesSection}>
             {g.name && (
               <h2 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-ink-2">
                 {g.name}
@@ -97,14 +103,14 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
               </h2>
             )}
             <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-              {g.list.map((t) => {
-                const token = t.qrTokens[0]?.token;
-                const session = t.sessions[0];
+              {g.list.map((tb) => {
+                const token = tb.qrTokens[0]?.token;
+                const session = tb.sessions[0];
                 return (
-                  <li key={t.id} className={cn('flex gap-3.5 rounded-[var(--radius-card)] border bg-surface p-3.5 shadow-xs', session ? 'border-accent/30' : 'border-line')} data-testid="table-card">
+                  <li key={tb.id} className={cn('flex gap-3.5 rounded-[var(--radius-card)] border bg-surface p-3.5 shadow-xs', session ? 'border-accent/30' : 'border-line')} data-testid="table-card">
                     {token ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={qrImages.get(t.id)} alt={`QR code for table ${t.label}`} className="size-20 shrink-0 rounded-lg border border-line bg-white p-1" width={80} height={80} decoding="async" />
+                      <img src={qrImages.get(tb.id)} alt={fmt(t.qrAlt, { label: tb.label })} className="size-20 shrink-0 rounded-lg border border-line bg-white p-1" width={80} height={80} decoding="async" />
                     ) : (
                       <span className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-dashed border-line text-muted" aria-hidden>
                         <Icon name="qr" className="size-6" />
@@ -112,60 +118,60 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <p className="font-semibold text-ink">Table {t.label}</p>
-                        {!t.isActive && <Badge tone="danger">inactive</Badge>}
+                        <p className="font-semibold text-ink">{fmt(t.table, { label: tb.label })}</p>
+                        {!tb.isActive && <Badge tone="danger">{t.inactive}</Badge>}
                         {session ? (
-                          <Badge tone="lime" dot>Occupied</Badge>
+                          <Badge tone="lime" dot>{t.occupied}</Badge>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs text-muted">
                             <span className="size-1.5 rounded-full bg-line-strong" aria-hidden />
-                            Free
+                            {t.free}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-muted">{t.area?.name ?? 'No area'}{t.seats ? ` · ${t.seats} seats` : ''}</p>
+                      <p className="text-xs text-muted">{tb.area?.name ?? t.noArea}{tb.seats ? ` · ${fmt(t.seatsN, { n: tb.seats })}` : ''}</p>
                       {session && (
                         <p className="mt-1 text-xs text-muted" data-testid="table-session-info">
-                          Opened {session.openedAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
-                          {session.openedById ? '' : ' by a guest order'}
-                          {session._count.orders > 0 && <> · <span className="font-medium text-warning">{session._count.orders} waiting for approval</span></>}
+                          {fmt(t.opened, { time: session.openedAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) })}
+                          {session.openedById ? '' : t.byGuest}
+                          {session._count.orders > 0 && <> · <span className="font-medium text-warning">{fmt(t.waitingApproval, { n: session._count.orders })}</span></>}
                         </p>
                       )}
                       {session && policy === 'SESSION_PIN' && canSessions && (
                         <div className="mt-2">
-                          <TablePinPanel org={ctx.org.slug} sessionId={session.id} locked={!!session.pinLockedAt} failures={session.pinFailedAttempts} phones={session._count.devices} testId={`table-pin-${t.label}`} />
+                          <TablePinPanel org={ctx.org.slug} sessionId={session.id} locked={!!session.pinLockedAt} failures={session.pinFailedAttempts} phones={session._count.devices} testId={`table-pin-${tb.label}`} t={d.pin} />
                         </div>
                       )}
-                      {!session && t.staffTasks[0] && (
+                      {!session && tb.staffTasks[0] && (
                         <p className="mt-1.5">
-                          <Badge tone="warning" dot data-testid="open-request">Guests ask to open this table</Badge>
+                          <Badge tone="warning" dot data-testid="open-request">{t.guestsAsk}</Badge>
                         </p>
                       )}
-                      {!session && t.isActive && canSessions && (
+                      {!session && tb.isActive && canSessions && (
                         <div className="mt-1.5">
-                          <InlineAction action={openTableAction} fields={{ org: ctx.org.slug, tableId: t.id }} label={policy === 'SESSION_PIN' ? 'Open table & create PIN' : 'Open table'} variant={t.staffTasks[0] || policy !== 'OPEN' ? 'primary' : 'secondary'} testId="open-table" />
+                          <InlineAction action={openTableAction} fields={{ org: ctx.org.slug, tableId: tb.id }} label={policy === 'SESSION_PIN' ? t.openWithPin : t.open} variant={tb.staffTasks[0] || policy !== 'OPEN' ? 'primary' : 'secondary'} testId="open-table" />
                         </div>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {session && ctx.can('payments.record') && (
                           <a href={`${base}/bills/${session.id}`} className={cn(smallLink, 'border-accent/30 text-ink')} data-testid="bill-link">
-                            <Icon name="bill" className="size-3.5" /> Bill
+                            <Icon name="bill" className="size-3.5" /> {t.bill}
                           </a>
                         )}
                         {token && (
                           <>
-                            <a href={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=png`} className={smallLink} aria-label={`Download PNG QR for table ${t.label}`} title="Download PNG">
+                            <a href={`/api/dashboard/${ctx.org.slug}/qr/${tb.id}?format=png`} className={smallLink} aria-label={fmt(t.pngFor, { label: tb.label })} title={t.downloadPng}>
                               PNG
                             </a>
-                            <a href={`/api/dashboard/${ctx.org.slug}/qr/${t.id}?format=svg&download=1`} className={smallLink} aria-label={`Download SVG QR for table ${t.label}`} title="Download SVG">
+                            <a href={`/api/dashboard/${ctx.org.slug}/qr/${tb.id}?format=svg&download=1`} className={smallLink} aria-label={fmt(t.svgFor, { label: tb.label })} title={t.downloadSvg}>
                               SVG
                             </a>
-                            <a href={`/t/${token}`} target="_blank" rel="noreferrer" className={smallLink} data-testid="open-table-link" title="Open the guest page in a new tab">
-                              <Icon name="external" className="size-3.5" /> Open
+                            <a href={`/t/${token}`} target="_blank" rel="noreferrer" className={smallLink} data-testid="open-table-link" title={t.openGuestTitle}>
+                              <Icon name="external" className="size-3.5" /> {t.openGuest}
                             </a>
                           </>
                         )}
-                        {canManage && <InlineAction action={rotateQrAction} fields={{ org: ctx.org.slug, tableId: t.id }} label="New QR" variant="ghost" size="sm" confirm="Create a new QR code? The old printed code will stop working." />}
+                        {canManage && <InlineAction action={rotateQrAction} fields={{ org: ctx.org.slug, tableId: tb.id }} label={t.newQr} variant="ghost" size="sm" confirm={t.newQrConfirm} />}
                       </div>
                     </div>
                   </li>
@@ -181,34 +187,34 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
     <>
       <SetupStepNav orgSlug={ctx.org.slug} orgId={ctx.org.id} stepKey="tables" locationId={location.id} />
       <PageHeader
-        title="Tables & QR codes"
-        description="Each table has its own QR code. Guests scan it to order, with no app or login. Staff still accept every order."
+        title={t.title}
+        description={t.description}
         meta={
           <ButtonLink href={`/dashboard/${ctx.org.slug}/tables/floor-plan`} variant="secondary" size="sm" icon="layers" data-testid="open-floor-plan">
-            Floor plan
+            {t.floorPlan}
           </ButtonLink>
         }
         actions={
           tables.length > 0 && (
             <>
-              <ButtonLink href={`${base}/tables/print`} variant="secondary" icon="print">Printable QR sheet</ButtonLink>
-              <ButtonLink href={`/api/dashboard/${ctx.org.slug}/qr/sheet.pdf?location=${location.id}`} variant="secondary" icon="download" prefetch={false}>Download PDF</ButtonLink>
+              <ButtonLink href={`${base}/tables/print`} variant="secondary" icon="print">{t.printSheet}</ButtonLink>
+              <ButtonLink href={`/api/dashboard/${ctx.org.slug}/qr/sheet.pdf?location=${location.id}`} variant="secondary" icon="download" prefetch={false}>{t.downloadPdf}</ButtonLink>
             </>
           )
         }
       />
       {!location.tableOrderingEnabled && (
         <div className="mb-4">
-          <Alert tone="warning" title="Table ordering is switched off">
-            Guests can scan and view the menu but cannot order. Turn it on in Settings → Ordering channels.
+          <Alert tone="warning" title={t.orderingOffTitle}>
+            {t.orderingOff}
           </Alert>
         </div>
       )}
       {tables.length > 0 && (
         <div className={statGrid(3, 'mb-5')}>
-          <Stat label="Tables" value={tables.length} icon="tables" />
-          <Stat label="Occupied now" value={occupied} icon="users" tone={occupied > 0 ? 'lime' : undefined} />
-          <Stat label="Dining areas" value={areas.length} icon="layers" />
+          <Stat label={t.statTables} value={tables.length} icon="tables" />
+          <Stat label={t.statOccupied} value={occupied} icon="users" tone={occupied > 0 ? 'lime' : undefined} />
+          <Stat label={t.statAreas} value={areas.length} icon="layers" />
         </div>
       )}
       {tables.length === 0 ? (
@@ -225,11 +231,7 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
       )}
       <p className="mt-5 flex items-start gap-2 text-xs text-muted" data-testid="table-policy-note">
         <Icon name="shield" className="mt-px size-3.5 shrink-0" />
-        {policy === 'SESSION_PIN'
-          ? 'Open each table when you seat guests and tell them its PIN. Each phone enters it once; closing the table removes every phone. A copied QR code alone cannot order, and staff still accept every order.'
-          : policy === 'SESSION'
-            ? 'Open each table when you seat guests: closed tables cannot order. Closing the table ends the seating. Staff still accept every order.'
-            : 'Open ordering: anyone holding a table’s QR code can order, even from outside the restaurant, and the table opens by itself. Staff accept every order. Turn on table PINs in Settings → Ordering channels.'}
+        {policy === 'SESSION_PIN' ? t.notePin : policy === 'SESSION' ? t.noteSession : t.noteOpen}
       </p>
     </>
   );

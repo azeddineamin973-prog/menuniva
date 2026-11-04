@@ -55,6 +55,7 @@ const PUBLIC_ROUTES: Record<string, string> = {
 const PUBLIC_ACTIONS: Record<string, string> = {
   signupAction: 'creates an account',
   loginAction: 'signs in',
+  setUiLanguageAction: 'sets the interface-language cookie; when signed in, saves only the own account language (one of 5 values)',
   logoutAction: 'ends the current session',
   requestPasswordResetAction: 'generic response, rate limited',
   resetPasswordAction: 'single-use token',

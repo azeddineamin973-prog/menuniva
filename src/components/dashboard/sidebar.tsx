@@ -13,6 +13,15 @@ import { OFFLINE_AFTER_MS } from '@/lib/poll-health';
 import type { AttentionLevel, AttentionSummary } from '@/lib/attention';
 import { AttentionBar, attentionMenuItems, type AttentionLabels } from './attention';
 import { ThemeToggle } from './theme-toggle';
+import { LanguageCookieSwitcher } from '@/components/language-cookie-switcher';
+import { fmt } from '@/i18n/config';
+import type { DashText } from '@/i18n/dash/en';
+import type { LanguageCode } from '@/generated/prisma/enums';
+
+type ShellText = DashText['sidebar'];
+/** Frame text in the signed-in person's language (always provided by AppShell). */
+const ShellTextContext = createContext<ShellText | null>(null);
+const useShellText = () => useContext(ShellTextContext)!;
 import { useConnectionState, usePolling } from './use-polling';
 
 /** `badgeLevel`: the most urgent attention item of that section (badge turns amber or red). */
@@ -48,6 +57,10 @@ export type ShellProps = {
   initialCollapsed: boolean;
   signOutLabel: string;
   themeLabels: { dark: string; light: string };
+  /** Frame text and interface language of the signed-in person. */
+  text: ShellText;
+  lang: LanguageCode;
+  languageLabel: string;
   banners?: React.ReactNode;
   children: React.ReactNode;
 };
@@ -215,6 +228,7 @@ export function AppShell(serverProps: ShellProps) {
   const alertTotal = (attention?.total ?? 0) + alerts.reduce((n, a) => n + a.count, 0);
 
   return (
+    <ShellTextContext.Provider value={serverProps.text}>
     <StaleCounts.Provider value={staleText}>
       <div className="min-h-dvh lg:flex">
         <aside
@@ -273,6 +287,7 @@ export function AppShell(serverProps: ShellProps) {
         {searchOpen && <CommandPalette links={[...props.links, ...props.accountLinks]} slug={org.slug} onClose={() => setSearchOpen(false)} />}
       </div>
     </StaleCounts.Provider>
+    </ShellTextContext.Provider>
   );
 }
 
@@ -291,17 +306,20 @@ function SidebarContent({
   setup,
   signOutLabel,
   themeLabels,
+  lang,
+  languageLabel,
   collapsed,
   isActive,
   onToggleCollapsed,
 }: ShellProps & { collapsed: boolean; isActive: (href: string) => boolean; onToggleCollapsed?: () => void }) {
+  const tx = useShellText();
   const groups = GROUP_KEYS.filter((g) => links.some((l) => l.group === g));
   return (
     <nav className="flex h-full flex-col" aria-label={labels.navigation}>
       <div className={cn('flex h-14 shrink-0 items-center gap-2 border-b border-line', collapsed ? 'justify-center px-2' : 'px-3')}>
         <RestaurantSwitcher org={org} orgs={orgs} locations={locations} currentLocationId={currentLocationId} collapsed={collapsed} labels={labels} />
         {onToggleCollapsed && !collapsed && (
-          <button type="button" onClick={onToggleCollapsed} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink" aria-label="Collapse sidebar" title="Collapse sidebar" data-testid="sidebar-collapse">
+          <button type="button" onClick={onToggleCollapsed} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink" aria-label={tx.collapse} title={tx.collapse} data-testid="sidebar-collapse">
             <Icon name="sidebar" />
           </button>
         )}
@@ -327,11 +345,11 @@ function SidebarContent({
 
       <div className={cn('shrink-0 border-t border-line p-2', collapsed && 'flex flex-col items-center gap-1')}>
         {collapsed && onToggleCollapsed && (
-          <button type="button" onClick={onToggleCollapsed} className="flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink" aria-label="Expand sidebar" title="Expand sidebar" data-testid="sidebar-expand">
+          <button type="button" onClick={onToggleCollapsed} className="flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink" aria-label={tx.expand} title={tx.expand} data-testid="sidebar-expand">
             <Icon name="sidebar" className="rtl:-scale-x-100" />
           </button>
         )}
-        <AccountArea user={user} accountLinks={accountLinks} collapsed={collapsed} signOutLabel={signOutLabel} themeLabels={themeLabels} />
+        <AccountArea user={user} accountLinks={accountLinks} collapsed={collapsed} signOutLabel={signOutLabel} themeLabels={themeLabels} lang={lang} languageLabel={languageLabel} />
       </div>
     </nav>
   );
@@ -384,10 +402,11 @@ function NavLink({ link: l, active, collapsed }: { link: SidebarLink; active: bo
 }
 
 function SetupProgress({ setup, collapsed, active }: { setup: { href: string; completed: number; total: number }; collapsed: boolean; active: boolean }) {
+  const tx = useShellText();
   const pct = Math.round((setup.completed / setup.total) * 100);
   if (collapsed)
     return (
-      <Link href={setup.href} title={`Finish setup · ${setup.completed}/${setup.total}`} className="mx-auto mb-3 flex size-10 items-center justify-center rounded-lg bg-accent-soft text-accent" aria-label="Setup wizard">
+      <Link href={setup.href} title={fmt(tx.finishSetup, { done: setup.completed, total: setup.total })} className="mx-auto mb-3 flex size-10 items-center justify-center rounded-lg bg-accent-soft text-accent" aria-label={tx.setupWizard}>
         <Icon name="wand" className="size-[18px]" />
       </Link>
     );
@@ -400,7 +419,7 @@ function SetupProgress({ setup, collapsed, active }: { setup: { href: string; co
     >
       <span className="flex items-center justify-between gap-2 text-[13px] font-medium text-ink">
         <span className="flex items-center gap-2">
-          <Icon name="wand" className="text-accent" /> Setup wizard
+          <Icon name="wand" className="text-accent" /> {tx.setupWizard}
         </span>
         <span className="text-xs text-muted tabular-nums">
           {setup.completed}/{setup.total}
@@ -415,11 +434,12 @@ function SetupProgress({ setup, collapsed, active }: { setup: { href: string; co
 
 function RestaurantSwitcher({ org, orgs, locations, currentLocationId, collapsed, labels }: Pick<ShellProps, 'org' | 'orgs' | 'locations' | 'currentLocationId' | 'labels'> & { collapsed: boolean }) {
   const router = useRouter();
+  const tx = useShellText();
   const [, start] = useTransition();
   const location = locations.find((l) => l.id === currentLocationId);
   const items: MenuItem[] = [];
   if (locations.length > 1) {
-    items.push({ type: 'label', label: 'Locations' });
+    items.push({ type: 'label', label: tx.locations });
     for (const l of locations)
       items.push({
         type: 'button',
@@ -433,7 +453,7 @@ function RestaurantSwitcher({ org, orgs, locations, currentLocationId, collapsed
   }
   if (orgs.length > 1) {
     if (items.length) items.push({ type: 'separator' });
-    items.push({ type: 'label', label: 'Restaurants' });
+    items.push({ type: 'label', label: tx.restaurants });
     for (const o of orgs) items.push({ label: o.name, href: `/dashboard/${o.slug}`, icon: o.slug === org.slug ? 'check' : 'building' });
     items.push({ label: labels.switchRestaurant, href: '/dashboard?choose=1', icon: 'chevronUpDown' });
   }
@@ -480,10 +500,11 @@ function RestaurantSwitcher({ org, orgs, locations, currentLocationId, collapsed
   );
 }
 
-function AccountArea({ user, accountLinks, collapsed, signOutLabel, themeLabels }: Pick<ShellProps, 'user' | 'accountLinks' | 'signOutLabel' | 'themeLabels'> & { collapsed: boolean }) {
+function AccountArea({ user, accountLinks, collapsed, signOutLabel, themeLabels, lang, languageLabel }: Pick<ShellProps, 'user' | 'accountLinks' | 'signOutLabel' | 'themeLabels' | 'lang' | 'languageLabel'> & { collapsed: boolean }) {
   const [, start] = useTransition();
+  const tx = useShellText();
   const items: MenuItem[] = [
-    { label: 'Account settings', href: '/account', icon: 'user' },
+    { label: tx.accountSettings, href: '/account', icon: 'user' },
     ...accountLinks.map((l) => ({ label: l.label, href: l.href, icon: l.icon })),
     { type: 'separator' },
     { type: 'button', label: signOutLabel, icon: 'logout', onSelect: () => start(() => logoutAction()) },
@@ -494,6 +515,9 @@ function AccountArea({ user, accountLinks, collapsed, signOutLabel, themeLabels 
     </span>
   );
   return (
+    <>
+    {/* Interface language for this person: saved to the account, applies to every MenuNiva page. */}
+    {!collapsed && <LanguageCookieSwitcher current={lang} saveToAccount label={languageLabel} className="mb-2 block px-1 [&_select]:w-full [&_select]:max-w-none" />}
     <div className={cn('flex items-center gap-1', collapsed && 'flex-col')}>
       <Link href="/account" className={cn('flex min-w-0 items-center gap-2.5 rounded-lg p-1 hover:bg-surface-2', !collapsed && 'flex-1')} data-testid="my-account-link" title={collapsed ? `${user.name} · ${user.email}` : user.email}>
         {avatar}
@@ -504,7 +528,7 @@ function AccountArea({ user, accountLinks, collapsed, signOutLabel, themeLabels 
       </Link>
       <ThemeToggle labels={themeLabels} />
       <Menu
-        label="Account menu"
+        label={tx.accountMenu}
         side="top"
         align={collapsed ? 'start' : 'end'}
         triggerClassName="flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink pointer-coarse:size-10"
@@ -519,6 +543,7 @@ function AccountArea({ user, accountLinks, collapsed, signOutLabel, themeLabels 
         testId="account-menu"
       />
     </div>
+    </>
   );
 }
 
@@ -541,14 +566,15 @@ function TopBar({
   drawerOpen,
 }: ShellProps & { alertTotal: number; sinceAnswerMs: number; isActive: (href: string) => boolean; onOpenSearch: () => void; onOpenMenu: (e: React.MouseEvent<HTMLElement>) => void; drawerOpen: boolean }) {
   const pathname = usePathname();
+  const tx = useShellText();
   const bump = useBump(alertTotal);
   const stale = useContext(StaleCounts);
   const topLevel = attention?.items[0]?.level;
   const crumbs = useMemo(() => {
     // While setup is unfinished the wizard is not in either list (it has its own sidebar card).
-    const setupLink: SidebarLink[] = setup ? [{ href: setup.href, label: 'Setup wizard', group: 'account', key: 'setup', icon: 'wand' }] : [];
+    const setupLink: SidebarLink[] = setup ? [{ href: setup.href, label: tx.setupWizard, group: 'account', key: 'setup', icon: 'wand' }] : [];
     return breadcrumbs(pathname, [...links, ...accountLinks, ...setupLink], org);
-  }, [pathname, links, accountLinks, org, setup]);
+  }, [pathname, links, accountLinks, org, setup, tx]);
   const section = crumbs[crumbs.length - 1];
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-bg/85 px-3 backdrop-blur-md sm:px-4 lg:px-8 print:hidden">
@@ -561,7 +587,7 @@ function TopBar({
         <p className="truncate text-[11px] leading-tight text-muted">{org.name}</p>
       </div>
       {/* Larger screens: breadcrumbs. */}
-      <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-1 lg:block" data-testid="breadcrumbs">
+      <nav aria-label={tx.breadcrumb} className="hidden min-w-0 flex-1 lg:block" data-testid="breadcrumbs">
         <ol className="flex min-w-0 items-center gap-1.5 text-[13px]">
           {crumbs.map((c, i) => (
             // On the overview the restaurant crumb and "Overview" share a link, so the key needs the position.
@@ -588,10 +614,10 @@ function TopBar({
         data-testid="open-search"
       >
         <Icon name="search" />
-        <span className="flex-1 text-start">Search…</span>
+        <span className="flex-1 text-start">{tx.searchButton}</span>
         <kbd className="rounded border border-line bg-surface-2 px-1 text-[10px]">⌘K</kbd>
       </button>
-      <button type="button" onClick={onOpenSearch} className="flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 md:hidden" aria-label="Search">
+      <button type="button" onClick={onOpenSearch} className="flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 md:hidden" aria-label={tx.search}>
         <Icon name="search" className="size-5" />
       </button>
 
@@ -609,7 +635,7 @@ function TopBar({
       )}
 
       <Menu
-        label={alertTotal ? `Notifications (${alertTotal})` : 'Notifications'}
+        label={alertTotal ? fmt(tx.notificationsCount, { n: alertTotal }) : tx.notifications}
         triggerClassName="relative flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 hover:text-ink lg:size-9"
         trigger={
           <>
@@ -690,18 +716,19 @@ function breadcrumbs(pathname: string, links: SidebarLink[], org: { name: string
 
 function CommandPalette({ links, slug, onClose }: { links: SidebarLink[]; slug: string; onClose: () => void }) {
   const router = useRouter();
+  const tx = useShellText();
   const [q, setQ] = useState('');
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const base = `/dashboard/${slug}`;
   const has = (key: string) => links.some((l) => l.key === key);
   const actions: { label: string; href: string; icon: IconName; group: string }[] = [
-    ...links.map((l) => ({ label: l.label, href: l.href, icon: l.icon, group: 'Go to' })),
-    ...(has('menu') ? [{ label: 'Add a dish', href: `${base}/menu/products/new`, icon: 'plus' as IconName, group: 'Actions' }, { label: 'Prices & availability', href: `${base}/menu/quick`, icon: 'tag' as IconName, group: 'Actions' }, { label: 'Translations', href: `${base}/menu/translations`, icon: 'globe' as IconName, group: 'Actions' }] : []),
-    ...(has('tables') ? [{ label: 'Print QR codes', href: `${base}/tables/print`, icon: 'print' as IconName, group: 'Actions' }] : []),
-    ...(has('importStudio') ? [{ label: 'Import a menu', href: `${base}/import`, icon: 'import' as IconName, group: 'Actions' }] : []),
-    ...(has('settings') ? [{ label: 'Branding', href: `${base}/settings/branding`, icon: 'photo' as IconName, group: 'Actions' }, { label: 'Ordering channels', href: `${base}/settings/channels`, icon: 'layers' as IconName, group: 'Actions' }] : []),
-    { label: 'Account settings', href: '/account', icon: 'user', group: 'Actions' },
+    ...links.map((l) => ({ label: l.label, href: l.href, icon: l.icon, group: tx.goTo })),
+    ...(has('menu') ? [{ label: tx.addDish, href: `${base}/menu/products/new`, icon: 'plus' as IconName, group: tx.actions }, { label: tx.pricesAvailability, href: `${base}/menu/quick`, icon: 'tag' as IconName, group: tx.actions }, { label: tx.translations, href: `${base}/menu/translations`, icon: 'globe' as IconName, group: tx.actions }] : []),
+    ...(has('tables') ? [{ label: tx.printQr, href: `${base}/tables/print`, icon: 'print' as IconName, group: tx.actions }] : []),
+    ...(has('importStudio') ? [{ label: tx.importMenu, href: `${base}/import`, icon: 'import' as IconName, group: tx.actions }] : []),
+    ...(has('settings') ? [{ label: tx.branding, href: `${base}/settings/branding`, icon: 'photo' as IconName, group: tx.actions }, { label: tx.orderingChannels, href: `${base}/settings/channels`, icon: 'layers' as IconName, group: tx.actions }] : []),
+    { label: tx.accountSettings, href: '/account', icon: 'user', group: tx.actions },
   ];
   const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const results = actions.filter((a) => fold(a.label).includes(fold(q.trim())));
@@ -719,7 +746,7 @@ function CommandPalette({ links, slug, onClose }: { links: SidebarLink[]; slug: 
     router.push(href);
   };
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center p-3 pt-[12vh] sm:p-6 sm:pt-[14vh]" role="dialog" aria-modal="true" aria-label="Search" data-testid="command-palette">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center p-3 pt-[12vh] sm:p-6 sm:pt-[14vh]" role="dialog" aria-modal="true" aria-label={tx.search} data-testid="command-palette">
       <button type="button" aria-hidden tabIndex={-1} className="animate-fade-in absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="animate-pop-in relative w-full max-w-lg overflow-hidden rounded-2xl border border-line bg-surface shadow-lg">
         <div className="flex items-center gap-2.5 border-b border-line px-4">
@@ -740,8 +767,8 @@ function CommandPalette({ links, slug, onClose }: { links: SidebarLink[]; slug: 
               }
               if (e.key === 'Enter' && results[index]) go(results[index].href);
             }}
-            placeholder="Search sections and actions…"
-            aria-label="Search sections and actions"
+            placeholder={tx.searchPlaceholder}
+            aria-label={tx.searchPlaceholder}
             role="combobox"
             aria-expanded="true"
             aria-controls="command-results"
@@ -750,7 +777,7 @@ function CommandPalette({ links, slug, onClose }: { links: SidebarLink[]; slug: 
           <kbd className="rounded border border-line bg-surface-2 px-1.5 text-[10px] text-muted">Esc</kbd>
         </div>
         <ul id="command-results" role="listbox" className="mn-scroll max-h-[min(60vh,24rem)] overflow-y-auto p-1.5">
-          {results.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">No matches</li>}
+          {results.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">{tx.noMatches}</li>}
           {results.map((r, i) => (
             <li key={`${r.group}${r.href}`} role="option" aria-selected={i === index}>
               <button

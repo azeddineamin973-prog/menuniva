@@ -2,6 +2,9 @@ import Link from 'next/link';
 import { ButtonLink, Icon } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { getSetupProgress, setupNav, type SetupStepKey } from '@/server/services/setup-progress';
+import { fmt } from '@/i18n/config';
+import { getDashText } from '@/i18n/dash';
+import { getCurrentUser } from '@/server/auth/session';
 
 /**
  * The wizard bar shown on top of each setup step page: where the owner is, what is still
@@ -11,7 +14,9 @@ import { getSetupProgress, setupNav, type SetupStepKey } from '@/server/services
  * being set up. Each step page keeps working on its own if this renders nothing.
  */
 export async function SetupStepNav({ orgSlug, orgId, stepKey, locationId }: { orgSlug: string; orgId: string; stepKey: SetupStepKey; locationId?: string | null }) {
-  const progress = await getSetupProgress(orgId, locationId);
+  const [progress, user] = await Promise.all([getSetupProgress(orgId, locationId), getCurrentUser()]);
+  const t = getDashText(user?.preferredLanguage ?? 'en').setupNav;
+  const title = (key: string, fallback: string) => (t.steps as Record<string, string>)[key] ?? fallback;
   const nav = setupNav(progress, stepKey);
   if (!nav || nav.completed === nav.total) return null;
   const base = `/dashboard/${orgSlug}`;
@@ -23,11 +28,11 @@ export async function SetupStepNav({ orgSlug, orgId, stepKey, locationId }: { or
           href={`${base}/setup`}
           className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg pe-1 text-[13px] font-medium text-ink-2 hover:text-ink pointer-coarse:min-h-10"
           data-testid="setup-nav-back"
-          aria-label="Back to setup"
+          aria-label={t.backToSetup}
         >
           <Icon name="arrowLeft" className="size-3.5 rtl:rotate-180" />
-          <span className="hidden sm:inline">Back to setup</span>
-          <span className="sm:hidden">Setup</span>
+          <span className="hidden sm:inline">{t.backToSetup}</span>
+          <span className="sm:hidden">{t.setup}</span>
         </Link>
         <span className="h-5 w-px shrink-0 bg-line" aria-hidden />
         <span className="flex min-w-0 flex-1 items-center gap-2 text-[13px]">
@@ -38,20 +43,20 @@ export async function SetupStepNav({ orgSlug, orgId, stepKey, locationId }: { or
             {step.done ? <Icon name="check" className="size-3" /> : step.n}
           </span>
           <span className="min-w-0 truncate text-muted">
-            <span className="text-ink">Step {step.n} of {nav.total}</span> · {step.title}
+            <span className="text-ink">{fmt(t.stepOf, { n: step.n, total: nav.total })}</span> · {title(step.key, step.title)}
           </span>
-          <span className={cn('hidden shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium sm:inline', step.done ? 'bg-success/10 text-success' : 'bg-accent-soft text-accent')}>{step.done ? 'Done' : 'In progress'}</span>
+          <span className={cn('hidden shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium sm:inline', step.done ? 'bg-success/10 text-success' : 'bg-accent-soft text-accent')}>{step.done ? t.done : t.inProgress}</span>
         </span>
         {next ? (
           <ButtonLink href={`${base}${next.path}`} variant={step.done ? 'primary' : 'secondary'} size="sm" iconEnd="arrowRight" className="shrink-0" data-testid="setup-nav-next">
             <span>
-              Next<span className="hidden md:inline">: {next.title}</span>
+              {t.next}<span className="hidden md:inline">: {title(next.key, next.title)}</span>
             </span>
           </ButtonLink>
         ) : (
           <ButtonLink href={`${base}/setup`} variant="primary" size="sm" iconEnd="arrowRight" className="shrink-0" data-testid="setup-nav-next">
             <span>
-              Finish<span className="hidden md:inline"> setup</span>
+              {t.finish}<span className="hidden md:inline">{t.finishSetup}</span>
             </span>
           </ButtonLink>
         )}

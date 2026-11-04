@@ -3,6 +3,7 @@
 import { keepValuesOnSubmit } from '@/components/forms/use-keep-values';
 import { useActionState } from 'react';
 import { friendlyError } from '@/components/forms/action-form';
+import { useUiText } from '@/components/ui-text';
 import { Alert, Button } from '@/components/ui';
 import { initialActionState, type ActionResult } from '@/lib/action-result';
 
@@ -23,11 +24,12 @@ export function LinkResultForm({
   testId?: string;
 }) {
   const [state, formAction, pending] = useActionState<R, FormData>(action, initialActionState as R);
+  const ui = useUiText();
   return (
     <form onSubmit={keepValuesOnSubmit(formAction)} className="space-y-3" data-testid={testId}>
       {children}
       <Button type="submit" disabled={pending} variant="dark">
-        {pending ? 'Working…' : submitLabel}
+        {pending ? ui.working : submitLabel}
       </Button>
       {state.ok && state.data && (
         <div>
@@ -37,7 +39,7 @@ export function LinkResultForm({
           </code>
         </div>
       )}
-      {!state.ok && state.error && <Alert tone="danger">{state.error === 'validation' ? 'Please check the form.' : friendlyError(state.error)}</Alert>}
+      {!state.ok && state.error && <Alert tone="danger">{state.error === 'validation' ? ui.checkForm : friendlyError(state.error, null, ui)}</Alert>}
     </form>
   );
 }
