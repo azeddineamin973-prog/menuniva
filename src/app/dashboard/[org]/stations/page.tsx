@@ -4,12 +4,14 @@ import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, Select, Stat, statGrid } from '@/components/ui';
 import { db } from '@/server/db';
 import { pickName } from '@/server/services/menu';
+import { NO_PREPARATION, prepRoute } from '@/server/services/routing';
 import { routingReview } from '@/server/services/station-assign';
 import { requireTenantPage } from '@/server/tenant';
 import { currentLocation } from '@/server/current-location';
 import { assignCategoryStationsAction, createStationsAction, routeProductsAction, saveStationAction } from '../tables/actions';
 
 const TYPE_LABEL = { KITCHEN: 'Kitchen', CAFE: 'Café', DESSERTS: 'Desserts', DRINKS: 'Drinks', OTHER: 'Other' } as const;
+const NO_PREP_LABEL = 'No preparation — handed over at the counter';
 
 export default async function StationsPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
@@ -29,7 +31,17 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
   ]);
   const langs = [o.sourceLanguage, ...o.enabledLanguages];
   const activeStations = review.stations.filter((s) => s.isActive);
-  const suggestable = review.categories.filter((c) => c.suggestedStationId && c.suggestedStationId !== c.currentStationId);
+  /** Where a dish is prepared at this location, as the Single dishes list shows it. */
+  const routeLabel = (p: (typeof products)[number]) => {
+    const r = prepRoute(p, location.id);
+    if (r.kind === 'none') return 'No preparation';
+    const s = p.stationId ? p.station : p.category.defaultStation;
+    const via = p.stationId ? '' : ' (category)';
+    if (r.kind === 'station') return `${s?.name}${via}`;
+    if (r.reason === 'station_off') return `${s?.name}${via} — switched off`;
+    if (r.reason === 'other_location') return `${s?.name}${via} — another location`;
+    return '—';
+  };
 
   return (
     <>
@@ -70,7 +82,7 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
           <CardHeader
             title="Send each category to a station"
             description="Dishes follow their category unless a dish has its own station. Suggestions come from the category name — check them before saving."
-            action={suggestable.length > 0 ? <Badge tone="lime">{suggestable.length} suggested</Badge> : <Badge tone="success">Nothing to change</Badge>}
+            action={review.assignable > 0 ? <Badge tone="lime">{review.assignable} suggested</Badge> : <Badge tone="success">Nothing to change</Badge>}
           />
           <CardBody>
             {review.missingTypes.length > 0 && (
@@ -87,6 +99,7 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
             ) : (
               <ActionForm action={assignCategoryStationsAction} submitLabel="Save routing" submitVariant="dark" successText="Routing saved" testId="category-routing-form">
                 <input type="hidden" name="org" value={ctx.org.slug} />
+                <input type="hidden" name="locationId" value={location.id} />
                 {/* A list rather than a table: on phones each category gets the full width for its station picker. */}
                 <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
                   <li className="hidden grid-cols-[minmax(0,1fr)_5rem_14rem] gap-3 bg-surface-2/60 px-3 py-2 text-xs font-medium text-muted sm:grid" aria-hidden>
@@ -98,8 +111,11 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
                     <li key={c.categoryId} className="grid gap-2 px-3 py-2.5 text-sm sm:grid-cols-[minmax(0,1fr)_5rem_14rem] sm:items-center sm:gap-3" data-testid="routing-row" data-category={c.name}>
                       <span className="min-w-0">
                         <span className="font-medium break-words text-ink">{c.name}</span>
-                        {!c.currentStationId && <Badge tone="warning" className="ms-2">No station</Badge>}
-                        {c.suggestedStationId && c.suggestedStationId !== c.currentStationId && <span className="block text-xs text-muted">Suggested: {c.suggestedStationName}</span>}
+                        {c.current === 'none' && <Badge tone="warning" className="ms-2">No station</Badge>}
+                        {c.current === 'station_off' && <Badge tone="danger" className="ms-2">Station switched off</Badge>}
+                        {c.current === 'no_preparation' && <Badge tone="info" className="ms-2">No preparation</Badge>}
+                        {/* A suggestion is only offered where nothing is chosen yet: it never replaces a routing. */}
+                        {c.current === 'none' && c.suggestedStationId && <span className="block text-xs text-muted">Suggested: {c.suggestedStationName}</span>}
                         <span className="block text-xs text-muted sm:hidden">
                           {c.products} dishes{c.overridden > 0 ? ` · ${c.overridden} set individually` : ''}
                         </span>
@@ -108,20 +124,23 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
                         {c.products}
                         {c.overridden > 0 && <span className="block">{c.overridden} set individually</span>}
                       </span>
-                      <Select
-                        name={`station:${c.categoryId}`}
-                        defaultValue={c.suggestedStationId ?? c.currentStationId ?? ''}
-                        aria-label={`Station for ${c.name}`}
-                        className="w-full"
-                        data-testid={`station-select-${c.categoryId}`}
-                      >
-                        <option value="">— no station —</option>
-                        {activeStations.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </Select>
+                      {c.editable ? (
+                        <Select name={`station:${c.categoryId}`} defaultValue={c.formDefault} aria-label={`Station for ${c.name}`} className="w-full" data-testid={`station-select-${c.categoryId}`}>
+                          <option value="">— no station —</option>
+                          {activeStations.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                          {/* Kept as it is while switched off, so saving other rows does not lose it. */}
+                          {c.current === 'station_off' && <option value={c.currentStationId!}>{c.currentStationName} (switched off)</option>}
+                          <option value={NO_PREPARATION}>{NO_PREP_LABEL}</option>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-muted" data-testid={`station-elsewhere-${c.categoryId}`}>
+                          {c.currentStationName} · {c.currentLocationName}. Not orderable here; change it from that location’s page.
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -137,18 +156,40 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
           <CardHeader title="Stations" />
           <ul className="divide-y divide-line">
             {counts.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                <div>
-                  <p className="font-medium">
-                    {s.name} {!s.isActive && <Badge tone="danger">inactive</Badge>}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {TYPE_LABEL[s.type]} · {s._count.products} dishes directly · default for {s._count.categories} categories
-                  </p>
+              <li key={s.id} className="space-y-2 px-5 py-3" data-testid="station-row" data-station={s.name}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">
+                      {s.name} {!s.isActive && <Badge tone="danger">switched off</Badge>}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {TYPE_LABEL[s.type]} · {s._count.products} dishes directly · default for {s._count.categories} categories
+                    </p>
+                  </div>
+                  <ButtonLink href={`${base}/kitchen/${s.id}`} variant="secondary" size="sm">
+                    Open display
+                  </ButtonLink>
                 </div>
-                <ButtonLink href={`${base}/kitchen/${s.id}`} variant="secondary" size="sm">
-                  Open display
-                </ButtonLink>
+                {/* Switching off is refused while orders are open on it, and asks for a confirmation
+                    when dishes depend on it: they cannot be ordered here while it is off. */}
+                <ActionForm
+                  action={saveStationAction}
+                  submitLabel={s.isActive ? 'Switch off' : 'Switch on'}
+                  submitVariant="secondary"
+                  successText="Saved"
+                  className="flex flex-wrap items-center gap-3 space-y-0"
+                  testId={`station-toggle-${s.id}`}
+                >
+                  <input type="hidden" name="org" value={ctx.org.slug} />
+                  <input type="hidden" name="id" value={s.id} />
+                  <input type="hidden" name="locationId" value={location.id} />
+                  <input type="hidden" name="name" value={s.name} />
+                  <input type="hidden" name="type" value={s.type} />
+                  <input type="hidden" name="isActive" value={s.isActive ? 'off' : 'on'} />
+                  {s.isActive && s._count.products + s._count.categories > 0 && (
+                    <Checkbox name="confirmDependents" label="Guests cannot order its dishes here while it is off" />
+                  )}
+                </ActionForm>
               </li>
             ))}
             {counts.length === 0 && <li className="px-5 py-4 text-sm text-muted">No stations yet.</li>}
@@ -188,8 +229,9 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
               <Alert tone="success">Every visible dish is routed to a station.</Alert>
             )}
             {products.length > 0 && activeStations.length > 0 && (
-              <ActionForm action={routeProductsAction} submitLabel="Assign selected dishes" className="mt-4">
+              <ActionForm action={routeProductsAction} submitLabel="Assign selected dishes" className="mt-4" testId="route-products-form">
                 <input type="hidden" name="org" value={ctx.org.slug} />
+                <input type="hidden" name="locationId" value={location.id} />
                 <Field label="Send to station" htmlFor="rstation">
                   <Select id="rstation" name="stationId">
                     {activeStations.map((s) => (
@@ -198,6 +240,7 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
                       </option>
                     ))}
                     <option value="">Use category default</option>
+                    <option value={NO_PREPARATION}>{NO_PREP_LABEL}</option>
                   </Select>
                 </Field>
                 <div className="max-h-80 space-y-1 overflow-y-auto rounded-xl border border-line p-2">
@@ -207,7 +250,7 @@ export default async function StationsPage({ params }: { params: Promise<{ org: 
                         <input type="checkbox" name="productIds" value={p.id} className="h-4 w-4" />
                         {pickName(p.translations, langs)}
                       </span>
-                      <span className="text-xs text-muted">{p.station?.name ?? (p.category.defaultStation ? `${p.category.defaultStation.name} (category)` : '—')}</span>
+                      <span className="text-xs text-muted">{routeLabel(p)}</span>
                     </label>
                   ))}
                 </div>

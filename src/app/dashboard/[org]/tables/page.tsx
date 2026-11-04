@@ -9,6 +9,7 @@ import { currentLocation } from '@/server/current-location';
 import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { createTablesAction, rotateQrAction, saveAreaAction } from './actions';
 import { openTableAction } from '../bills/actions';
+import { TablePinPanel } from './table-access-panel';
 
 const smallLink =
   'inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-surface px-2 text-xs font-medium text-ink-2 shadow-xs hover:border-line-strong hover:text-ink pointer-coarse:h-10 pointer-coarse:px-3';
@@ -24,6 +25,8 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
   ]);
   const base = `/dashboard/${ctx.org.slug}`;
   const canManage = ctx.can('tables.manage');
+  const canSessions = ctx.can('tables.sessions');
+  const policy = location.tableOrderingPolicy;
   const occupied = tables.filter((t) => t.sessions[0]).length;
   // QR codes are drawn here, inside the page (about 2 KB each), instead of one signed-in image
   // request per table: a page with 30 tables used to make 30 extra requests on every visit.
@@ -121,14 +124,26 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
                         )}
                       </div>
                       <p className="text-xs text-muted">{t.area?.name ?? 'No area'}{t.seats ? ` · ${t.seats} seats` : ''}</p>
-                      {session?.verificationCode && (
-                        <div className="mt-1.5">
-                          <Badge tone="dark" data-testid="table-code">Code {session.verificationCode}</Badge>
+                      {session && (
+                        <p className="mt-1 text-xs text-muted" data-testid="table-session-info">
+                          Opened {session.openedAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                          {session.openedById ? '' : ' by a guest order'}
+                          {session._count.orders > 0 && <> · <span className="font-medium text-warning">{session._count.orders} waiting for approval</span></>}
+                        </p>
+                      )}
+                      {session && policy === 'SESSION_PIN' && canSessions && (
+                        <div className="mt-2">
+                          <TablePinPanel org={ctx.org.slug} sessionId={session.id} locked={!!session.pinLockedAt} failures={session.pinFailedAttempts} phones={session._count.devices} testId={`table-pin-${t.label}`} />
                         </div>
                       )}
-                      {!session && location.tableCodeRequired && ctx.can('tasks.manage') && (
+                      {!session && t.staffTasks[0] && (
+                        <p className="mt-1.5">
+                          <Badge tone="warning" dot data-testid="open-request">Guests ask to open this table</Badge>
+                        </p>
+                      )}
+                      {!session && t.isActive && canSessions && (
                         <div className="mt-1.5">
-                          <InlineAction action={openTableAction} fields={{ org: ctx.org.slug, tableId: t.id }} label="Open table" variant="primary" testId="open-table" />
+                          <InlineAction action={openTableAction} fields={{ org: ctx.org.slug, tableId: t.id }} label={policy === 'SESSION_PIN' ? 'Open table & create PIN' : 'Open table'} variant={t.staffTasks[0] || policy !== 'OPEN' ? 'primary' : 'secondary'} testId="open-table" />
                         </div>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -208,9 +223,13 @@ export default async function TablesPage({ params }: { params: Promise<{ org: st
           {manage}
         </div>
       )}
-      <p className="mt-5 flex items-start gap-2 text-xs text-muted">
+      <p className="mt-5 flex items-start gap-2 text-xs text-muted" data-testid="table-policy-note">
         <Icon name="shield" className="mt-px size-3.5 shrink-0" />
-        A QR code can be photographed and shared, so it does not prove a guest is at the table. Every table order must be accepted by staff, and orders are rate-limited.
+        {policy === 'SESSION_PIN'
+          ? 'Open each table when you seat guests and tell them its PIN. Each phone enters it once; closing the table removes every phone. A copied QR code alone cannot order, and staff still accept every order.'
+          : policy === 'SESSION'
+            ? 'Open each table when you seat guests: closed tables cannot order. Closing the table ends the seating. Staff still accept every order.'
+            : 'Open ordering: anyone holding a table’s QR code can order, even from outside the restaurant, and the table opens by itself. Staff accept every order. Turn on table PINs in Settings → Ordering channels.'}
       </p>
     </>
   );

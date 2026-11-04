@@ -166,9 +166,21 @@ enum TableSessionStatus {
   CLOSED
 }
 
+/// Who may order at a table (one setting per location, replaces `tableCodeRequired`).
+/// OPEN: anyone holding the QR (legacy; MenuNiva opens the table itself).
+/// SESSION: staff must open the table first.
+/// SESSION_PIN: staff open the table and give a 6-digit PIN; each phone enters it once per seating.
+/// A per-order verification mode is a future option and is deliberately not listed until built.
+enum TableOrderingPolicy {
+  OPEN
+  SESSION
+  SESSION_PIN
+}
+
 enum StaffTaskType {
   CALL_WAITER
   REQUEST_BILL
+  OPEN_TABLE // a guest at a closed table asks staff to open it
 }
 
 enum StaffTaskStatus {
@@ -452,7 +464,7 @@ model RestaurantSettings {
 }
 
 model RestaurantLocation {
-  id                      String      @id @default(cuid())
+  id                      String              @id @default(cuid())
   organizationId          String
   slug                    String
   name                    String
@@ -460,30 +472,33 @@ model RestaurantLocation {
   addressLine2            String?
   city                    String?
   postalCode              String?
-  country                 CountryCode @default(PT)
+  country                 CountryCode         @default(PT)
   phone                   String?
   whatsappNumber          String?
   email                   String?
-  timeZone                String      @default("Europe/Lisbon")
+  timeZone                String              @default("Europe/Lisbon")
   openingHours            Json? // { mon: [{open:"12:00",close:"15:00"}], ... } confirmed by restaurant
+  attentionThresholds     Json? // { order_unaccepted: { warn: 2, urgent: 4 }, ... } minutes; null or missing kinds = recommended times (src/lib/attention.ts)
   websiteUrl              String?
   instagramUrl            String?
   facebookUrl             String?
   tiktokUrl               String?
   glovoUrl                String?
   uberEatsUrl             String?
-  tableOrderingEnabled    Boolean     @default(false)
-  takeawayEnabled         Boolean     @default(false)
-  deliveryEnabled         Boolean     @default(false)
-  reservationsEnabled     Boolean     @default(false)
-  whatsappOrderingEnabled Boolean     @default(false)
-  orderingPaused          Boolean     @default(false)
-  tableCodeRequired       Boolean     @default(false) // guests must enter a code given by staff before ordering
-  isPublished             Boolean     @default(false)
+  tableOrderingEnabled    Boolean             @default(false)
+  takeawayEnabled         Boolean             @default(false)
+  deliveryEnabled         Boolean             @default(false)
+  reservationsEnabled     Boolean             @default(false)
+  whatsappOrderingEnabled Boolean             @default(false)
+  orderingPaused          Boolean             @default(false)
+  tableCodeRequired       Boolean             @default(false) // superseded by tableOrderingPolicy (kept one release for rollback; no longer read)
+  tableOrderingPolicy     TableOrderingPolicy @default(SESSION_PIN) // new locations: staff-opened table + PIN. Existing ones were migrated to their current behaviour
+  tablePendingOrderCap    Int                 @default(15) // max orders waiting for staff approval per table session
+  isPublished             Boolean             @default(false)
   publishedAt             DateTime?
-  orderSequence           Int         @default(0) // atomic counter for human-friendly order numbers
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
+  orderSequence           Int                 @default(0) // atomic counter for human-friendly order numbers
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   organization        RestaurantOrganization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   diningAreas         DiningArea[]
@@ -620,6 +635,7 @@ model MenuCategory {
   sortOrder        Int      @default(0)
   isActive         Boolean  @default(true)
   defaultStationId String?
+  noPreparation    Boolean  @default(false) // dishes need no preparation (e.g. bottled drinks): handed over at the counter, no kitchen ticket
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -653,6 +669,7 @@ model MenuProduct {
   menuId                String
   categoryId            String
   stationId             String? // preparation station (overrides category default)
+  noPreparation         Boolean       @default(false) // needs no preparation (e.g. bottled water): handed over at the counter; overrides the category
   taxClassId            String?
   status                ProductStatus @default(DRAFT)
   soldOut               Boolean       @default(false) // temporary, all locations
@@ -999,25 +1016,73 @@ model TableQRToken {
 }
 
 model TableSession {
-  id               String             @id @default(cuid())
-  organizationId   String
-  locationId       String
-  tableId          String
-  status           TableSessionStatus @default(OPEN)
-  verificationCode String? // optional short code staff can tell guests
-  openedAt         DateTime           @default(now())
-  closedAt         DateTime?
-  closedById       String?
-  closeNote        String?
-  openedById       String?
+  id                String             @id @default(cuid())
+  organizationId    String
+  locationId        String
+  tableId           String
+  status            TableSessionStatus @default(OPEN)
+  verificationCode  String? // legacy 4-digit code of sessions opened before SESSION_PIN; cleared when the table closes
+  openedAt          DateTime           @default(now())
+  closedAt          DateTime?
+  closedById        String?
+  closeNote         String?
+  openedById        String?
+  // Temporary PIN of this seating, AES-256-GCM encrypted with a key derived from APP_SECRET
+  // (src/server/services/table-access.ts). Never stored in plain text; erased when the table closes.
+  pinCipher         String?
+  pinIssuedAt       DateTime?
+  pinIssuedById     String?
+  pinFailedAttempts Int                @default(0) // wrong PINs since the PIN was issued (atomic UPDATE … RETURNING)
+  pinLockedAt       DateTime? // set when the failure limit is reached: enrolment refused until staff issue a new PIN
 
-  location   RestaurantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  table      RestaurantTable    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  location   RestaurantLocation   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table      RestaurantTable      @relation(fields: [tableId], references: [id], onDelete: Cascade)
   orders     Order[]
   staffTasks StaffTask[]
+  devices    TableSessionDevice[]
+  pendingClaims TablePendingClaim[]
 
   @@index([organizationId, locationId, status])
   @@index([tableId, status])
+}
+
+/// A guest phone allowed to order for one table session (entered the PIN once). The phone keeps a
+/// random token in an httpOnly cookie; only its SHA-256 hash is stored. Valid only while the session
+/// is OPEN, not revoked and not expired. Closing the table revokes every device of the session.
+model TableSessionDevice {
+  id             String    @id @default(cuid())
+  organizationId String
+  locationId     String
+  tableId        String // follows the session when staff move the party to another table
+  tableSessionId String
+  tokenHash      String    @unique
+  guestHash      String? // hashed mn_guest identity (provenance and throttling), never the raw cookie
+  enrolledAt     DateTime  @default(now())
+  expiresAt      DateTime
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  revokedById    String?
+
+  tableSession TableSession @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@index([tableSessionId])
+  @@index([organizationId, locationId])
+}
+
+/// One place in a seating's pending-order cap, held by a table order between the check and its commit
+/// (src/server/services/orders.ts, claimPendingSlot). Taken by the SQL function
+/// claim_table_pending_slot under a per-session lock that lasts for that one statement only; the
+/// order's own transaction deletes it as the order appears, so NEW orders + claims never exceed the
+/// cap, also when many phones send at the same moment. A claim left by a crashed request expires (60 s).
+model TablePendingClaim {
+  id             String   @id
+  tableSessionId String
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  tableSession TableSession @relation(fields: [tableSessionId], references: [id], onDelete: Cascade)
+
+  @@index([tableSessionId, createdAt])
 }
 
 // ============================== KITCHEN ====================================
@@ -1044,52 +1109,54 @@ model KitchenStation {
 // ============================== ORDERS =====================================
 
 model Order {
-  id                  String         @id @default(cuid())
-  organizationId      String
-  locationId          String
-  number              Int // per-location sequence
-  channel             OrderChannel
-  status              OrderStatus    @default(NEW)
-  paymentStatus       PaymentStatus  @default(UNPAID)
-  tableId             String?
-  tableSessionId      String?
-  customerName        String?
-  customerPhone       String?
-  customerNotes       String?
-  language            LanguageCode   @default(pt)
-  pickupAt            DateTime?
-  subtotalCents       Int
-  discountCents       Int            @default(0)
-  deliveryFeeCents    Int            @default(0)
-  totalCents          Int
-  paidCents           Int            @default(0)
-  paymentMethodIntent PaymentMethod? // how the guest said they will pay (informational)
-  loyaltyAccountId    String? // set only when the guest voluntarily joins loyalty from this order
-  currency            String         @default("EUR")
-  idempotencyKey      String
-  trackingTokenHash   String         @unique
-  isPriority          Boolean        @default(false) // set by staff; shown first on kitchen displays
-  acknowledgedAt      DateTime?
-  acceptedAt          DateTime?
-  readyAt             DateTime?
-  completedAt         DateTime?
-  cancelledAt         DateTime?
-  cancelReason        String?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  id                   String         @id @default(cuid())
+  organizationId       String
+  locationId           String
+  number               Int // per-location sequence
+  channel              OrderChannel
+  status               OrderStatus    @default(NEW)
+  paymentStatus        PaymentStatus  @default(UNPAID)
+  tableId              String?
+  tableSessionId       String?
+  tableSessionDeviceId String? // the authorised phone that placed this table order (provenance for the approving waiter)
+  customerName         String?
+  customerPhone        String?
+  customerNotes        String?
+  language             LanguageCode   @default(pt)
+  pickupAt             DateTime?
+  subtotalCents        Int
+  discountCents        Int            @default(0)
+  deliveryFeeCents     Int            @default(0)
+  totalCents           Int
+  paidCents            Int            @default(0)
+  paymentMethodIntent  PaymentMethod? // how the guest said they will pay (informational)
+  loyaltyAccountId     String? // set only when the guest voluntarily joins loyalty from this order
+  currency             String         @default("EUR")
+  idempotencyKey       String
+  trackingTokenHash    String         @unique
+  isPriority           Boolean        @default(false) // set by staff; shown first on kitchen displays
+  acknowledgedAt       DateTime? // first time staff moved the order on; old rows also hold "Seen" taps. Never ends alerts or counts (audit OPS-02): a NEW order waits until accepted or rejected
+  acceptedAt           DateTime?
+  readyAt              DateTime?
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  cancelReason         String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  organization   RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  location       RestaurantLocation     @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  table          RestaurantTable?       @relation(fields: [tableId], references: [id], onDelete: SetNull)
-  tableSession   TableSession?          @relation(fields: [tableSessionId], references: [id], onDelete: SetNull)
-  items          OrderItem[]
-  events         OrderStatusEvent[]
-  tickets        KitchenTicket[]
-  delivery       DeliveryOrderDetails?
-  discounts      OrderDiscount[]
-  payments       PaymentRecord[]
-  feedback       CustomerFeedback[]
-  loyaltyAccount LoyaltyAccount?        @relation(fields: [loyaltyAccountId], references: [id], onDelete: SetNull)
+  organization       RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location           RestaurantLocation     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table              RestaurantTable?       @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  tableSession       TableSession?          @relation(fields: [tableSessionId], references: [id], onDelete: SetNull)
+  tableSessionDevice TableSessionDevice?    @relation(fields: [tableSessionDeviceId], references: [id], onDelete: SetNull)
+  items              OrderItem[]
+  events             OrderStatusEvent[]
+  tickets            KitchenTicket[]
+  delivery           DeliveryOrderDetails?
+  discounts          OrderDiscount[]
+  payments           PaymentRecord[]
+  feedback           CustomerFeedback[]
+  loyaltyAccount     LoyaltyAccount?        @relation(fields: [loyaltyAccountId], references: [id], onDelete: SetNull)
 
   @@unique([locationId, idempotencyKey])
   @@unique([locationId, number])
@@ -1117,6 +1184,8 @@ model OrderItem {
   voidedAt             DateTime?
   voidedById           String?
   voidReason           String?
+  amendedAt            DateTime? // quantity reduced by staff after the kitchen got the ticket (shown on the station screen)
+  originalQuantity     Int? // quantity before the first such reduction
   createdAt            DateTime   @default(now())
 
   order       Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -1199,6 +1268,8 @@ model StaffTask {
 
 // ============================== PAYMENTS ===================================
 
+// Operational record of money taken at the restaurant, for reconciliation only. NOT a Portuguese
+// fiscal document (fatura / fatura-recibo): MenuNiva is not certified invoicing or POS software.
 model PaymentRecord {
   id             String              @id @default(cuid())
   organizationId String

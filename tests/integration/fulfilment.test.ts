@@ -9,11 +9,14 @@ import {
   quoteDelivery,
   resolvePickup,
   saveDeliveryZone,
+  testDeliveryAddress,
   submitDeliveryOrder,
   submitPickupOrder,
   updateDeliverySettings,
   updateTakeawaySettings,
   assignDriver,
+  assertStaffMayMoveDelivery,
+  myDeliveries,
 } from '@/server/services/fulfilment';
 import { changeOrderStatus, changeTicketStatus, trackOrder } from '@/server/services/orders';
 import { resolveTenantAccess } from '@/server/tenant';
@@ -98,10 +101,38 @@ describe('M9-04/05 delivery zones', () => {
   beforeEach(resetDatabase);
   it('validates PT and ES patterns', () => {
     expect(parseZonePatterns('PT', '4700-*, 4710001 ; 4715-*')).toEqual(['4700-*', '4710-001', '4715-*']);
-    expect(() => parseZonePatterns('PT', '47000')).toThrow(/not a valid Portuguese/);
+    expect(parseZonePatterns('PT', '4700, 4705, Braga')).toEqual(['4700-*', '4705-*', 'city:Braga']); // no * needed
+    expect(parseZonePatterns('PT', '4700, *')).toEqual(['*']);
+    expect(() => parseZonePatterns('PT', '0700')).toThrow(/not a valid Portuguese/);
     expect(parseZonePatterns('ES', '280*, 08001')).toEqual(['280*', '08001']);
     expect(() => parseZonePatterns('ES', '4700-123')).toThrow(/Spanish/);
     expect(() => parseZonePatterns('PT', '')).toThrow(/at least one/);
+  });
+
+  it('town zones, everywhere and the most precise zone winning (whatever the order they were added in)', async () => {
+    const f = await createOrderingFixture();
+    const add = (name: string, patterns: string, fee: string) => saveDeliveryZone(f.ctx, { locationId: f.location.id, name, patterns, fee });
+    await add('Everywhere', '*', '6,00');
+    await add('Braga', 'Braga', '3,50');
+    await add('Centre', '4700', '2,00');
+    const pl = (await publicLocation(f.org.slug))!;
+    const q = (postal: string, city: string) => quoteDelivery(pl, postal, 'pt', [{ productId: f.dish.id, quantity: 1, modifiers: [] }], new Date(), undefined, city);
+    expect(await q('4700-123', 'Braga')).toMatchObject({ covered: true, zoneName: 'Centre', feeCents: 200 });
+    expect(await q('4715-050', 'braga')).toMatchObject({ covered: true, zoneName: 'Braga', feeCents: 350 });
+    expect(await q('3000-380', 'Coimbra')).toMatchObject({ covered: true, zoneName: 'Everywhere', feeCents: 600 });
+    // The order is priced exactly like the quote.
+    await delivery(f, { postalCode: '4715-050', city: 'Braga' });
+    expect(await db.order.findFirstOrThrow({ select: { deliveryFeeCents: true } })).toEqual({ deliveryFeeCents: 350 });
+  });
+
+  it('a town-only zone waits for the guest town before saying "not delivered"', async () => {
+    const f = await createOrderingFixture();
+    await saveDeliveryZone(f.ctx, { locationId: f.location.id, name: 'Braga', patterns: 'Braga', fee: '3,00' });
+    const pl = (await publicLocation(f.org.slug))!;
+    const item = [{ productId: f.dish.id, quantity: 1, modifiers: [] }];
+    expect(await quoteDelivery(pl, '4715-050', 'pt', item)).toMatchObject({ valid: true, covered: false, needsCity: true });
+    expect(await quoteDelivery(pl, '4715-050', 'pt', item, new Date(), undefined, 'Porto')).toMatchObject({ covered: false, needsCity: false });
+    expect(await testDeliveryAddress(f.ctx, { locationId: f.location.id, postalCode: '4715050', city: 'BRAGA' })).toMatchObject({ valid: true, postalCode: '4715-050', zone: { name: 'Braga', feeCents: 300 } });
   });
 });
 
@@ -181,7 +212,7 @@ describe('M9-07/08/11 delivery workflow and driver view', () => {
     await expect(driverUpdate(driver, order.id, 'OUT_FOR_DELIVERY')).rejects.toMatchObject({ code: 'status_conflict' }); // not ready yet
     const ticket = await db.kitchenTicket.findFirstOrThrow();
     await changeTicketStatus(f.ctx, { ticketId: ticket.id, expectedFrom: 'PENDING', to: 'READY' });
-    await expect(driverUpdate(other, order.id, 'OUT_FOR_DELIVERY')).rejects.toThrow(/not assigned to you/);
+    await expect(driverUpdate(other, order.id, 'OUT_FOR_DELIVERY')).rejects.toThrow(/Another driver already has/);
     await driverUpdate(driver, order.id, 'OUT_FOR_DELIVERY');
     await driverUpdate(driver, order.id, 'DELIVERED', true);
     const done = await db.order.findUniqueOrThrow({ where: { id: order.id }, include: { delivery: true, payments: true } });
@@ -190,6 +221,67 @@ describe('M9-07/08/11 delivery workflow and driver view', () => {
     expect(done.payments.map((p) => [p.method, p.amountCents])).toEqual([['CASH_ON_DELIVERY', 2040]]);
     expect(done.delivery?.outForDeliveryAt && done.delivery?.deliveredAt).toBeTruthy();
     await changeOrderStatus(f.ctx, { orderId: order.id, expectedFrom: 'DELIVERED', to: 'COMPLETED' });
+  });
+
+  it('one driver: every delivery is theirs as soon as it is placed; staff do not confirm pickup for them', async () => {
+    const f = await createOrderingFixture();
+    await zone(f);
+    const u = await createTestUser('Solo driver');
+    const dm = await db.restaurantMembership.create({ data: { userId: u.id, organizationId: f.org.id, role: 'DELIVERY_STAFF' } });
+    const driver = await resolveTenantAccess(u.id, f.org.slug, 'delivery.driver');
+    await delivery(f);
+    const order = await db.order.findFirstOrThrow({ include: { delivery: true } });
+    expect(order.delivery?.driverMembershipId).toBe(dm.id); // nobody assigned it
+    expect(await myDeliveries(driver)).toEqual([]); // shown once the restaurant accepts it
+    await changeOrderStatus(f.ctx, { orderId: order.id, expectedFrom: 'NEW', to: 'ACCEPTED' });
+    expect((await myDeliveries(driver)).map((o) => o.id)).toEqual([order.id]);
+    await changeTicketStatus(f.ctx, { ticketId: (await db.kitchenTicket.findFirstOrThrow()).id, expectedFrom: 'PENDING', to: 'READY' });
+    await expect(assertStaffMayMoveDelivery(f.ctx, order.id, 'OUT_FOR_DELIVERY')).rejects.toThrow(/driver confirms/);
+    await driverUpdate(driver, order.id, 'OUT_FOR_DELIVERY');
+    await expect(assertStaffMayMoveDelivery(f.ctx, order.id, 'DELIVERED')).rejects.toThrow(/driver confirms/);
+    await driverUpdate(driver, order.id, 'DELIVERED');
+    expect((await db.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('DELIVERED');
+  });
+
+  it('several drivers: the delivery shows to all of them; the first to confirm pickup takes it', async () => {
+    const f = await createOrderingFixture();
+    await zone(f);
+    const ua = await createTestUser('Driver A');
+    const ub = await createTestUser('Driver B');
+    const uc = await createTestUser('Driver elsewhere');
+    const a = await db.restaurantMembership.create({ data: { userId: ua.id, organizationId: f.org.id, role: 'DELIVERY_STAFF' } });
+    await db.restaurantMembership.create({ data: { userId: ub.id, organizationId: f.org.id, role: 'DELIVERY_STAFF' } });
+    await db.restaurantMembership.create({ data: { userId: uc.id, organizationId: f.org.id, role: 'DELIVERY_STAFF', locationIds: ['another-location'] } });
+    const [da, db2, dc] = await Promise.all([ua, ub, uc].map((u) => resolveTenantAccess(u.id, f.org.slug, 'delivery.driver')));
+    await delivery(f);
+    const order = await db.order.findFirstOrThrow({ include: { delivery: true } });
+    expect(order.delivery?.driverMembershipId).toBeNull();
+    await changeOrderStatus(f.ctx, { orderId: order.id, expectedFrom: 'NEW', to: 'ACCEPTED' });
+    expect((await myDeliveries(da)).map((o) => o.id)).toEqual([order.id]);
+    expect((await myDeliveries(db2)).map((o) => o.id)).toEqual([order.id]);
+    expect(await myDeliveries(dc)).toEqual([]); // works at another location
+    await changeTicketStatus(f.ctx, { ticketId: (await db.kitchenTicket.findFirstOrThrow()).id, expectedFrom: 'PENDING', to: 'READY' });
+    await driverUpdate(da, order.id, 'OUT_FOR_DELIVERY');
+    await expect(driverUpdate(db2, order.id, 'OUT_FOR_DELIVERY')).rejects.toMatchObject({ code: 'status_conflict' });
+    await expect(driverUpdate(db2, order.id, 'DELIVERED')).rejects.toThrow(/not assigned to you/);
+    expect(await myDeliveries(db2)).toEqual([]); // gone from the other driver's list
+    expect((await db.deliveryOrderDetails.findFirstOrThrow()).driverMembershipId).toBe(a.id);
+  });
+
+  it('a deactivated driver does not block a delivery; without drivers, staff mark it themselves', async () => {
+    const f = await createOrderingFixture();
+    await zone(f);
+    const u = await createTestUser('Leaving driver');
+    const dm = await db.restaurantMembership.create({ data: { userId: u.id, organizationId: f.org.id, role: 'DELIVERY_STAFF' } });
+    await delivery(f);
+    const order = await db.order.findFirstOrThrow();
+    await changeOrderStatus(f.ctx, { orderId: order.id, expectedFrom: 'NEW', to: 'ACCEPTED' });
+    await db.restaurantMembership.update({ where: { id: dm.id }, data: { status: 'DISABLED' } });
+    const u2 = await createTestUser('New driver');
+    await db.restaurantMembership.create({ data: { userId: u2.id, organizationId: f.org.id, role: 'DELIVERY_STAFF' } });
+    expect((await myDeliveries(await resolveTenantAccess(u2.id, f.org.slug, 'delivery.driver'))).map((o) => o.id)).toEqual([order.id]);
+    await db.restaurantMembership.updateMany({ where: { organizationId: f.org.id, role: 'DELIVERY_STAFF' }, data: { status: 'DISABLED' } });
+    await expect(assertStaffMayMoveDelivery(f.ctx, order.id, 'OUT_FOR_DELIVERY')).resolves.toBeUndefined();
   });
 
   it('cancelling a delivery requires a reason', async () => {

@@ -25,6 +25,8 @@ export type MenuDish = {
   takeaway: number | null;
   delivery: number | null;
   noStation: boolean;
+  /** Needs no preparation (handed over at the counter). */
+  noPreparation: boolean;
   allergens: boolean;
   missingTranslations: number;
 };
@@ -455,6 +457,7 @@ function DishRow({
           {p.featured && <Badge tone="lime">Featured</Badge>}
           {p.popular && <Badge>Popular</Badge>}
           {p.noStation && <Badge tone="warning">No station</Badge>}
+          {p.noPreparation && <Badge tone="info">No preparation</Badge>}
           {p.allergens && <Badge tone="info">Allergens</Badge>}
           {p.missingTranslations > 0 && <Badge>{p.missingTranslations} translations required</Badge>}
         </div>

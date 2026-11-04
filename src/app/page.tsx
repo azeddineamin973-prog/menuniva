@@ -1,73 +1,152 @@
-import Link from 'next/link';
-import { Logo, LogoMark } from '@/components/brand/logo';
-import { ButtonLink } from '@/components/ui';
+import type { Metadata } from 'next';
+import { EveryLanguage, EveryOrder, Facts, Kitchen, OneMenu } from '@/components/landing/chapters';
+import { Faq, type FaqItem } from '@/components/landing/faq';
+import { AroundTheMeal, HowItWorks } from '@/components/landing/features';
+import { FinalCta, SiteFooter } from '@/components/landing/footer';
+import { SiteHeader } from '@/components/landing/header';
+import { Hero } from '@/components/landing/hero';
+import { toPlanCards, type PlanRow } from '@/components/landing/plans';
+import { Pricing } from '@/components/landing/pricing';
+import type { Cta } from '@/components/landing/ui';
+import { getCurrentUser } from '@/server/auth/session';
+import { db } from '@/server/db';
+import { env } from '@/server/env';
+import { DEFAULT_PLANS } from '@/server/services/plans';
+import { CONFIG_DEFAULTS, getPlatformConfig, type PlatformConfigValues } from '@/server/services/platform-config';
 
-const FEATURES = [
-  ['QR table ordering', 'Guests scan, browse in their language and order from the table. No app download, no customer login.'],
-  ['Kitchen & café displays', 'Each order is split by station. Food goes to the kitchen, tea to the café, and the order is ready only when every station is.'],
-  ['Takeaway & own delivery', 'Pickup slots, postal-code delivery zones for Portugal and Spain, and a simple staff delivery view.'],
-  ['Five languages', 'Português, English, Français, العربية (right-to-left) and Español, with a translation review step before publishing.'],
-  ['Menu Import Studio', 'Bring your menu from CSV, Excel, PDF or pasted text, review every item, then publish. Nothing is published without your confirmation.'],
-  ['Private feedback', 'Guests rate their visit privately. The Google review link is shown to every guest, whatever their rating.'],
-];
+export const dynamic = 'force-dynamic';
 
-export default function HomePage() {
+const DESCRIPTION =
+  'One menu for QR table ordering, takeaway, your own delivery and WhatsApp orders, with kitchen and café displays, reservations and private guest feedback, in five languages. Made for restaurants in Portugal and Spain.';
+
+export const metadata: Metadata = {
+  description: DESCRIPTION,
+  alternates: { canonical: `${env.APP_BASE_URL}/` },
+  openGraph: { type: 'website', siteName: 'MenuNiva', url: `${env.APP_BASE_URL}/`, title: 'MenuNiva — One Menu. Every Order. Every Language.', description: DESCRIPTION },
+};
+
+/**
+ * Active plans as configured in Super Admin. Before any plan exists the defaults are shown (they are
+ * what the platform creates first); if the database cannot be read, the plan cards are left out.
+ */
+async function loadPlans(): Promise<PlanRow[] | null> {
+  try {
+    const rows = await db.subscriptionPlan.findMany({
+      orderBy: { sortOrder: 'asc' },
+      select: { code: true, name: true, description: true, monthlyPriceCents: true, currency: true, limits: true, features: true, isActive: true },
+    });
+    if (rows.length === 0) return DEFAULT_PLANS.map((p) => ({ ...p, currency: 'EUR', features: [...p.features] }));
+    return rows.filter((p) => p.isActive);
+  } catch {
+    return null;
+  }
+}
+
+/** The one main action: open the dashboard, start the trial, or (registrations paused) get in touch. */
+function mainCta(signedIn: boolean, config: PlatformConfigValues): Cta {
+  if (signedIn) return { href: '/dashboard', label: 'Open your dashboard', short: 'Dashboard' };
+  if (config.signupsOpen) return config.defaultTrialDays > 0 ? { href: '/signup', label: 'Start free trial', short: 'Free trial' } : { href: '/signup', label: 'Create your account', short: 'Sign up' };
+  if (config.supportEmail) return { href: `mailto:${config.supportEmail}`, label: 'Contact us', short: 'Contact' };
+  return { href: '/login', label: 'Sign in', short: 'Sign in' };
+}
+
+function faqItems(config: PlatformConfigValues, trialDays: number, manualBilling: boolean): FaqItem[] {
+  const items: FaqItem[] = [
+    { q: 'Do guests need an app or an account?', a: 'No. Guests scan the QR code on their table and order in the browser. There is no app to install and no customer login.' },
+    {
+      q: 'How do guests pay?',
+      a: 'At your restaurant: at the counter, to the waiter, or in cash or by card on delivery. MenuNiva records each payment and lets you split bills. Online payment needs a separate payment provider.',
+    },
+    {
+      q: 'Does MenuNiva take a commission on orders?',
+      a: 'No. MenuNiva is a monthly subscription. There is no commission on orders through your own MenuNiva channels: table QR, takeaway, delivery and WhatsApp.',
+    },
+    {
+      q: 'Which languages can guests use?',
+      a: (
+        <>
+          Português (Portugal), English, Français,{' '}
+          <bdi lang="ar" dir="rtl">
+            العربية
+          </bdi>{' '}
+          and Español, with Arabic shown right-to-left. Translations stay hidden from guests until you have reviewed them; until then guests see your original text.
+        </>
+      ),
+    },
+    {
+      q: 'Can I import my current menu?',
+      a: 'Yes. Paste a Glovo store link, or upload an Uber Eats export, an Excel or CSV file, a PDF or plain text. You review every dish, price and allergen before anything is published.',
+    },
+    {
+      q: 'What equipment do I need?',
+      a: 'A phone, tablet or computer with a web browser. Kitchen and café displays run in the browser on any tablet, laptop or TV, and tickets print from the browser or as PDF.',
+    },
+    {
+      q: 'Can I keep selling on Glovo and Uber Eats?',
+      a: 'Yes. Import your menu from them and link to your store pages from your MenuNiva page. Orders placed on those platforms stay on those platforms.',
+    },
+    {
+      q: 'Are MenuNiva receipts invoices?',
+      a: 'No. MenuNiva receipts are not legal invoices. Certified invoicing in Portugal and Spain needs a certified invoicing provider.',
+    },
+    {
+      q: 'How is guest data handled?',
+      a: 'Each restaurant chooses how long guest contact details are kept, and older details are erased automatically. A guest’s data can be exported or erased on request.',
+    },
+  ];
+  if (trialDays > 0) {
+    const during = config.trialIncludesAllModules ? 'Every feature is available during the trial. ' : '';
+    const billing = manualBilling ? ' Nothing is charged automatically: billing is arranged with MenuNiva directly.' : '';
+    items.push({ q: `What happens after the ${trialDays}-day trial?`, a: `${during}When the trial ends, your restaurant keeps the features of its plan.${billing}` });
+  }
+  return items;
+}
+
+export default async function HomePage() {
+  const [planRows, config, user] = await Promise.all([loadPlans(), getPlatformConfig().catch(() => CONFIG_DEFAULTS), getCurrentUser().catch(() => null)]);
+  const signedIn = user !== null;
+  const cta = mainCta(signedIn, config);
+  // Trial wording only where it is true: registrations open and a trial length set.
+  const trialDays = config.signupsOpen ? config.defaultTrialDays : 0;
+  const manualBilling = env.BILLING_PROVIDER === 'manual';
+
+  const perks = [
+    ...(trialDays > 0 && !signedIn ? [`${trialDays}-day free trial`] : []),
+    ...(manualBilling && config.signupsOpen && !signedIn ? ['No card required'] : []),
+    '0% commission on your own channels',
+  ];
+  const trialNote =
+    trialDays > 0 && !signedIn
+      ? [`${trialDays}-day free trial`, config.trialIncludesAllModules ? 'every feature included' : null, manualBilling ? 'no card required' : null].filter(Boolean).join(' · ')
+      : null;
+  const signIn = { href: '/login', label: 'Sign in' };
+  const showSignIn = !signedIn && cta.href !== '/login';
+  const account = signedIn
+    ? [{ href: '/dashboard', label: 'Dashboard' }, { href: '/account', label: 'My account' }]
+    : [...(config.signupsOpen ? [{ href: '/signup', label: trialDays > 0 ? 'Start free trial' : 'Create account' }] : []), { href: '/login', label: 'Sign in (owners and staff)' }];
+
   return (
-    <div className="min-h-dvh bg-bg">
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 sm:px-6 sm:py-5">
-        <Logo />
-        <nav className="flex items-center gap-1 sm:gap-2">
-          {/* The hero repeats "Sign in", so the smallest phones keep just the trial button here. */}
-          <ButtonLink href="/login" variant="ghost" className="px-3! max-[359px]:hidden">Sign in</ButtonLink>
-          <ButtonLink href="/signup" className="px-3! sm:px-4!">
-            <span className="sm:hidden">Free trial</span>
-            <span className="hidden sm:inline">Start free trial</span>
-          </ButtonLink>
-        </nav>
-      </header>
-
-      <section className="mx-auto max-w-6xl px-4 pt-6 pb-16 sm:px-6 sm:pt-10 sm:pb-20">
-        <div className="relative overflow-hidden rounded-[2rem] bg-graphite px-6 py-12 text-white sm:px-14 sm:py-20">
-          <div aria-hidden className="absolute -end-20 -top-20 h-72 w-72 rounded-full bg-lime/15 blur-3xl" />
-          <LogoMark className="mb-8 h-14 w-14" />
-          <h1 className="max-w-3xl text-4xl leading-[1.08] font-semibold tracking-tight sm:text-6xl">
-            One Menu. Every Order. <span className="text-lime">Every Language.</span>
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            MenuNiva is the restaurant platform for table QR ordering, takeaway, your own delivery, kitchen displays,
-            reservations and private guest feedback — built for restaurants in Portugal and Spain.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <ButtonLink href="/signup" size="lg">Register your restaurant</ButtonLink>
-            <ButtonLink href="/login" size="lg" variant="secondary" className="border-white/15 bg-white/5 text-white hover:bg-white/10">
-              Sign in
-            </ButtonLink>
-          </div>
-          <p className="mt-6 text-sm text-white/50">
-            Monthly subscription. MenuNiva takes no commission on orders placed through your own MenuNiva channels.
-          </p>
-        </div>
-      </section>
-
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-20 sm:grid-cols-2 sm:px-6 sm:pb-24 lg:grid-cols-3">
-        {FEATURES.map(([title, body]) => (
-          <div key={title} className="rounded-[var(--radius-card)] border border-line bg-surface p-6">
-            <div className="mb-4 h-1.5 w-10 rounded-full bg-lime" />
-            <h2 className="font-semibold">{title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
-          </div>
-        ))}
-      </section>
-
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:px-6">
-          <span>© MenuNiva</span>
-          <span>
-            Payments are taken at the restaurant. Online payments and certified invoicing require separate providers.
-          </span>
-          <Link href="/login" className="inline-flex min-h-10 items-center hover:text-ink">Staff sign in</Link>
-        </div>
-      </footer>
+    // English page: left-to-right even when the visitor chose Arabic elsewhere (the cookie sets
+    // dir="rtl" on <html>). `relative` makes the clip also contain absolutely positioned children.
+    <div dir="ltr" lang="en" className="mn-landing relative min-h-dvh overflow-x-clip bg-bg text-ink">
+      <a href="#main" className="sr-only z-50 rounded-lg bg-graphite px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:start-4 focus:top-3">
+        Skip to content
+      </a>
+      <SiteHeader cta={cta} showSignIn={showSignIn} />
+      <main id="main">
+        <Hero cta={cta} perks={perks} />
+        <Facts />
+        <OneMenu />
+        <EveryOrder />
+        <Kitchen />
+        <EveryLanguage />
+        <AroundTheMeal />
+        <HowItWorks cta={cta} />
+        <Pricing plans={planRows && toPlanCards(planRows)} cta={cta} trialNote={trialNote} />
+        <Faq items={faqItems(config, trialDays, manualBilling)} supportEmail={config.supportEmail} />
+        <FinalCta cta={cta} perks={perks} secondary={showSignIn ? signIn : null} />
+      </main>
+      <SiteFooter account={account} supportEmail={config.supportEmail} />
     </div>
   );
 }

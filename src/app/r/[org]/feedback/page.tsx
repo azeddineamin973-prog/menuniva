@@ -5,7 +5,7 @@ import { getMessages } from '@/i18n';
 import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
 import { feedbackLocation, googleReviewLinkFor } from '@/server/services/feedback';
-import { resolveGuestLanguage } from '@/server/services/storefront';
+import { guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
 import { FeedbackForm } from './feedback-form';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,7 @@ export default async function FeedbackPage({ params, searchParams }: { params: P
   const google = await googleReviewLinkFor(location.id);
   const enabled = org.settings?.feedbackEnabled ?? true;
   return (
-    <StorefrontShell branding={branding} restaurantName={org.name} subtitle={m.customer.leaveFeedback} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
+    <StorefrontShell branding={branding} restaurantName={org.name} subtitle={m.customer.leaveFeedback} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy} homeHref={`/r/${org.slug}${sp.l ? `/${encodeURIComponent(sp.l)}` : ''}${guestQuery({}, { lang: sp.lang === lang ? lang : null })}`} homeLabel={m.ordering.backToMenu}>
       <div className="mx-auto max-w-lg space-y-6 px-4 py-6">
         {enabled && (
           <>

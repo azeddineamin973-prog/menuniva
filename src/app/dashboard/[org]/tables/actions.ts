@@ -5,6 +5,7 @@ import { runTenantAction } from '@/server/action';
 import { removeDiningArea, saveFloorPlan } from '@/server/services/floor-plan';
 import { createTables, expandTableLabels, rotateTableQr, saveArea, saveStation, routeProducts, updateTable } from '@/server/services/tables';
 import { assignCategoryStations, createStations } from '@/server/services/station-assign';
+import { NO_PREPARATION } from '@/server/services/routing';
 
 const R = { revalidate: '/dashboard/[org]' };
 
@@ -91,27 +92,41 @@ export async function saveStationAction(_p: ActionResult, form: FormData) {
   return runTenantAction(
     form.get('org'),
     'stations.manage',
-    (ctx) => saveStation(ctx, { id: form.get('id') || undefined, locationId: form.get('locationId'), name: form.get('name'), type: form.get('type'), isActive: form.get('isActive') !== 'off' }),
+    (ctx) =>
+      saveStation(ctx, {
+        id: form.get('id') || undefined,
+        locationId: form.get('locationId'),
+        name: form.get('name'),
+        type: form.get('type'),
+        isActive: form.get('isActive') !== 'off',
+        confirmDependents: form.get('confirmDependents') === 'on',
+      }),
     R,
   );
 }
 
 export async function routeProductsAction(_p: ActionResult, form: FormData) {
-  return runTenantAction(form.get('org'), 'stations.manage', (ctx) => routeProducts(ctx, (form.get('stationId') as string) || null, form.getAll('productIds').map(String)), R);
+  return runTenantAction(
+    form.get('org'),
+    'stations.manage',
+    (ctx) => routeProducts(ctx, (form.get('stationId') as string) || null, form.getAll('productIds').map(String), (form.get('locationId') as string) || undefined),
+    R,
+  );
 }
 
 /**
  * Sets the default station of many categories in one submit. The form posts one
  * `station:<categoryId>` field per row, so unchanged rows are still sent and the owner's review
- * is applied exactly as they left it.
+ * is applied exactly as they left it. NO_PREPARATION marks the category as needing none.
  */
 export async function assignCategoryStationsAction(_p: ActionResult, form: FormData) {
-  const assignments: { categoryId: string; stationId: string | null }[] = [];
+  const assignments: { categoryId: string; stationId: string | null; noPreparation: boolean }[] = [];
   for (const [key, value] of form.entries()) {
     if (!key.startsWith('station:')) continue;
-    assignments.push({ categoryId: key.slice('station:'.length), stationId: typeof value === 'string' && value ? value : null });
+    const v = typeof value === 'string' ? value : '';
+    assignments.push({ categoryId: key.slice('station:'.length), stationId: v && v !== NO_PREPARATION ? v : null, noPreparation: v === NO_PREPARATION });
   }
-  return runTenantAction(form.get('org'), 'stations.manage', (ctx) => assignCategoryStations(ctx, { assignments }), R);
+  return runTenantAction(form.get('org'), 'stations.manage', (ctx) => assignCategoryStations(ctx, { assignments, locationId: (form.get('locationId') as string) || undefined }), R);
 }
 
 export async function createStationsAction(_p: ActionResult, form: FormData) {

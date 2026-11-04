@@ -13,6 +13,9 @@ import { awaitFreshWindow } from '../support/rate-window';
  * other, while one abusive client is still stopped.
  */
 const WIFI = 'ip_restaurant-public-address';
+// awaitFreshWindow may wait up to 60 s for the next limit window before the test starts filling it; the
+// default 30 s test timeout made these tests fail whenever they ran in the last minute of a window.
+const WAITS_FOR_WINDOW = 120_000;
 async function tables(f: Awaited<ReturnType<typeof createOrderingFixture>>, n: number) {
   const out = [f.qrToken];
   for (let i = 1; i < n; i++) {
@@ -46,6 +49,8 @@ describe('public order throttling (audit BUG-05)', () => {
 
   it('a client that keeps deleting its cookie is still stopped by the per-IP limit and the overflow is reported', async () => {
     const f = await createOrderingFixture();
+    // Throttling under test, not the pending-approval cap (secure-table-sessions.test.ts covers that).
+    await db.restaurantLocation.update({ where: { id: f.location.id }, data: { tablePendingOrderCap: 50 } });
     const qr = await tables(f, 6);
     const ipLimit = TABLE_ORDER_LIMITS.ip[0];
     // 150 orders take a few seconds; 60 s of window left is ample headroom.
@@ -55,15 +60,16 @@ describe('public order throttling (audit BUG-05)', () => {
     const abuse = await db.errorLog.findMany({ where: { source: 'abuse' } });
     expect(abuse.map((a) => a.message)).toEqual([expect.stringContaining('Rate limit exceeded')]);
     expect(JSON.stringify(abuse)).not.toContain('attacker-real-ip');
-  });
+  }, WAITS_FOR_WINDOW);
 
   it('without a trusted IP (no proxy configured) the per-table limit still caps one table', async () => {
     const f = await createOrderingFixture();
+    await db.restaurantLocation.update({ where: { id: f.location.id }, data: { tablePendingOrderCap: 50 } });
     const [limit] = TABLE_ORDER_LIMITS.table;
     await awaitFreshWindow(TABLE_ORDER_LIMITS.table[1], 60_000);
     for (let i = 0; i < limit; i++) await order(f.qrToken, { guest: `g_anon${i}`, ip: null }, f);
     await expect(order(f.qrToken, { guest: 'g_anon-x', ip: null }, f)).rejects.toBeInstanceOf(RateLimitError);
-  });
+  }, WAITS_FOR_WINDOW);
 
   it('retrying with the same idempotency key never consumes the limit nor creates a second order', async () => {
     const f = await createOrderingFixture();
@@ -71,6 +77,8 @@ describe('public order throttling (audit BUG-05)', () => {
     const body = { qrToken: f.qrToken, idempotencyKey: key, language: 'pt', items: [{ productId: f.dish.id, quantity: 1, modifiers: [] }] };
     for (let i = 0; i < 25; i++) await submitTableOrder(body, { guest: 'g_retry', ip: WIFI });
     expect(await db.order.count({ where: { organizationId: f.org.id } })).toBe(1);
+    // The 25 retries used none of the phone's 10 orders per 10 minutes: its next order goes through.
+    await expect(submitTableOrder({ ...body, idempotencyKey: randomUUID() }, { guest: 'g_retry', ip: WIFI })).resolves.toMatchObject({ duplicate: false });
   });
 
   it('takeaway: many guests from one Wi-Fi are fine; one phone number is capped', async () => {
@@ -82,5 +90,5 @@ describe('public order throttling (audit BUG-05)', () => {
     await awaitFreshWindow(3600, 60_000);
     for (let i = 0; i < 8; i++) await pickup(100 + i, '+351 912 345 678');
     await expect(pickup(200, '+351912345678')).rejects.toBeInstanceOf(RateLimitError);
-  });
+  }, WAITS_FOR_WINDOW);
 });

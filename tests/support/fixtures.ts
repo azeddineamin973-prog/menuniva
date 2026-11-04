@@ -47,6 +47,9 @@ export async function createOrderingFixture(name = 'Test Restaurant') {
   });
   const area = await db.diningArea.create({ data: { organizationId: org.id, locationId: location.id, name: 'Test area' } });
   const table = await db.restaurantTable.create({ data: { organizationId: org.id, locationId: location.id, areaId: area.id, label: '05', qrTokens: { create: { token: `qr_${org.id}_05`.slice(0, 40) } } }, include: { qrTokens: true } });
-  await db.restaurantLocation.update({ where: { id: location.id }, data: { isPublished: true, tableOrderingEnabled: true, takeawayEnabled: true, deliveryEnabled: true } });
+  // As an existing restaurant after the migration (open table ordering, pending cap 50): the pricing,
+  // kitchen, bill and payment suites test those flows, not table access. New locations default to SESSION_PIN, covered by
+  // tests/integration/secure-table-sessions.test.ts.
+  await db.restaurantLocation.update({ where: { id: location.id }, data: { isPublished: true, tableOrderingEnabled: true, takeawayEnabled: true, deliveryEnabled: true, tableOrderingPolicy: 'OPEN', tablePendingOrderCap: 50 } });
   return { owner, org, location, ctx, kitchen, cafe, dish, tea, honey: tea.modifierGroups[0].options[1], sugar: tea.modifierGroups[0].options[0], table, qrToken: table.qrTokens[0].token };
 }

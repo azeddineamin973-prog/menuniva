@@ -9,7 +9,7 @@ import { createOrderingFixture } from '../support/fixtures';
 /** Local fixes for audit gaps GAP-04 (takeaway/delivery without hours) and GAP-05 (table limit race). */
 describe('audit gaps', () => {
   beforeEach(resetDatabase);
-  const channels = (locationId: string, extra: Record<string, boolean>) => ({ locationId, tableOrderingEnabled: true, takeawayEnabled: false, deliveryEnabled: false, reservationsEnabled: false, whatsappOrderingEnabled: false, orderingPaused: false, tableCodeRequired: false, ...extra });
+  const channels = (locationId: string, extra: Record<string, boolean>) => ({ locationId, tableOrderingEnabled: true, takeawayEnabled: false, deliveryEnabled: false, reservationsEnabled: false, whatsappOrderingEnabled: false, orderingPaused: false, tableOrderingPolicy: 'OPEN', tablePendingOrderCap: 15, ...extra });
 
   it('GAP-04: takeaway/delivery cannot be switched on or published without any hours', async () => {
     const f = await createOrderingFixture();

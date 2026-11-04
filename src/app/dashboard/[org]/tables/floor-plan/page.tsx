@@ -62,7 +62,7 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ org:
         </p>
       )}
       {reservations && (
-        <section className="mb-5 space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4" aria-labelledby="assignment-title" data-testid="booking-mode">
+        <section className="mb-4 space-y-2.5 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3" aria-labelledby="assignment-title" data-testid="booking-mode">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="assignment-title" className="text-sm font-semibold text-ink">
               Online bookings and tables
@@ -78,7 +78,18 @@ export default async function FloorPlanPage({ params }: { params: Promise<{ org:
           )}
         </section>
       )}
-      <FloorPlanEditor org={ctx.org.slug} locationId={location.id} areas={plan.areas} tables={plan.tables} canEdit={ctx.can('tables.manage')} guestStyle={guestStyle} guestMap={reservations && mode === 'guest'} />
+      <FloorPlanEditor
+        org={ctx.org.slug}
+        locationId={location.id}
+        areas={plan.areas}
+        tables={plan.tables}
+        canEdit={ctx.can('tables.manage')}
+        guestStyle={guestStyle}
+        guestMap={reservations && mode === 'guest'}
+        reservationsOn={reservations}
+        reservationsEnabled={location.reservationsEnabled}
+        canSetMode={ctx.can('settings.manage')}
+      />
     </>
   );
 }

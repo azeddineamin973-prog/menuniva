@@ -79,12 +79,18 @@ async function orderByToken(token: string) {
 }
 
 /** What the guest's order page shows about loyalty. Never exposes the phone number. */
-export async function loyaltyForOrder(token: string, lang: LanguageCode) {
+export async function loyaltyForOrder(token: string, language: LanguageCode | Promise<LanguageCode>) {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
   const order = await orderByToken(token);
   if (!order) return null;
-  const [program, org] = await Promise.all([db.loyaltyProgram.findUnique({ where: { organizationId: order.organizationId } }), db.restaurantOrganization.findUniqueOrThrow({ where: { id: order.organizationId } })]);
-  if (!program?.enabled || !(await hasModule(order.organizationId, 'loyalty'))) return null;
+  const [program, org, loyaltyOn] = await Promise.all([
+    db.loyaltyProgram.findUnique({ where: { organizationId: order.organizationId } }),
+    db.restaurantOrganization.findUniqueOrThrow({ where: { id: order.organizationId } }),
+    hasModule(order.organizationId, 'loyalty'),
+  ]);
+  if (!program?.enabled || !loyaltyOn) return null;
+  // The guest's language may still be resolving (order page): only the reward text needs it.
+  const lang = await language;
   const account = order.loyaltyAccount && !order.loyaltyAccount.deletedAt ? order.loyaltyAccount : null;
   if (account) await expireLoyalty(order.organizationId, new Date(), account.id);
   const fresh = account ? await db.loyaltyAccount.findUnique({ where: { id: account.id } }) : null;

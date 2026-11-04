@@ -8,29 +8,38 @@ import { limitPublic } from '../rate-limit';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { resolveTableToken } from './orders';
 
-export const tableRequestSchema = z.object({ qrToken: z.string().min(10).max(64), type: z.enum(['CALL_WAITER', 'REQUEST_BILL']) });
+export const tableRequestSchema = z.object({ qrToken: z.string().min(10).max(64), type: z.enum(['CALL_WAITER', 'REQUEST_BILL', 'OPEN_TABLE']) });
+
+const TASK_TITLE = { CALL_WAITER: 'Waiter called', REQUEST_BILL: 'Bill requested', OPEN_TABLE: 'Guests ask to open the table' } as const;
 
 /**
- * "Call waiter" / "Request the bill" from the table. Creates a visible staff task.
- * Duplicate open requests of the same type for a table are merged (not repeated).
- * This does not create an invoice.
+ * "Call waiter", "Request the bill" or "Please open my table" from the table. Creates a visible
+ * staff task. Duplicate open requests of the same type for a table are merged (not repeated), also
+ * when several phones ask at the same moment: the check and the insert run under a transaction-level
+ * advisory lock on (table, type) (audit V9, Q20). This does not create an invoice.
  */
 export async function createTableRequest(input: unknown, client: string | ClientIdentity) {
   const d = tableRequestSchema.parse(input);
   const table = await resolveTableToken(d.qrToken);
   if (!table || !table.location.isPublished) throw new UserFacingError('qr_invalid', 404);
-  const countForTable = await limitPublic(`table-request:${table.id}`, asIdentity(client), { guest: [6, 600], ip: [60, 600], scope: { key: 'table', limit: [30, 600] } });
-  const existing = await db.staffTask.findFirst({ where: { tableId: table.id, type: d.type, status: { in: ['OPEN', 'ACKNOWLEDGED'] } } });
-  if (existing) return { taskId: existing.id, duplicate: true };
-  const session = await db.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' } });
-  const task = await db.staffTask.create({
-    data: { organizationId: table.organizationId, locationId: table.locationId, tableId: table.id, tableSessionId: session?.id ?? null, type: d.type },
+  const countForTable = await limitPublic(`table-request:${table.id}`, asIdentity(client), { guest: [6, 600], ip: [60, 600], cookieless: [20, 600], scope: { key: 'table', limit: [30, 600] } });
+  const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`table-request:${table.id}:${d.type}`}))::text`;
+    const session = await tx.tableSession.findFirst({ where: { tableId: table.id, status: 'OPEN' }, select: { id: true } });
+    // An open table needs no "open my table" request: the guest can order (or enter the PIN) now.
+    if (d.type === 'OPEN_TABLE' && session) return { taskId: null, duplicate: true, alreadyOpen: true };
+    const existing = await tx.staffTask.findFirst({ where: { tableId: table.id, type: d.type, status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, select: { id: true } });
+    if (existing) return { taskId: existing.id, duplicate: true, alreadyOpen: false };
+    const task = await tx.staffTask.create({
+      data: { organizationId: table.organizationId, locationId: table.locationId, tableId: table.id, tableSessionId: session?.id ?? null, type: d.type },
+    });
+    await tx.notification.create({
+      data: { organizationId: table.organizationId, locationId: table.locationId, type: 'STAFF_TASK', title: `${TASK_TITLE[d.type]} — table ${table.label}`, entityId: task.id },
+    });
+    return { taskId: task.id, duplicate: false, alreadyOpen: false };
   });
-  await db.notification.create({
-    data: { organizationId: table.organizationId, locationId: table.locationId, type: 'STAFF_TASK', title: `${d.type === 'CALL_WAITER' ? 'Waiter called' : 'Bill requested'} — table ${table.label}`, entityId: task.id },
-  });
-  await countForTable().catch((e) => logError('rate-limit-count', e));
-  return { taskId: task.id, duplicate: false };
+  if (!result.duplicate) await countForTable().catch((e) => logError('rate-limit-count', e));
+  return result;
 }
 
 export async function listOpenTasks(ctx: TenantContext, locationId: string) {

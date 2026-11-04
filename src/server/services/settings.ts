@@ -140,7 +140,10 @@ export const channelSettingsSchema = z.object({
   reservationsEnabled: bool,
   whatsappOrderingEnabled: bool,
   orderingPaused: bool,
-  tableCodeRequired: bool,
+  // One table-ordering security policy per location (OPEN | SESSION | SESSION_PIN).
+  // Absent (an older form or a script): left as it is.
+  tableOrderingPolicy: z.enum(['OPEN', 'SESSION', 'SESSION_PIN']).optional(),
+  tablePendingOrderCap: z.coerce.number().int().min(1).max(50).optional(),
   ...locationLinksSchema.shape,
   googleReviewUrl: googleReviewUrlSchema,
 });
@@ -151,7 +154,7 @@ export async function updateChannelSettings(ctx: TenantContext, input: unknown) 
   const { locationId, googleReviewUrl, ...rest } = data;
   // Without any hours, takeaway/delivery would accept orders at any time of day and night
   // (audit GAP-04). Hours are entered by the restaurant, never assumed.
-  const hours = await db.restaurantLocation.findUniqueOrThrow({ where: { id: locationId }, select: { openingHours: true, takeawaySettings: { select: { pickupHours: true } }, deliverySettings: { select: { deliveryHours: true } } } });
+  const hours = await db.restaurantLocation.findUniqueOrThrow({ where: { id: locationId }, select: { openingHours: true, tableOrderingPolicy: true, takeawaySettings: { select: { pickupHours: true } }, deliverySettings: { select: { deliveryHours: true } } } });
   if (rest.takeawayEnabled && !hours.openingHours && !hours.takeawaySettings?.pickupHours) throw new UserFacingError('Enter your opening hours (Settings) or pickup hours (Takeaway) before turning on takeaway.');
   if (rest.deliveryEnabled && !hours.openingHours && !hours.deliverySettings?.deliveryHours) throw new UserFacingError('Enter your opening hours (Settings) or delivery hours (Delivery) before turning on delivery.');
   await db.$transaction(async (tx) => {
@@ -159,6 +162,8 @@ export async function updateChannelSettings(ctx: TenantContext, input: unknown) 
       where: { id: locationId },
       data: {
         ...rest,
+        // Kept in step for one release so a code rollback keeps tables closed rather than open.
+        ...(rest.tableOrderingPolicy ? { tableCodeRequired: rest.tableOrderingPolicy !== 'OPEN' } : {}),
         glovoUrl: rest.glovoUrl ?? null,
         uberEatsUrl: rest.uberEatsUrl ?? null,
         websiteUrl: rest.websiteUrl ?? null,
@@ -178,6 +183,9 @@ export async function updateChannelSettings(ctx: TenantContext, input: unknown) 
       data: { onboardingData: { ...((org.onboardingData as object) ?? {}), channelsSaved: true } },
     });
     await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'settings.channels_updated', entityType: 'RestaurantLocation', entityId: locationId }, tx);
+    if (rest.tableOrderingPolicy && hours.tableOrderingPolicy !== rest.tableOrderingPolicy) {
+      await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'settings.table_policy_changed', entityType: 'RestaurantLocation', entityId: locationId, metadata: { from: hours.tableOrderingPolicy, to: rest.tableOrderingPolicy } }, tx);
+    }
   });
 }
 

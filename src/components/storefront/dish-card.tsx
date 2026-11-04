@@ -5,96 +5,133 @@ import { cn } from '@/lib/cn';
 import type { PublicProduct } from '@/server/services/public-menu';
 import { MediaImage } from '@/components/ui/media-image';
 
-type Labels = { from: string; soldOut: string; unavailable: string; popular: string; add: string };
-
-/** Dietary/feature tags worth showing on a card, recognised in the languages MenuNiva supports. */
-const TAG_STYLE: { match: RegExp; icon?: 'flame' }[] = [{ match: /^(spicy|picante|piquant|épicé|حار)/i, icon: 'flame' }, { match: /./ }];
+type Labels = { from: string; soldOut: string; unavailable: string; popular: string; add: string; quickAdd: string; remove1: string; add1: string };
 
 export function lowestPrice(p: PublicProduct) {
   return p.priceCents + Math.min(0, ...p.variants.map((v) => v.priceDeltaCents));
 }
 
 /**
- * Dish card. Phones: one row, text first and a large photo on the side (easy to scan with a
- * thumb). From `sm`: a photo-first card in a grid. The whole card opens the dish sheet.
+ * Product tile, shop style: photo on top, name and price below, two per row on phones.
+ * The control on the photo adds the dish at once when there is nothing to choose; once it is in
+ * the order it becomes − n +. Dishes with sizes or required choices open their sheet instead.
+ * Shows only what the restaurant entered: no invented badges, times or prices.
  */
-export function DishCard({ p, money, labels, canOrder, onOpen, priority = false }: { p: PublicProduct; money: (c: number) => string; labels: Labels; canOrder: boolean; onOpen: () => void; priority?: boolean }) {
+export function DishCard({
+  p,
+  money,
+  labels,
+  canOrder,
+  onOpen,
+  onQuickAdd,
+  onRemoveOne,
+  simple = false,
+  priority = false,
+  count = 0,
+}: {
+  p: PublicProduct;
+  money: (c: number) => string;
+  labels: Labels;
+  canOrder: boolean;
+  onOpen: () => void;
+  onQuickAdd?: () => void;
+  /** Simple dishes: take one back out of the order. */
+  onRemoveOne?: () => void;
+  /** No sizes and no required choices: can be added from the tile. */
+  simple?: boolean;
+  priority?: boolean;
+  count?: number;
+}) {
   const blocked = p.soldOut || !p.available;
-  const tags = p.tags.slice(0, 2);
+  const quick = !blocked && canOrder && onQuickAdd;
+  const stepper = quick && simple && count > 0 && onRemoveOne;
   return (
-    <button
-      type="button"
-      disabled={blocked}
-      onClick={onOpen}
-      className={cn(
-        'group relative flex h-full w-full gap-3 overflow-hidden rounded-2xl bg-sf-card p-3 text-start ring-1 ring-sf-text/[0.06] transition-[box-shadow,transform] duration-200',
-        'shadow-[0_1px_2px_rgb(0_0_0/0.04),0_6px_16px_-10px_rgb(0_0_0/0.18)] hover:shadow-[0_2px_4px_rgb(0_0_0/0.05),0_14px_28px_-14px_rgb(0_0_0/0.28)] active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-primary disabled:cursor-not-allowed sm:flex-col sm:gap-0 sm:p-0',
-      )}
-      data-testid="customer-product"
-    >
-      {/* Photo: side tile on phones, top of the card from sm. */}
-      <span className="relative order-last shrink-0 sm:order-first">
-        {p.imageUrl ? (
-          <MediaImage
-            src={p.imageUrl}
-            // Phones: a 112 px tile. Tablets: half the width. Desktop: a third of the 1024 px column.
-            sizes="(min-width: 1024px) 320px, (min-width: 640px) 45vw, 112px"
-            widths={[160, 320, 480, 640, 960]}
-            // 320 px is 2.9× the phone tile: 3× phones skip the 480 px copy (twice the bytes).
-            phoneWidths={[160, 320]}
-            className={cn('size-28 rounded-xl bg-sf-accent/10 object-cover sm:aspect-[4/3] sm:h-auto sm:w-full sm:rounded-none', blocked && 'grayscale-[60%]')}
-            loading={priority ? 'eager' : 'lazy'}
-            decoding="async"
-            width={320}
-            height={240}
-          />
-        ) : (
-          <NoPhoto className="size-28 rounded-xl sm:aspect-[4/3] sm:h-auto sm:w-full sm:rounded-none" />
+    <div className="group relative h-full">
+      <button
+        type="button"
+        disabled={blocked}
+        onClick={onOpen}
+        className={cn(
+          'flex h-full w-full flex-col overflow-hidden rounded-2xl bg-sf-card text-start ring-1 ring-sf-line transition-[box-shadow,transform] duration-200',
+          'hover:shadow-[var(--sf-shadow-card)] active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-primary disabled:cursor-not-allowed',
+          count > 0 && 'ring-2 ring-sf-primary/70',
         )}
-        {blocked && (
-          <span className="absolute inset-x-1.5 bottom-1.5 rounded-lg bg-black/70 px-2 py-1 text-center text-[11px] font-semibold text-white backdrop-blur-sm sm:inset-x-auto sm:start-3 sm:bottom-3">
-            {p.soldOut ? labels.soldOut : labels.unavailable}
-          </span>
-        )}
-        {!blocked && canOrder && (
-          <span
-            aria-hidden
-            className="absolute -end-1 -bottom-1 flex size-9 items-center justify-center rounded-full bg-sf-primary text-sf-on-primary shadow-md ring-[3px] ring-sf-card transition-transform group-hover:scale-105 sm:end-3 sm:bottom-3 sm:ring-0 motion-reduce:transition-none"
-          >
-            <Icon name="plus" className="size-[18px]" strokeWidth={2.4} />
-          </span>
-        )}
-      </span>
-
-      <span className="flex min-w-0 flex-1 flex-col sm:p-4">
-        <span className="flex flex-wrap items-center gap-1.5">
-          {p.isPopular && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-sf-accent/15 px-2 py-0.5 text-[11px] font-semibold">
-              <Icon name="star" className="size-3" />
+        data-testid="customer-product"
+      >
+        <span className="relative block aspect-square w-full overflow-hidden bg-sf-sunken sm:aspect-[4/3]">
+          {p.imageUrl ? (
+            <MediaImage
+              src={p.imageUrl}
+              // Two tiles per row on phones, three from tablets.
+              sizes="(min-width: 1024px) 300px, (min-width: 768px) 30vw, 50vw"
+              widths={[320, 480, 640, 960]}
+              phoneWidths={[320, 480]}
+              className={cn('h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none', blocked && 'opacity-60 grayscale-[60%]')}
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
+              width={320}
+              height={320}
+            />
+          ) : (
+            <NoPhoto className="h-full w-full" />
+          )}
+          {p.isPopular && !blocked && (
+            <span className="absolute start-2 top-2 inline-flex items-center gap-1 rounded-full bg-sf-card/95 px-2 py-1 text-[11px] font-semibold text-sf-text shadow-sm backdrop-blur">
+              <Icon name="star" className="size-3 text-sf-gold" />
               {labels.popular}
             </span>
           )}
-          {tags.map((t) => {
-            const style = TAG_STYLE.find((s) => s.match.test(t));
-            return (
-              <span key={t} className="inline-flex items-center gap-1 rounded-full bg-sf-text/[0.06] px-2 py-0.5 text-[11px] font-medium capitalize">
-                {style?.icon && <Icon name={style.icon} className="size-3" />}
-                {t}
-              </span>
-            );
-          })}
+          {blocked && (
+            <span className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1 text-center text-xs font-semibold text-white backdrop-blur-sm">{p.soldOut ? labels.soldOut : labels.unavailable}</span>
+          )}
+          {count > 0 && !stepper && (
+            <span className="absolute end-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-sf-primary px-2 text-xs font-bold text-sf-on-primary tabular-nums shadow" data-testid="dish-count">
+              {count}
+            </span>
+          )}
         </span>
-        <span className={cn('block leading-snug font-semibold break-words', (p.isPopular || tags.length > 0) && 'mt-1.5')}>{p.name}</span>
-        {p.description && <span className="mt-1 line-clamp-2 text-sm leading-snug opacity-70">{p.description}</span>}
-        <span className="mt-auto flex items-center gap-2 pt-2.5">
-          <span className="text-[15px] font-bold text-sf-primary-ink tabular-nums">
-            {p.variants.length > 1 && <span className="me-1 text-xs font-medium opacity-70">{labels.from}</span>}
+        <span className="flex flex-1 flex-col p-3 sm:p-4">
+          <span className="line-clamp-2 text-[15px] leading-snug font-semibold break-words sm:text-base">{p.name}</span>
+          {p.description && <span className="mt-1 line-clamp-1 text-[13px] leading-snug text-sf-muted sm:line-clamp-2 sm:text-sm">{p.description}</span>}
+          <span className="mt-auto pt-2.5 text-[15px] font-semibold text-sf-text tabular-nums sm:text-base">
+            {p.variants.length > 1 && <span className="me-1 text-xs font-medium text-sf-muted">{labels.from}</span>}
             {money(lowestPrice(p))}
           </span>
         </span>
-      </span>
-    </button>
+      </button>
+
+      {/* Add control, on the photo's corner (an overlay the size of the photo). */}
+      {quick && (
+        <span className="pointer-events-none absolute inset-x-0 top-0 aspect-square sm:aspect-[4/3]">
+          <span className="pointer-events-auto absolute end-2 bottom-2">
+            {stepper ? (
+              <span className="flex items-center rounded-full bg-sf-primary p-1 text-sf-on-primary shadow-[0_6px_16px_-6px_rgb(0_0_0/0.5)]" data-testid="tile-stepper">
+                <button type="button" onClick={onRemoveOne} aria-label={labels.remove1.replace('{name}', p.name)} className="flex size-9 items-center justify-center rounded-full hover:bg-black/15" data-testid="tile-dec">
+                  <Icon name={count <= 1 ? 'trash' : 'minus'} className="size-4" />
+                </button>
+                <span className="w-6 text-center text-sm font-bold tabular-nums" aria-live="polite" data-testid="tile-qty">
+                  {count}
+                </span>
+                <button type="button" onClick={onQuickAdd} aria-label={labels.add1.replace('{name}', p.name)} className="flex size-9 items-center justify-center rounded-full hover:bg-black/15" data-testid="quick-add">
+                  <Icon name="plus" className="size-4" strokeWidth={2.4} />
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onQuickAdd}
+                aria-label={labels.quickAdd.replace('{name}', p.name)}
+                className="flex size-11 items-center justify-center rounded-full bg-sf-card text-sf-primary-ink shadow-[0_6px_16px_-6px_rgb(0_0_0/0.45)] ring-1 ring-sf-line transition-transform hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-primary motion-reduce:transition-none"
+                data-testid="quick-add"
+              >
+                <Icon name="plus" className="size-5" strokeWidth={2.4} />
+              </button>
+            )}
+          </span>
+        </span>
+      )}
+    </div>
   );
 }
 

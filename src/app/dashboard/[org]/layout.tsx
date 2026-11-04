@@ -5,7 +5,7 @@ import { Badge, Icon } from '@/components/ui';
 import { ToastProvider } from '@/components/ui/toast';
 import { dirOf, getMessages, LANGUAGE_TAG } from '@/i18n';
 import { NAV_ITEMS } from '@/lib/nav';
-import { db } from '@/server/db';
+import { navStatus } from '@/server/services/nav-counts';
 import { listUserOrganizations } from '@/server/services/organizations';
 import { getSetupProgress } from '@/server/services/setup-progress';
 import { accessibleLocations, requireTenantPage } from '@/server/tenant';
@@ -20,15 +20,16 @@ export default async function DashboardLayout({ children, params }: { children: 
   const jar = await cookies();
 
   const [locations, current, modules] = await Promise.all([accessibleLocations(ctx), currentLocation(ctx), orgModules(ctx.org.id)]);
-  const scoped = ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {};
-  const [newOrders, openTasks, lowRatings, orgs, setup] = await Promise.all([
-    ctx.can('orders.view') ? db.order.count({ where: { organizationId: ctx.org.id, status: 'NEW', acknowledgedAt: null, ...scoped } }) : 0,
-    ctx.can('tasks.manage') ? db.staffTask.count({ where: { organizationId: ctx.org.id, status: 'OPEN', ...scoped } }) : 0,
-    ctx.can('reviews.view') ? db.notification.count({ where: { organizationId: ctx.org.id, type: 'LOW_RATING', readAt: null, ...scoped } }) : 0,
+  const [status, orgs, setup] = await Promise.all([
+    navStatus(ctx),
     listUserOrganizations(ctx.userId),
     ctx.can('settings.manage') ? getSetupProgress(ctx.org.id, current?.id) : null,
   ]);
 
+  const countOf = (key: string) => {
+    const v = (status as unknown as Record<string, unknown>)[key];
+    return typeof v === 'number' ? v : undefined;
+  };
   const visible = NAV_ITEMS.filter((i) => ctx.can(i.permission) && (!i.module || modules.has(i.module)));
   const toLink = (i: (typeof NAV_ITEMS)[number]): SidebarLink => ({
     href: `${base}${i.path}`,
@@ -36,17 +37,16 @@ export default async function DashboardLayout({ children, params }: { children: 
     icon: i.icon,
     label: m.nav[i.key],
     group: i.group,
-    badge: i.key === 'liveOrders' ? newOrders : i.key === 'tasks' ? openTasks : i.key === 'reviews' ? lowRatings : undefined,
+    badge: countOf(i.key),
+    badgeLevel: status.attention.byNav[i.key as keyof typeof status.attention.byNav]?.level,
   });
   const setupDone = !setup || setup.completed === setup.steps.length;
   // The setup wizard shows as a progress card while unfinished; afterwards it is reached from the account menu.
   const links = visible.filter((i) => !i.placement || i.placement === 'sidebar').map(toLink);
   const accountLinks = visible.filter((i) => i.placement === 'account' || (i.placement === 'setup' && setupDone)).map(toLink);
-  const alerts: ShellAlert[] = [
-    { key: 'orders', label: `New order${newOrders === 1 ? '' : 's'} waiting`, count: newOrders, href: `${base}/orders`, icon: 'orders' },
-    { key: 'tasks', label: 'Table requests', count: openTasks, href: `${base}/tasks`, icon: 'bell' },
-    { key: 'reviews', label: 'Low ratings to follow up', count: lowRatings, href: `${base}/reviews`, icon: 'star' },
-  ];
+  // The bell lists the attention items (orders, tickets, table and booking requests) and, besides
+  // them, what is not operational work. Keys match the counts so the shell keeps them live.
+  const alerts: ShellAlert[] = [{ key: 'reviews', label: 'Low ratings to follow up', count: status.reviews, href: `${base}/reviews`, icon: 'star' }];
 
   const lang = ctx.user.preferredLanguage;
   const role = ctx.role.replace('RESTAURANT_', '').replace('_', ' ').toLowerCase();
@@ -75,7 +75,7 @@ export default async function DashboardLayout({ children, params }: { children: 
           links={links}
           accountLinks={accountLinks}
           groupLabels={{ operate: m.staff.groupOperate, menu: m.staff.groupMenu, grow: m.staff.groupGrow, manage: m.staff.groupManage }}
-          labels={{ more: m.shell.more, openMenu: m.shell.openMenu, closeMenu: m.shell.closeMenu, restaurant: m.shell.restaurant, navigation: m.shell.navigation, quickNav: m.shell.quickNav, switchRestaurant: m.shell.switchRestaurant, short: m.shell.short }}
+          labels={{ more: m.shell.more, openMenu: m.shell.openMenu, closeMenu: m.shell.closeMenu, restaurant: m.shell.restaurant, navigation: m.shell.navigation, quickNav: m.shell.quickNav, switchRestaurant: m.shell.switchRestaurant, countsStale: m.shell.countsStale, short: m.shell.short }}
           org={{ name: ctx.org.name, slug: ctx.org.slug }}
           orgs={orgs.map((o) => ({ slug: o.organization.slug, name: o.organization.name }))}
           locations={locations.map((l) => ({ id: l.id, name: l.name }))}
@@ -83,6 +83,8 @@ export default async function DashboardLayout({ children, params }: { children: 
           user={{ name: ctx.user.name, email: ctx.user.email, role }}
           setup={setupDone || !setup ? null : { href: `${base}/setup`, completed: setup.completed, total: setup.steps.length }}
           alerts={alerts}
+          attention={status.attention}
+          attentionLabels={m.shell.attention}
           initialCollapsed={jar.get('mn_sidebar')?.value === 'collapsed'}
           signOutLabel={m.auth.signOut}
           themeLabels={{ dark: 'Dark mode', light: 'Light mode' }}

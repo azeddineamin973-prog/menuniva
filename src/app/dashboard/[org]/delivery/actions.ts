@@ -3,7 +3,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
 import { UserFacingError } from '@/server/errors';
-import { assignDriver, deleteDeliveryZone, driverUpdate, saveDeliveryZone, updateDeliverySettings, updateTakeawaySettings } from '@/server/services/fulfilment';
+import { deleteDeliveryZone, driverUpdate, saveDeliveryZone, testDeliveryAddress, updateDeliverySettings, updateTakeawaySettings, type ZoneTestResult } from '@/server/services/fulfilment';
 
 const R = { revalidate: '/dashboard/[org]' };
 const on = (f: FormData, k: string) => f.get(k) === 'on';
@@ -56,12 +56,13 @@ export async function saveZoneAction(_p: ActionResult, form: FormData) {
   );
 }
 
-export async function deleteZoneAction(_p: ActionResult, form: FormData) {
-  return runTenantAction(form.get('org'), 'delivery.manage', (ctx) => deleteDeliveryZone(ctx, String(form.get('id'))), R);
+/** Read-only: which zone and fee an address would get (Zones tab → Test an address). */
+export async function testDeliveryAddressAction(_p: ActionResult<ZoneTestResult>, form: FormData): Promise<ActionResult<ZoneTestResult>> {
+  return runTenantAction(form.get('org'), 'delivery.manage', (ctx) => testDeliveryAddress(ctx, { locationId: form.get('locationId'), postalCode: form.get('postalCode'), city: form.get('city') ?? '' }));
 }
 
-export async function assignDriverAction(_p: ActionResult, form: FormData) {
-  return runTenantAction(form.get('org'), 'delivery.manage', (ctx) => assignDriver(ctx, String(form.get('orderId')), (form.get('membershipId') as string) || null), R);
+export async function deleteZoneAction(_p: ActionResult, form: FormData) {
+  return runTenantAction(form.get('org'), 'delivery.manage', (ctx) => deleteDeliveryZone(ctx, String(form.get('id'))), R);
 }
 
 export async function driverUpdateAction(_p: ActionResult, form: FormData) {

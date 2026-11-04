@@ -6,6 +6,7 @@ node_modules/
 .next-e2e/
 .next-demo/
 .next-ux/
+.next-uxreal/
 out/
 build/
 dist/

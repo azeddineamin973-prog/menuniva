@@ -9,6 +9,8 @@ import { LANGUAGE_NATIVE_NAME } from '@/i18n/config';
 import { saveCategoryAction } from '../../actions';
 
 type T = { name: string; description: string };
+/** Same value as the server's NO_PREPARATION (that module is server-only). */
+const NO_PREPARATION = 'NO_PREPARATION';
 
 export function CategoryEditor({
   org,
@@ -36,7 +38,17 @@ export function CategoryEditor({
       <CardBody>
         <ActionForm action={saveCategoryAction} submitLabel="Save category" onSuccess={() => router.push(`${base}/menu`)}>
           <input type="hidden" name="org" value={org} />
-          <input type="hidden" name="payload" value={JSON.stringify({ id, defaultStationId: v.defaultStationId || null, isActive: v.isActive, translations: Object.fromEntries(ordered.map((l) => [l, tr(l)])) })} />
+          <input
+            type="hidden"
+            name="payload"
+            value={JSON.stringify({
+              id,
+              defaultStationId: v.defaultStationId && v.defaultStationId !== NO_PREPARATION ? v.defaultStationId : null,
+              noPreparation: v.defaultStationId === NO_PREPARATION,
+              isActive: v.isActive,
+              translations: Object.fromEntries(ordered.map((l) => [l, tr(l)])),
+            })}
+          />
           <div className="grid gap-4 md:grid-cols-2">
             {ordered.map((l) => (
               <Field key={l} label={`Name — ${LANGUAGE_NATIVE_NAME[l]}${l === source ? ' (source)' : ''}`} htmlFor={`c-${l}`} hint={l !== source && !tr(l).name ? 'Translation required' : undefined}>
@@ -48,6 +60,7 @@ export function CategoryEditor({
             <Select id="station" value={v.defaultStationId ?? ''} onChange={(e) => setV({ ...v, defaultStationId: e.target.value || null })}>
               <option value="">— none —</option>
               {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <option value={NO_PREPARATION}>No preparation — handed over at the counter</option>
             </Select>
           </Field>
           <Checkbox label="Show this category on the menu" checked={v.isActive} onChange={(e) => setV({ ...v, isActive: e.target.checked })} />

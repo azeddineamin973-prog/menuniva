@@ -20,7 +20,22 @@ import { env } from './env';
  */
 export const GUEST_COOKIE = 'mn_guest';
 const GUEST_RE = /^[A-Za-z0-9_-]{22}$/;
-export type ClientIdentity = { guest: string; ip: string | null };
+/**
+ * `ip` is a salted hash of the client's NETWORK: the full IPv4 address, or the /64 prefix of an IPv6
+ * address (one household or phone gets a whole /64 and can rotate within it freely; audit V4, Q08).
+ * `cookieless` marks a request without a valid guest cookie (its `guest` id is single-use).
+ */
+export type ClientIdentity = { guest: string; ip: string | null; cookieless?: boolean };
+
+/** Throttling key of an address: IPv4 as is, IPv6 by its /64 network (first four groups). */
+export function networkKey(ip: string): string {
+  if (isIP(ip) !== 6) return ip;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [];
+  const t = ip.includes('::') ? (tail ? tail.split(':') : []) : [];
+  const groups = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
 
 export function trustedClientIp(headers: Headers, hops = env.TRUST_PROXY_HOPS ?? 0): string | null {
   if (!hops) return null;
@@ -52,7 +67,7 @@ export function clientIdentity(req: Request): { identity: ClientIdentity; issued
   const valid = cookie && GUEST_RE.test(cookie) ? cookie : null;
   const guest = valid ?? newGuestId();
   const ip = trustedClientIp(req.headers);
-  return { identity: { guest: `g_${hash(guest)}`, ip: ip ? `ip_${hash(ip)}` : null }, issued: valid ? null : guest };
+  return { identity: { guest: `g_${hash(guest)}`, ip: ip ? `ip_${hash(networkKey(ip))}` : null, cookieless: !valid }, issued: valid ? null : guest };
 }
 
 /** Accepts the legacy string key used by scripts/tests (treated as the guest id). */

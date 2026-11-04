@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MenuApp } from '@/components/storefront/menu-app';
 import { StorefrontShell } from '@/components/storefront/shell';
 import { PreviewBanner } from '@/components/storefront/preview-banner';
-import { OpenStatus, OrderModeBar } from '@/components/storefront/order-modes';
+import { OpenStatus, OrderChoice, type OrderChoiceItem } from '@/components/storefront/order-modes';
+import { fmt } from '@/i18n/config';
+import { formatCents } from '@/lib/money';
+import { deliveryAvailability, labelPickupSlots, pickupAvailability } from '@/server/services/order-modes';
 import { isOpenAt } from '@/lib/opening-hours';
 import { zonedParts } from '@/lib/time';
 import { getMessages } from '@/i18n';
@@ -15,13 +17,13 @@ import { env } from '@/server/env';
 import { getPublicMenu } from '@/server/services/public-menu';
 import { allergyNoticeFor, canPreviewOrg, guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
 import { Icon, type IconName } from '@/components/ui/icons';
-import { StorefrontHours } from '@/components/storefront/opening-hours';
+import { footerLabels, StorefrontFooter } from '@/components/storefront/footer';
+import { loadStorefrontFooter } from '@/server/services/storefront-footer';
 import type { OpeningHours } from '@/lib/opening-hours';
 
 export const dynamic = 'force-dynamic';
 
 const CHANNELS_AVAILABLE = { takeaway: true, delivery: true, reservations: true };
-const CHIP = 'inline-flex min-h-10 items-center gap-1.5 rounded-full shadow-sm bg-sf-card/70 px-3.5 font-medium ring-1 ring-sf-text/10 transition hover:bg-sf-card';
 
 type Params = { org: string; location?: string[] };
 
@@ -80,7 +82,7 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   // In preview the owner stays in preview (and in the chosen language) on every guest page.
   const keep = { preview: isPreview, lang: sp.lang === lang ? lang : null };
   const menu = await getPublicMenu(location.id, lang, 'TABLE');
-  const [review, modules] = await Promise.all([db.reviewSettings.findUnique({ where: { locationId: location.id } }), orgModules(org.id)]);
+  const modules = await orgModules(org.id);
   const base = `/r/${org.slug}${org.locations.length > 1 ? `/${location.slug}` : ''}`;
   const lq = guestQuery({ l: org.locations.length > 1 ? location.slug : null }, keep);
   const wa = location.whatsappOrderingEnabled && location.whatsappNumber ? location.whatsappNumber.replace(/[^\d]/g, '') : null;
@@ -99,8 +101,43 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   };
 
   const actions: { label: string; href: string; icon: IconName; external?: boolean; primary?: boolean }[] = [];
-  if (CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled && modules.has('takeaway')) actions.push({ label: m.customer.pickup, href: `/r/${org.slug}/order/pickup${lq}`, icon: 'bag', primary: true });
-  if (CHANNELS_AVAILABLE.delivery && location.deliveryEnabled && modules.has('delivery')) actions.push({ label: m.customer.restaurantDelivery, href: `/r/${org.slug}/order/delivery${lq}`, icon: 'truck', primary: true });
+  const o = m.ordering;
+  const tag = LANGUAGE_TAG[lang];
+  const money = (c: number) => formatCents(c, tag);
+  const choices: OrderChoiceItem[] = [];
+  const wantsPickup = CHANNELS_AVAILABLE.takeaway && location.takeawayEnabled && modules.has('takeaway');
+  const wantsDelivery = CHANNELS_AVAILABLE.delivery && location.deliveryEnabled && modules.has('delivery');
+  if (wantsPickup || wantsDelivery) {
+    // What each method looks like right now, computed exactly like the ordering page does.
+    const full = await db.restaurantLocation.findUniqueOrThrow({ where: { id: location.id }, include: { takeawaySettings: true, deliverySettings: true, deliveryZones: { where: { isActive: true } } } });
+    if (wantsPickup) {
+      const href = `/r/${org.slug}/order/pickup${lq}`;
+      actions.push({ label: o.pickupTitle, href, icon: 'bag', primary: true });
+      const pa = pickupAvailability(full);
+      const first = labelPickupSlots(pa.opts, tag, location.timeZone, o)[0];
+      choices.push({
+        key: 'pickup',
+        title: o.pickupTitle,
+        href,
+        icon: 'bag',
+        lines: [pa.opts.asap.allowed ? fmt(o.pickupReady, { minutes: pa.opts.asap.minutes }) : first ? fmt(o.pickupNext, { time: `${first.day} ${first.time}` }) : m.customer.noPickupSlots, ...(location.addressLine1 ? [[location.addressLine1, location.city].filter(Boolean).join(', ')] : [])],
+        unavailable: pa.open ? undefined : o.unavailableNow,
+      });
+    }
+    if (wantsDelivery) {
+      const href = `/r/${org.slug}/order/delivery${lq}`;
+      actions.push({ label: o.deliveryTitle, href, icon: 'truck', primary: true });
+      const da = deliveryAvailability(full);
+      choices.push({
+        key: 'delivery',
+        title: o.deliveryTitle,
+        href,
+        icon: 'truck',
+        lines: [o.deliveryBy, [da.minFeeCents !== null ? fmt(o.deliveryFrom, { amount: da.minFeeCents === 0 ? m.customer.deliveryFee0 : money(da.minFeeCents) }) : null, fmt(m.customer.estimatedTime, { minutes: da.estimateMinutes })].filter(Boolean).join(' · ')],
+        unavailable: da.open ? undefined : o.unavailableNow,
+      });
+    }
+  }
   if (CHANNELS_AVAILABLE.reservations && location.reservationsEnabled && modules.has('reservations')) actions.push({ label: m.customer.reserveTable, href: `/r/${org.slug}/reserve${lq}`, icon: 'calendar' });
   if (wa) actions.push({ label: m.customer.orderViaWhatsApp, href: `/r/${org.slug}/order/whatsapp${lq}`, icon: 'phone' });
   if (location.glovoUrl) actions.push({ label: m.customer.orderOnGlovo, href: location.glovoUrl, icon: 'external', external: true });
@@ -109,85 +146,61 @@ export default async function StorefrontPage({ params, searchParams }: { params:
   const zp = zonedParts(new Date(), location.timeZone);
   // Only when hours are configured: never guess whether the restaurant is open.
   const openNow = hours && Object.keys(hours).length > 0 ? isOpenAt(hours, zp.weekday, zp.hour * 60 + zp.minute) : null;
-  const mapsHref = location.addressLine1 ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([org.name, location.addressLine1, location.postalCode, location.city].filter(Boolean).join(', '))}` : null;
+  const address = [location.addressLine1, location.city].filter(Boolean).join(', ');
+  const primary = actions.filter((a) => a.primary);
+  const others = actions.filter((a) => !a.external && !a.primary);
+  // Address, hours, ways to order and the restaurant's links: all in the footer, once.
+  const footer = await loadStorefrontFooter({ org, location, branding: org.branding, lang, m, query: lq, menuHref: `${base}${guestQuery({}, keep)}#menu` });
 
   return (
     <StorefrontShell
       branding={org.branding}
       restaurantName={org.name}
-      subtitle={[location.addressLine1, location.city].filter(Boolean).join(', ') || undefined}
+      subtitle={org.branding?.tagline ?? (location.name !== org.name ? location.name : undefined)}
       lang={lang}
       languages={org.enabledLanguages}
       poweredBy={m.common.poweredBy}
-      headerMeta={<OpenStatus open={openNow} labels={m.customer} />}
+      homeHref={`${base}${guestQuery({}, keep)}`}
+      homeLabel={m.ordering.backToMenu}
+      footer={<StorefrontFooter data={footer} labels={footerLabels(m)} />}
+      headerMeta={
+        <>
+          <OpenStatus open={openNow} labels={m.customer} />
+          {address && (
+            <span className="inline-flex items-center gap-1.5 text-sm opacity-90">
+              <Icon name="map" className="size-4" />
+              {address}
+            </span>
+          )}
+        </>
+      }
     >
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       {isPreview && <PreviewBanner />}
-      <div className="mx-auto max-w-5xl space-y-4 px-4 pt-5 sm:px-6">
-        {org.branding?.tagline && <p className="max-w-2xl font-serif text-lg leading-snug sm:text-xl">{org.branding.tagline}</p>}
-        <OrderModeBar
-          label={m.customer.howToOrder}
-          modes={[
-            ...(actions.some((a) => !a.external) ? [{ key: 'menu', label: m.customer.menu, href: `${base}${guestQuery({}, keep)}`, icon: 'book' as const, active: true }] : []),
-            ...actions.filter((a) => !a.external).map((a) => ({ key: a.href, label: a.label, href: a.href, icon: a.icon })),
-          ]}
-        />
-        {wa && <p className="text-xs opacity-60">{m.customer.whatsappOpenNote}</p>}
-        <StorefrontHours hours={(location.openingHours as OpeningHours | null) ?? null} timeZone={location.timeZone} tag={LANGUAGE_TAG[lang]} m={m.customer} />
-        {/* Contact and review links as chips: easy to hit with a thumb, unlike underlined words. */}
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden [&>*]:shrink-0" data-testid="storefront-contact">
-          {/* Other platforms (Glovo, Uber Eats): links out, kept apart from MenuNiva's own ordering. */}
-          {actions
-            .filter((a) => a.external)
-            .map((a) => (
-              <a key={a.href} href={a.href} target="_blank" rel="noopener noreferrer" className={`${CHIP} font-semibold`}>
-                {a.label}
-                <Icon name="external" className="size-3.5 opacity-70" />
-              </a>
-            ))}
-          {location.phone && (
-            <a href={`tel:${location.phone.replace(/\s/g, '')}`} className={CHIP} aria-label={`${m.customer.call} ${location.phone}`}>
-              <Icon name="phone" className="size-4" />
-              <span dir="ltr">{location.phone}</span>
-            </a>
-          )}
-          {mapsHref && (
-            <a href={mapsHref} target="_blank" rel="noopener noreferrer" className={CHIP}>
-              <Icon name="map" className="size-4" />
-              {m.customer.directions}
-            </a>
-          )}
-          {location.websiteUrl && <a href={location.websiteUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Website<Icon name="external" className="size-3.5 opacity-70" /></a>}
-          {location.instagramUrl && <a href={location.instagramUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Instagram</a>}
-          {location.facebookUrl && <a href={location.facebookUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Facebook</a>}
-          {location.tiktokUrl && <a href={location.tiktokUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>TikTok</a>}
-          {modules.has('feedback') && <Link href={`/r/${org.slug}/feedback?l=${location.slug}`} className={CHIP}>{m.customer.leaveFeedback}</Link>}
-          {review?.googleReviewUrl && <a href={review.googleReviewUrl} target="_blank" rel="noopener noreferrer" className={CHIP}>Google<Icon name="external" className="size-3.5 opacity-70" /></a>}
-        </div>
+      <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6 sm:pt-8">
+        <OrderChoice title={o.chooseTitle} items={choices} />
       </div>
-      <div id="menu">
+
+      <div id="menu" className="pt-4">
+        {primary.length > 0 && <h2 className="mx-auto max-w-5xl px-4 pt-4 font-serif text-[1.6rem] sm:px-6 sm:text-[1.9rem]">{o.ourMenu}</h2>}
         <MenuApp
           channel="TABLE"
           scope={{ orgSlug: org.slug, locationSlug: location.slug, locationId: location.id }}
           lang={lang}
-          tag={LANGUAGE_TAG[lang]}
+          tag={tag}
           menu={menu}
           canOrder={false}
           // This page is for browsing: ordering happens at a table (QR), or through one of the
-          // channels above. The notice says which, once — it used to be printed twice.
-          orderingMessage={
-            location.tableOrderingEnabled
-              ? `${m.customer.orderAtTable} — ${m.customer.scanQrAtTable}`
-              : actions.length > 0
-                ? m.customer.howToOrder
-                : undefined
-          }
-          m={{ customer: m.customer, common: m.common, allergens: m.allergens, validation: m.validation }}
+          // ways above. The notice says which, once.
+          orderingMessage={location.tableOrderingEnabled ? `${m.customer.orderAtTable} — ${m.customer.scanQrAtTable}` : primary.length === 0 && actions.length > 0 ? m.customer.howToOrder : undefined}
+          m={{ customer: m.customer, common: m.common, allergens: m.allergens, validation: m.validation, ordering: m.ordering }}
           allergyNotice={allergyNoticeFor(org.settings, lang, m.customer.allergyNoticeDefault)}
           pricesIncludeVat={org.settings?.pricesIncludeTax ?? true}
-          orderActions={actions.filter((a) => !a.external).map((a) => ({ label: a.label, href: a.href }))}
+          // Inside a dish: only the ways to order it (pickup / delivery), each opening that dish.
+          orderActions={(primary.length ? primary : others).map((a) => ({ label: a.label, href: a.href, icon: a.icon === 'bag' || a.icon === 'truck' ? a.icon : undefined }))}
         />
       </div>
+
     </StorefrontShell>
   );
 }

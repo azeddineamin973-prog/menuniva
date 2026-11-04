@@ -3,6 +3,7 @@ import type { LanguageCode, OrderChannel, PriceChannel } from '@/generated/prism
 import { isOpenAt } from '@/lib/opening-hours';
 import { zonedParts } from '@/lib/time';
 import { db } from '../db';
+import { prepRoute, ROUTING_INCLUDE, usesStations } from './routing';
 
 export const PRICE_CHANNEL: Record<OrderChannel, PriceChannel> = { TABLE: 'DINE_IN', TAKEAWAY: 'TAKEAWAY', DELIVERY: 'DELIVERY' };
 
@@ -56,28 +57,33 @@ export async function getPublicMenu(locationId: string, lang: LanguageCode, chan
   const local = zonedParts(now, location.timeZone);
   const minute = local.hour * 60 + local.minute;
 
-  const categories = await db.menuCategory.findMany({
-    where: { organizationId: location.organizationId, isActive: true, menu: { isActive: true } },
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-    include: {
-      translations: true,
-      schedules: true,
-      products: {
-        where: { status: 'ACTIVE' },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        include: {
-          translations: true,
-          prices: true,
-          images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1, where: { rightsConfirmed: true } },
-          variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
-          modifierGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } } } },
-          allergens: true,
-          locationOverrides: { where: { locationId } },
-          schedules: true,
+  const [categories, withStations] = await Promise.all([
+    db.menuCategory.findMany({
+      where: { organizationId: location.organizationId, isActive: true, menu: { isActive: true } },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        translations: true,
+        schedules: true,
+        defaultStation: ROUTING_INCLUDE.category.select.defaultStation,
+        products: {
+          where: { status: 'ACTIVE' },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            translations: true,
+            prices: true,
+            images: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], take: 1, where: { rightsConfirmed: true } },
+            variants: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } },
+            modifierGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { where: { isAvailable: true }, orderBy: { sortOrder: 'asc' } } } },
+            allergens: true,
+            locationOverrides: { where: { locationId } },
+            schedules: true,
+            station: ROUTING_INCLUDE.station,
+          },
         },
       },
-    },
-  });
+    }),
+    usesStations(locationId),
+  ]);
 
   const out: PublicCategory[] = [];
   for (const c of categories) {
@@ -100,7 +106,8 @@ export async function getPublicMenu(locationId: string, lang: LanguageCode, chan
         imageUrl: p.images[0]?.url ?? null,
         priceCents: price,
         soldOut: p.soldOut || !!override?.soldOut,
-        available: scheduleAllows(p.schedules, local.weekday, minute),
+        // Same rule as checkout: a dish no switched-on station of this location prepares cannot be ordered.
+        available: scheduleAllows(p.schedules, local.weekday, minute) && (!withStations || prepRoute({ ...p, category: c }, locationId).kind !== 'missing'),
         isFeatured: p.isFeatured,
         isPopular: p.isPopular,
         tags: p.tags,

@@ -98,14 +98,19 @@ async function main() {
   const { createRestaurant } = await import('../src/server/services/organizations');
   const { resolveTenantAccess } = await import('../src/server/tenant');
   const { submitTableOrder, changeOrderStatus } = await import('../src/server/services/orders');
-  const { recordPayment } = await import('../src/server/services/bills');
+  const { closeTableSession, openTableSession, recordPayment } = await import('../src/server/services/bills');
+  const { joinTableSession } = await import('../src/server/services/table-access');
   const { submitFeedback } = await import('../src/server/services/feedback');
 
   const password = process.env.DEMO_PASSWORD || randomBytes(9).toString('base64url');
   const passwordHash = await hashPassword(password);
-  const out: { slug: string; qrToken: string }[] = [];
+  const out: { slug: string; qrToken: string; tables: { label: string; qrToken: string }[] }[] = [];
+  // DEMO_ONLY=demo-restaurante seeds only the listed demo restaurants (comma-separated slugs).
+  // DEMO_STAFF_LANGUAGE=en gives the demo staff accounts an English dashboard (default pt).
+  const only = (process.env.DEMO_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const staffLanguage = process.env.DEMO_STAFF_LANGUAGE === 'en' ? 'en' : 'pt';
 
-  for (const t of [GENERIC, CASA_DEMO]) {
+  for (const t of [GENERIC, CASA_DEMO].filter((x) => !only.length || only.includes(x.slug))) {
     // Re-running replaces the previous demo restaurant (demo database only).
     const old = await db.restaurantOrganization.findUnique({ where: { slug: t.slug } });
     if (old) {
@@ -114,7 +119,7 @@ async function main() {
       await db.restaurantOrganization.delete({ where: { id: old.id } });
       await db.user.deleteMany({ where: { id: { in: members.map((m) => m.userId) }, email: { endsWith: '@demo.menuniva.invalid' } } });
     }
-    const mk = (role: string, name: string) => db.user.create({ data: { name: `${name} (demo)`, email: `${t.emailPrefix}${role}@demo.menuniva.invalid`, passwordHash, preferredLanguage: 'pt' } });
+    const mk = (role: string, name: string) => db.user.create({ data: { name: `${name} (demo)`, email: `${t.emailPrefix}${role}@demo.menuniva.invalid`, passwordHash, preferredLanguage: staffLanguage } });
     const owner = await mk('owner', 'Dono Demo');
     const staff = await Promise.all([mk('manager', 'Gerente Demo'), mk('waiter', 'Empregado Demo'), mk('kitchen', 'Cozinha Demo'), mk('cafe', 'Café Demo'), mk('driver', 'Estafeta Demo')]);
     const { org, location } = await createRestaurant({ name: t.name, country: 'PT', city: t.city, locationName: t.name }, { ownerUserId: owner.id, actorUserId: null, isDemo: true });
@@ -154,7 +159,7 @@ async function main() {
     }
     const areas = [];
     for (const [i, name] of t.areas.entries()) areas.push(await db.diningArea.create({ data: { organizationId: org.id, locationId: location.id, name, sortOrder: i } }));
-    const tables: { qrTokens: { token: string }[] }[] = [];
+    const tables: { id: string; label: string; qrTokens: { token: string }[] }[] = [];
     for (let n = 1; n <= t.tables; n++) {
       tables.push(
         await db.restaurantTable.create({
@@ -169,7 +174,11 @@ async function main() {
     });
     if (t.pickupPoint) await db.takeawaySettings.update({ where: { locationId: location.id }, data: { pickupPoint: t.pickupPoint } });
 
-    // A few fictitious orders so the dashboards and analytics have something to show.
+    // A few fictitious orders so the dashboards and analytics have something to show. Demo restaurants
+    // are new restaurants, so they use the default table policy for new locations (SESSION_PIN): each
+    // order goes through the real flow — staff open the table, a fictitious phone enters the PIN once,
+    // then orders. Finished seatings are paid and closed again, so tables 01 and 02 are free; table 03
+    // stays open with one order waiting for staff approval.
     const ctx = await resolveTenantAccess(owner.id, t.slug);
     const mains = t.dishes.findIndex((d) => d.cat === 'mains');
     const drink = t.dishes.findIndex((d) => d.cat === 'drinks');
@@ -178,7 +187,14 @@ async function main() {
       [1, [[mains + 1, 1], [drink, 1]], true],
       [2, [[0, 1]], false],
     ] as [number, [number, number][], boolean][]) {
-      const o = await submitTableOrder({ qrToken: tables[table].qrTokens[0].token, idempotencyKey: randomUUID(), language: 'pt', items: items.map(([p, q]) => ({ productId: products[p], quantity: q, modifiers: [] })) }, `demo-${randomUUID()}`);
+      const seating = await openTableSession(ctx, tables[table].id);
+      const phone = { guest: `demo-phone-${randomUUID()}`, ip: null };
+      const grantTokens: string[] = [];
+      if (seating.pin) {
+        const joined = await joinTableSession({ qrToken: tables[table].qrTokens[0].token, pin: seating.pin }, phone, []);
+        if ('token' in joined && joined.token) grantTokens.push(joined.token);
+      }
+      const o = await submitTableOrder({ qrToken: tables[table].qrTokens[0].token, idempotencyKey: randomUUID(), language: 'pt', items: items.map(([p, q]) => ({ productId: products[p], quantity: q, modifiers: [] })) }, phone, { grantTokens });
       const row = await db.order.findFirstOrThrow({ where: { organizationId: org.id, number: o.orderNumber } });
       if (!finish) continue;
       await changeOrderStatus(ctx, { orderId: row.id, expectedFrom: 'NEW', to: 'ACCEPTED' });
@@ -186,9 +202,10 @@ async function main() {
       await changeOrderStatus(ctx, { orderId: row.id, expectedFrom: 'ACCEPTED', to: 'READY' });
       await changeOrderStatus(ctx, { orderId: row.id, expectedFrom: 'READY', to: 'COMPLETED' });
       await recordPayment(ctx, { orderId: row.id, method: 'CASH', amountCents: row.totalCents });
+      await closeTableSession(ctx, { sessionId: seating.id });
     }
     await submitFeedback({ orgSlug: t.slug, rating: 5, comment: 'Comentário fictício (demo).', language: 'pt' }, `demo-seed-${t.slug}`);
-    out.push({ slug: t.slug, qrToken: tables[0].qrTokens[0].token });
+    out.push({ slug: t.slug, qrToken: tables[0].qrTokens[0].token, tables: tables.map((x) => ({ label: x.label, qrToken: x.qrTokens[0].token })) });
     console.log(`Demo restaurant ready: ${t.name}\n  Storefront: /r/${t.slug}\n  Table QR:   /t/${tables[0].qrTokens[0].token}\n  Logins:     ${t.emailPrefix}owner@ ${t.emailPrefix}manager@ ${t.emailPrefix}waiter@ ${t.emailPrefix}kitchen@ ${t.emailPrefix}cafe@ ${t.emailPrefix}driver@demo.menuniva.invalid`);
   }
   console.log(`Database: ${new URL(DEMO_URL).pathname.slice(1)} (fictitious data only)\nPassword for every demo login: ${password}${process.env.DEMO_PASSWORD ? ' (from DEMO_PASSWORD)' : ' (random, shown once)'}`);

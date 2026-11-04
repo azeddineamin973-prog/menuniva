@@ -103,6 +103,8 @@ describe('one client cannot use up a restaurant’s shared order allowance', () 
   });
   it('the table cap still stops a flood of real orders', async () => {
     const f = await createOrderingFixture();
+    // The hourly table cap under test; the pending-approval cap (15 by default) is covered elsewhere.
+    await db.restaurantLocation.update({ where: { id: f.location.id }, data: { tablePendingOrderCap: 50 } });
     for (let i = 0; i < TABLE_ORDER_LIMITS.table[0]; i++) await tableOrder(f, { guest: `g_t${i}`, ip: null });
     await expect(tableOrder(f, { guest: 'g_t-next', ip: null })).rejects.toBeInstanceOf(RateLimitError);
   });

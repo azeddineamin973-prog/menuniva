@@ -4,7 +4,8 @@ import pg from 'pg';
 /**
  * TEST 20: the complete Casa de Marrocos flow in the separate demo environment. The demo tenant
  * has the real layout (areas, downstairs kitchen, café, reception counter) but fictitious dishes:
- * storefront → table QR in 5 languages (Arabic RTL) → order → staff accepts → kitchen and café
+ * storefront → table QR in 5 languages (Arabic RTL) → staff open the table and read its PIN → the
+ * guest enters the PIN once and orders → staff accepts → kitchen and café
  * prepare their own items → completed → payment recorded → guest sees the real status.
  */
 const SLUG = 'casa-de-marrocos-demo';
@@ -26,7 +27,7 @@ test('TEST 20: complete Casa de Marrocos demo flow in the DEMO environment', asy
   const guest = await (await browser.newContext()).newPage();
   await guest.goto(`/r/${SLUG}`);
   await expect(guest.getByTestId('demo-environment')).toBeVisible();
-  await expect(guest.getByText('pratos e preços fictícios')).toBeVisible();
+  await expect(guest.getByTestId('storefront').locator('header').getByText('pratos e preços fictícios')).toBeVisible(); // also repeated in the footer
   await guest.goto(`/t/${qr}`);
   await expect(guest.getByTestId('table-banner')).toContainText('Mesa 01');
   for (const [lang, text] of [['en', 'Moroccan tea (demo)'], ['fr', 'Thé marocain (démo)'], ['es', 'Té marroquí (demo)'], ['ar', 'شاي مغربي (تجريبي)'], ['pt', 'Chá marroquino (demo)']] as const) {
@@ -40,15 +41,29 @@ test('TEST 20: complete Casa de Marrocos demo flow in the DEMO environment', asy
   await guest.getByTestId('add-to-cart').click();
   await guest.getByTestId('view-cart').click();
   await expect(guest.getByTestId('cart-total')).toHaveText('19,00 €'); // 16,00 + 3,00 from the server quote
-  await guest.getByTestId('submit-order').click();
-  await expect(guest).toHaveURL(/\/o\//);
-  await expect(guest.getByTestId('order-status')).toHaveAttribute('data-status', 'NEW');
+  // A demo restaurant is a new restaurant, so it uses table PINs (SESSION_PIN, the default for new
+  // restaurants): the table cannot order until staff open it, and the guest enters the PIN once.
+  await expect(guest.getByTestId('submit-order')).toBeDisabled();
 
   await page.goto('/login');
   await page.getByTestId('login-form').locator('input[name=email]').fill('casa.owner@demo.menuniva.invalid');
   await page.getByTestId('login-form').locator('input[name=password]').fill(password);
   await page.getByTestId('login-form').locator('button[type=submit]').click();
   await expect(page).not.toHaveURL(/\/login/);
+  await page.goto(`${base}/tables`);
+  await page.getByTestId('table-card').filter({ hasText: 'Table 01' }).getByTestId('open-table').click();
+  await page.getByTestId('table-pin-01-show').click();
+  const pin = (await page.getByTestId('table-pin-01-value').innerText()).trim();
+  expect(pin).toMatch(/^\d{6}$/);
+
+  await guest.reload();
+  await guest.getByTestId('view-cart').click();
+  await expect(guest.getByTestId('cart-total')).toHaveText('19,00 €');
+  await guest.getByTestId('table-pin-input').fill(pin);
+  await guest.getByTestId('submit-order').click();
+  await expect(guest).toHaveURL(/\/o\//);
+  await expect(guest.getByTestId('order-status')).toHaveAttribute('data-status', 'NEW');
+
   await page.goto(`${base}/orders`);
   await expect(page.getByText(/DEMO restaurant/)).toBeVisible();
   const card = page.getByTestId('column-new').getByTestId('order-card').filter({ hasText: 'Mesa 01' });
@@ -75,7 +90,8 @@ test('TEST 20: complete Casa de Marrocos demo flow in the DEMO environment', asy
   await guest.goto(`/r/${SLUG}/order/pickup`);
   await guest.getByTestId('customer-product').filter({ hasText: 'Chá marroquino (demo)' }).click();
   await guest.getByTestId('add-to-cart').click();
-  await guest.getByTestId('view-cart').click();
+  if (await guest.getByTestId('view-cart').isVisible()) await guest.getByTestId('view-cart').click();
+  await guest.getByTestId('go-checkout').click();
   await expect(guest.getByTestId('checkout-pickup-point')).toContainText('Balcão de receção');
 
   // Analytics in the demo shows the seeded fictitious orders plus this one, unpaid kept apart.

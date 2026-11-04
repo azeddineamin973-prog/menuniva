@@ -85,6 +85,7 @@ const PATHS = {
   zoomOut: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5M7.5 10.5h6" /></>,
   chat: <><path d="M4.5 18.5 5.6 15A7.5 7.5 0 1 1 9 18.4z" /><path d="M9 10.5h6M9 13.5h3.5" /></>,
   refresh: <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4" />,
+  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -5,19 +5,19 @@ import { Prisma } from '@/generated/prisma/client';
 import { LANGUAGES } from '@/i18n/config';
 import { rangesFor, type OpeningHours } from '@/lib/opening-hours';
 import { openingHoursSchema } from '@/lib/opening-hours-schema';
-import { isValidPostalCode, normalizePostalCode, postalCodeMatches } from '@/lib/postal';
+import { EVERYWHERE, isValidPostalCode, normalizePostalCode, parseZoneEntry, zonePatternKind, zonePatternMatches, zonePatternSpecificity } from '@/lib/postal';
 import { parseMoneyToCents } from '@/lib/money';
 import { zonedParts, zonedTimeToUtc } from '@/lib/time';
 import { audit, logError } from '../audit';
-import { db } from '../db';
+import { db, type Tx } from '../db';
 import { assertModule, hasModule } from '../modules';
 import { UserFacingError } from '../errors';
 import { asIdentity, type ClientIdentity } from '../client-identity';
 import { limitPublic, rateLimit } from '../rate-limit';
-import { syncLoyaltyForOrder } from './loyalty';
 import { canPreviewOrg } from './storefront';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { createOrderRecord, OrderRejectedError, trackingTokenFor } from './orders';
+import { recomputeOrderPayment } from './bills';
 import { cartSchema, quoteCart } from './pricing';
 import { computeDiscounts, consumeUsage } from './promotions';
 
@@ -289,18 +289,22 @@ export async function updateDeliverySettings(ctx: TenantContext, input: unknown)
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'delivery.settings_updated', entityType: 'RestaurantLocation', entityId: locationId, metadata: rest });
 }
 
-/** Validates zone patterns for the country: exact codes must be valid; prefixes end with *. */
+/**
+ * Where a zone delivers, from what the owner typed (comma, semicolon or new line separated):
+ * postal areas ("4700" = every 4700-xxx code), exact codes, towns ("Braga") or "*" for
+ * everywhere. Lenient on format; refuses only values that cannot be a postal code or a town.
+ */
 export function parseZonePatterns(country: CountryCode, raw: string): string[] {
-  const patterns = [...new Set(raw.split(/[,\n;]/).map((p) => p.trim().replace(/\s+/g, '')).filter(Boolean))];
-  if (patterns.length === 0) throw new UserFacingError('Add at least one postal code or prefix (e.g. 4700-* or 4700-123).');
-  for (const p of patterns) {
-    if (p.endsWith('*')) {
-      const prefix = p.slice(0, -1);
-      const ok = country === 'PT' ? /^\d{1,4}(-\d{0,3})?$/.test(prefix) : /^\d{1,5}$/.test(prefix);
-      if (!ok || !prefix) throw new UserFacingError(`“${p}” is not a valid ${country === 'PT' ? 'Portuguese' : 'Spanish'} postal-code prefix.`);
-    } else if (!isValidPostalCode(country, p)) throw new UserFacingError(`“${p}” is not a valid ${country === 'PT' ? 'Portuguese (0000-000)' : 'Spanish (00000)'} postal code.`);
+  const entries = raw.split(/[,\n;]/).map((p) => p.trim()).filter(Boolean);
+  if (entries.length === 0) throw new UserFacingError(`Add at least one postal area or town (e.g. ${country === 'PT' ? '4700, Braga' : '28001, Madrid'}), or * for everywhere.`);
+  const out: string[] = [];
+  for (const e of entries) {
+    const p = parseZoneEntry(country, e);
+    if (!p) throw new UserFacingError(`“${e}” is not a valid ${country === 'PT' ? 'Portuguese' : 'Spanish'} postal code, postal area or town. Use e.g. ${country === 'PT' ? '4700, 4700-123 or Braga' : '280, 28013 or Madrid'}.`);
+    if (!out.some((x) => x.toLowerCase() === p.toLowerCase())) out.push(p);
   }
-  return patterns.map((p) => (p.endsWith('*') ? p : normalizePostalCode(country, p)));
+  // "Everywhere" already covers every other entry of the same zone.
+  return out.includes(EVERYWHERE) ? [EVERYWHERE] : out;
 }
 
 export const zoneSchema = z.object({
@@ -315,7 +319,7 @@ export const zoneSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-/** Restaurant-defined delivery zone. Fees come only from these zones (no distance pricing without a routing provider). */
+/** Restaurant-defined delivery zone. Fees come only from these zones (no distance pricing: no paid map service). */
 export async function saveDeliveryZone(ctx: TenantContext, input: unknown) {
   const d = zoneSchema.parse(input);
   await assertLocationAccess(ctx, d.locationId);
@@ -348,10 +352,37 @@ export async function deleteDeliveryZone(ctx: TenantContext, zoneId: string) {
   await db.deliveryZone.update({ where: { id: z0.id }, data: { isActive: false } });
 }
 
-export function findZone<Z extends { postalCodePatterns: string[]; isActive: boolean }>(country: CountryCode, zones: Z[], postal: string): { valid: boolean; zone: Z | null } {
-  if (!isValidPostalCode(country, postal)) return { valid: false, zone: null };
-  const zone = zones.find((zn) => zn.isActive && zn.postalCodePatterns.some((p) => postalCodeMatches(country, postal, p))) ?? null;
-  return { valid: true, zone };
+export type ZoneTestResult = { valid: boolean; zone: { name: string; feeCents: number; minOrderCents: number; freeDeliveryThresholdCents: number | null; estimatedMinutes: number | null } | null; needsCity: boolean; postalCode: string };
+
+/** Owner's check: which active zone (and fee) a guest at this postal code and town would get. Reads only. */
+export async function testDeliveryAddress(ctx: TenantContext, input: unknown): Promise<ZoneTestResult> {
+  const d = z.object({ locationId: z.string().min(1), postalCode: z.string().trim().max(12), city: z.string().trim().max(80).default('') }).parse(input);
+  await assertLocationAccess(ctx, d.locationId);
+  const location = await db.restaurantLocation.findFirstOrThrow({ where: { id: d.locationId, organizationId: ctx.org.id }, include: { deliveryZones: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } } } });
+  const { valid, zone, needsCity } = findZone(location.country, location.deliveryZones, d.postalCode, d.city);
+  return {
+    valid,
+    needsCity,
+    postalCode: normalizePostalCode(location.country, d.postalCode),
+    zone: zone && { name: zone.name, feeCents: zone.feeCents, minOrderCents: zone.minOrderCents, freeDeliveryThresholdCents: zone.freeDeliveryThresholdCents, estimatedMinutes: zone.estimatedMinutes },
+  };
+}
+
+/**
+ * The zone that delivers to this address. Several zones can cover it (e.g. "Braga centre" 4700
+ * and "Everywhere"): the most specific match wins, then the zone added first. `needsCity`: no
+ * zone yet, but a town-based zone might match once the guest types their town.
+ */
+export function findZone<Z extends { postalCodePatterns: string[]; isActive: boolean }>(country: CountryCode, zones: Z[], postal: string, city = ''): { valid: boolean; zone: Z | null; needsCity: boolean } {
+  if (!isValidPostalCode(country, postal)) return { valid: false, zone: null, needsCity: false };
+  let best: { zone: Z; score: number } | null = null;
+  for (const zn of zones) {
+    if (!zn.isActive) continue;
+    const score = Math.max(0, ...zn.postalCodePatterns.filter((p) => zonePatternMatches(country, postal, city, p)).map(zonePatternSpecificity));
+    if (score > 0 && (!best || score > best.score)) best = { zone: zn, score };
+  }
+  const needsCity = !best && !city.trim() && zones.some((zn) => zn.isActive && zn.postalCodePatterns.some((p) => zonePatternKind(p) === 'town'));
+  return { valid: true, zone: best?.zone ?? null, needsCity };
 }
 
 // =============================================================== M9-06 delivery quote & checkout
@@ -368,22 +399,25 @@ export type DeliveryQuote = {
   totalCents: number;
   meetsMinimum: boolean;
   estimatedMinutes: number;
+  /** Not covered yet: a zone is set by town, and the guest has not typed theirs. */
+  needsCity: boolean;
   issues: Awaited<ReturnType<typeof quoteCart>>['issues'];
 };
 
-export async function quoteDelivery(pl: PublicLocation, postal: string, lang: LanguageCode, items: unknown, now = new Date(), couponCode?: string): Promise<DeliveryQuote> {
+export async function quoteDelivery(pl: PublicLocation, postal: string, lang: LanguageCode, items: unknown, now = new Date(), couponCode?: string, city = ''): Promise<DeliveryQuote> {
   const { location } = pl;
   const q = await quoteCart({ locationId: location.id, channel: 'DELIVERY', lang, items: cartSchema.parse(items), now });
   const promo = await computeDiscounts(db, { organizationId: location.organizationId, locationId: location.id, channel: 'DELIVERY', couponCode, lines: q.lines, subtotalCents: q.subtotalCents, now });
   const after = q.subtotalCents - promo.totalCents;
-  const { valid, zone } = findZone(location.country, location.deliveryZones, postal);
+  const { valid, zone, needsCity } = findZone(location.country, location.deliveryZones, postal, city);
   const est = zone?.estimatedMinutes ?? (location.deliverySettings?.prepEstimateMinutes ?? 25) + (location.deliverySettings?.deliveryEstimateMinutes ?? 30);
-  if (!zone) return { valid, covered: false, feeCents: 0, minOrderCents: 0, freeFromCents: null, subtotalCents: q.subtotalCents, discountCents: promo.totalCents, totalCents: after, meetsMinimum: false, estimatedMinutes: est, issues: q.issues };
+  if (!zone) return { valid, covered: false, needsCity, feeCents: 0, minOrderCents: 0, freeFromCents: null, subtotalCents: q.subtotalCents, discountCents: promo.totalCents, totalCents: after, meetsMinimum: false, estimatedMinutes: est, issues: q.issues };
   const free = zone.freeDeliveryThresholdCents !== null && after >= zone.freeDeliveryThresholdCents;
   const fee = free ? 0 : zone.feeCents;
   return {
     valid,
     covered: true,
+    needsCity: false,
     zoneName: zone.name,
     feeCents: fee,
     minOrderCents: zone.minOrderCents,
@@ -428,7 +462,7 @@ export async function submitDeliveryOrder(input: unknown, client: string | Clien
   const trackingToken = trackingTokenFor(location.id, d.idempotencyKey);
   const existing = await db.order.findUnique({ where: { locationId_idempotencyKey: { locationId: location.id, idempotencyKey: d.idempotencyKey } } });
   if (existing) return { orderNumber: existing.number, trackingToken, status: existing.status, duplicate: true };
-  const { valid, zone } = findZone(location.country, location.deliveryZones, d.postalCode);
+  const { valid, zone } = findZone(location.country, location.deliveryZones, d.postalCode, d.city);
   if (!valid) throw new OrderRejectedError('invalid_postal_code');
   if (!zone) throw new OrderRejectedError('outside_delivery_zone');
   const placed = await limitRemoteOrder(location.id, asIdentity(client), d.phone);
@@ -463,8 +497,21 @@ export async function submitDeliveryOrder(input: unknown, client: string | Clien
     });
     await consumeUsage(tx, org.id, order.id, promo.discounts);
     await tx.order.update({ where: { id: order.id }, data: { paymentMethodIntent: d.paymentMethod } });
+    // The restaurant's drivers receive the order automatically: one driver gets it at once;
+    // with several, it stays open to all of them and the first to confirm pickup takes it.
+    const drivers = await locationDrivers(org.id, location.id, tx);
     await tx.deliveryOrderDetails.create({
-      data: { orderId: order.id, zoneId: zone.id, recipientName: d.customerName, addressLine: d.address, postalCode: normalizePostalCode(location.country, d.postalCode), city: d.city, phone: d.phone, notes: d.deliveryNotes?.trim() || null },
+      data: {
+        orderId: order.id,
+        zoneId: zone.id,
+        recipientName: d.customerName,
+        addressLine: d.address,
+        postalCode: normalizePostalCode(location.country, d.postalCode),
+        city: d.city,
+        phone: d.phone,
+        notes: d.deliveryNotes?.trim() || null,
+        driverMembershipId: drivers.length === 1 ? drivers[0].id : null,
+      },
     });
     await tx.notification.create({ data: { organizationId: org.id, locationId: location.id, type: 'NEW_ORDER', title: `New delivery order #${order.number} — ${zone.name}`, entityId: order.id } });
     return { orderNumber: order.number, trackingToken, status: order.status, duplicate: false, deliveryFeeCents: fee };
@@ -475,6 +522,16 @@ export async function submitDeliveryOrder(input: unknown, client: string | Clien
 
 export async function listDrivers(ctx: TenantContext) {
   return db.restaurantMembership.findMany({ where: { organizationId: ctx.org.id, status: 'ACTIVE', role: 'DELIVERY_STAFF' }, include: { user: { select: { name: true } } }, orderBy: { createdAt: 'asc' } });
+}
+
+/**
+ * The drivers who receive this location's delivery orders: every active member with the
+ * "Delivery staff" role who works there (no locations set = every location). Set up once on the
+ * Staff page; nobody picks a driver per order.
+ */
+export async function locationDrivers(organizationId: string, locationId: string, tx: Tx | typeof db = db) {
+  const all = await tx.restaurantMembership.findMany({ where: { organizationId, status: 'ACTIVE', role: 'DELIVERY_STAFF' }, include: { user: { select: { name: true } } }, orderBy: { createdAt: 'asc' } });
+  return all.filter((d) => d.locationIds.length === 0 || d.locationIds.includes(locationId));
 }
 
 export async function assignDriver(ctx: TenantContext, orderId: string, membershipId: string | null) {
@@ -491,14 +548,40 @@ export async function assignDriver(ctx: TenantContext, orderId: string, membersh
   await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'delivery.driver_assigned', entityType: 'Order', entityId: order.id, metadata: { membershipId } });
 }
 
-/** Deliveries assigned to the signed-in staff member (driver view). */
+/**
+ * Staff screens (Live Orders): when the location has drivers, pickup and delivery are confirmed by
+ * the driver on their phone, so staff never repeat that step. Without driver accounts (the owner
+ * delivers himself) staff mark it as before.
+ */
+export async function assertStaffMayMoveDelivery(ctx: TenantContext, orderId: string, to: unknown) {
+  if (to !== 'OUT_FOR_DELIVERY' && to !== 'DELIVERED') return;
+  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.org.id }, select: { channel: true, locationId: true } });
+  if (!order || order.channel !== 'DELIVERY') return;
+  if ((await locationDrivers(ctx.org.id, order.locationId)).length > 0) throw new UserFacingError('The driver confirms this on their phone (My deliveries) when they collect and deliver the order.');
+}
+
+/**
+ * A delivery is open to every driver of its location while nobody has it: not assigned yet, or
+ * assigned to someone who no longer works here (a deactivated account cannot block it).
+ */
+export const openDelivery = { OR: [{ driverMembershipId: null }, { driver: { status: { not: 'ACTIVE' as const } } }] };
+
+/**
+ * The driver's list, without anyone assigning it: the deliveries given to this driver plus the
+ * open ones at the locations they work at (with several drivers, the first to confirm pickup
+ * takes it). Finished deliveries: their own, of the last 12 hours.
+ */
 export async function myDeliveries(ctx: TenantContext) {
+  const here = ctx.locationIds.length ? { locationId: { in: ctx.locationIds } } : {};
   return db.order.findMany({
     where: {
       organizationId: ctx.org.id,
       channel: 'DELIVERY',
-      delivery: { driverMembershipId: ctx.membershipId },
-      OR: [{ status: { in: ['ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'] } }, { status: { in: ['DELIVERED', 'COMPLETED'] }, updatedAt: { gte: new Date(Date.now() - 12 * 3600_000) } }],
+      ...here,
+      OR: [
+        { status: { in: ['ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'] }, delivery: { OR: [{ driverMembershipId: ctx.membershipId }, openDelivery] } },
+        { status: { in: ['DELIVERED', 'COMPLETED'] }, updatedAt: { gte: new Date(Date.now() - 12 * 3600_000) }, delivery: { driverMembershipId: ctx.membershipId } },
+      ],
     },
     include: { delivery: true, items: { where: { voidedAt: null }, select: { quantity: true, nameSnapshot: true } } },
     orderBy: { createdAt: 'asc' },
@@ -506,27 +589,51 @@ export async function myDeliveries(ctx: TenantContext) {
 }
 
 /**
- * Driver status update: only the assigned driver, only READY → OUT_FOR_DELIVERY →
- * DELIVERED. Optionally records the cash collected (cash on delivery) for the remaining balance.
+ * Driver status update, READY → OUT_FOR_DELIVERY → DELIVERED. Confirming pickup (the staff
+ * handed the bag over) also takes an open delivery for this driver; if another driver confirmed
+ * first, this one is told so and nothing changes. Only the driver who has it can mark it
+ * delivered. Optionally records the cash collected (cash on delivery) for the remaining balance.
  */
 export async function driverUpdate(ctx: TenantContext, orderId: string, to: 'OUT_FOR_DELIVERY' | 'DELIVERED', cashCollected = false) {
-  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.org.id, channel: 'DELIVERY' }, include: { delivery: true } });
+  const order = await db.order.findFirst({ where: { id: orderId, organizationId: ctx.org.id, channel: 'DELIVERY' }, include: { delivery: { include: { driver: { select: { status: true } } } } } });
   if (!order?.delivery) throw new UserFacingError('Delivery not found.', 404);
-  if (order.delivery.driverMembershipId !== ctx.membershipId) throw new UserFacingError('This delivery is not assigned to you.', 403);
+  await assertLocationAccess(ctx, order.locationId);
   const from = to === 'OUT_FOR_DELIVERY' ? 'READY' : 'OUT_FOR_DELIVERY';
   if (order.status !== from) throw new UserFacingError('status_conflict', 409, { current: order.status });
+  // The guest chose card at the door: the driver's terminal takes it, never recorded as cash
+  // (the driver page hides the cash box for these; a direct request is refused here too).
+  if (to === 'DELIVERED' && cashCollected && order.paymentMethodIntent === 'CARD_TERMINAL') {
+    throw new UserFacingError('This order is paid by card at the door, so it cannot be recorded as cash. Confirm the delivery without “cash collected”.');
+  }
+  const mine = order.delivery.driverMembershipId === ctx.membershipId;
+  const open = !order.delivery.driverMembershipId || order.delivery.driver?.status !== 'ACTIVE';
+  if (!mine && !(to === 'OUT_FOR_DELIVERY' && open)) throw new UserFacingError(to === 'OUT_FOR_DELIVERY' ? 'Another driver already has this delivery.' : 'This delivery is not assigned to you.', 403);
   const { changeOrderStatus } = await import('./orders');
-  await changeOrderStatus(ctx, { orderId: order.id, expectedFrom: from, to });
-  if (to === 'DELIVERED' && cashCollected && order.paidCents < order.totalCents) {
-    await db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
-      const fresh = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
-      const due = fresh.totalCents - fresh.paidCents;
-      if (due <= 0) return;
-      await tx.paymentRecord.create({ data: { organizationId: ctx.org.id, orderId: order.id, amountCents: due, method: 'CASH_ON_DELIVERY', recordedById: ctx.userId, note: 'Collected by driver' } });
-      await tx.order.update({ where: { id: order.id }, data: { paidCents: fresh.totalCents, paymentStatus: 'PAID' } });
-      await syncLoyaltyForOrder(tx, order.id);
-      await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'payment.recorded', entityType: 'Order', entityId: order.id, metadata: { method: 'CASH_ON_DELIVERY', amountCents: due } }, tx);
-    });
+  if (!mine) {
+    // Take it, unless another driver confirmed at the same moment.
+    const taken = await db.deliveryOrderDetails.updateMany({ where: { orderId: order.id, ...openDelivery }, data: { driverMembershipId: ctx.membershipId } });
+    if (taken.count !== 1) throw new UserFacingError('Another driver already has this delivery.', 409);
+    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'delivery.driver_assigned', entityType: 'Order', entityId: order.id, metadata: { membershipId: ctx.membershipId, by: 'driver_pickup' } });
+  }
+  // The cash is recorded in the same transaction as DELIVERED (audit OPS-53): never a delivered
+  // order whose collected cash failed to save, nor cash on an order that did not become delivered.
+  const recordCash =
+    to === 'DELIVERED' && cashCollected
+      ? async (tx: Tx) => {
+          await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
+          const fresh = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
+          const due = fresh.totalCents - fresh.paidCents;
+          if (due <= 0) return;
+          const p = await tx.paymentRecord.create({ data: { organizationId: ctx.org.id, orderId: order.id, amountCents: due, method: 'CASH_ON_DELIVERY', recordedById: ctx.userId, note: 'Collected by driver' } });
+          await recomputeOrderPayment(tx, order.id);
+          await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'payment.recorded', entityType: 'Order', entityId: order.id, metadata: { method: 'CASH_ON_DELIVERY', amountCents: due, payments: [p.id], by: 'driver' } }, tx);
+        }
+      : undefined;
+  try {
+    await changeOrderStatus(ctx, { orderId: order.id, expectedFrom: from, to }, recordCash);
+  } catch (e) {
+    // Status changed meanwhile (e.g. cancelled): give the delivery back as it was.
+    if (!mine) await db.deliveryOrderDetails.updateMany({ where: { orderId: order.id, driverMembershipId: ctx.membershipId }, data: { driverMembershipId: order.delivery.driverMembershipId } });
+    throw e;
   }
 }

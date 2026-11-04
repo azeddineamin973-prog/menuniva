@@ -4,6 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { runTenantAction } from '@/server/action';
 import { eraseGuestData, findGuestData, updateRetention } from '@/server/services/privacy';
 import { saveBrandingWithImages, updateChannelSettings, updateLocationDetails, updateOrganizationSettings } from '@/server/services/settings';
+import { attentionInputFromForm, resetAttentionThresholds, updateAttentionThresholds } from '@/server/services/attention';
 
 export async function saveOrganizationSettingsAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
   return runTenantAction(form.get('org'), 'settings.manage', (ctx) =>
@@ -32,6 +33,12 @@ export async function saveChannelSettingsAction(_p: ActionResult, form: FormData
   });
 }
 
+export async function saveAttentionSettingsAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => updateAttentionThresholds(ctx, attentionInputFromForm(form)), { revalidate: '/dashboard/[org]' });
+}
+export async function resetAttentionSettingsAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
+  return runTenantAction(form.get('org'), 'settings.manage', (ctx) => resetAttentionThresholds(ctx, form.get('locationId')), { revalidate: '/dashboard/[org]' });
+}
 export async function saveBrandingAction(_p: ActionResult, form: FormData): Promise<ActionResult> {
   return runTenantAction(
     form.get('org'),

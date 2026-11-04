@@ -11,7 +11,8 @@ import { requireTenantAction, type TenantContext } from './tenant';
 export async function tenantRoute(
   req: Request,
   orgSlug: string,
-  permission: Permission,
+  /** `undefined` = any member of the organization (each handler then checks `ctx.can`). */
+  permission: Permission | undefined,
   fn: (ctx: TenantContext) => Promise<unknown>,
   source: string,
 ) {

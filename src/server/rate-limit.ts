@@ -22,15 +22,22 @@ export type Limit = [limit: number, windowSeconds: number];
  */
 export async function limitPublic(
   prefix: string,
-  identity: { guest: string; ip: string | null },
-  limits: { guest: Limit; ip?: Limit; scope?: { key: string; limit: Limit } },
+  identity: { guest: string; ip: string | null; cookieless?: boolean },
+  limits: { guest: Limit; ip?: Limit; scope?: { key: string; limit: Limit }; cookieless?: Limit },
 ): Promise<() => Promise<void>> {
-  await rateLimit(`${prefix}:g:${identity.guest}`, ...limits.guest);
-  if (identity.ip && limits.ip) await rateLimit(`${prefix}:ip:${identity.ip}`, ...limits.ip, true);
-  if (!limits.scope) return async () => {};
-  const key = `${prefix}:all:${limits.scope.key}`;
+  const key = limits.scope && `${prefix}:all:${limits.scope.key}`;
+  // Side by side, one database round trip instead of up to four in a row (each costs its full latency on
+  // every guest request; final QA). Per-guest and per-IP buckets count every attempt either way.
+  await Promise.all([
+    rateLimit(`${prefix}:g:${identity.guest}`, ...limits.guest),
+    // Requests without a guest cookie get a new id each time, so the per-guest cap above never bites:
+    // they share one bucket instead (real guests always carry the cookie set by the menu page; V4, Q10).
+    identity.cookieless && limits.cookieless ? rateLimit(`${prefix}:nocookie`, ...limits.cookieless, true) : null,
+    identity.ip && limits.ip ? rateLimit(`${prefix}:ip:${identity.ip}`, ...limits.ip, true) : null,
+    key && limits.scope ? assertBelowLimit(key, ...limits.scope.limit) : null,
+  ]);
+  if (!key || !limits.scope) return async () => {};
   const [limit, windowSeconds] = limits.scope.limit;
-  await assertBelowLimit(key, limit, windowSeconds);
   return () => countSuccess(key, limit, windowSeconds);
 }
 

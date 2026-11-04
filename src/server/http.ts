@@ -1,6 +1,7 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
+import { Prisma } from '@/generated/prisma/client';
 import { RateLimitError } from './rate-limit';
 import { AccessDeniedError, UserFacingError } from './errors';
 import { logError } from './audit';
@@ -39,5 +40,10 @@ export async function handleRouteError(source: string, e: unknown) {
     return NextResponse.json({ error: 'access_denied' }, { status });
   }
   await logError(source, e);
+  // The database was too busy to start or finish a transaction in time (P2028): nothing was written,
+  // so the same request can safely be sent again (order submission is idempotent).
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2028') {
+    return NextResponse.json({ error: 'busy_retry', retryAfter: 1 }, { status: 503, headers: { 'Retry-After': '1' } });
+  }
   return NextResponse.json({ error: 'server_error' }, { status: 500 });
 }

@@ -6,6 +6,7 @@ import { parseMoneyToCents } from '@/lib/money';
 import { audit } from '../audit';
 import { db, type Tx } from '../db';
 import { assertMenuItemCapacity } from './limits';
+import { NO_PREPARATION } from './routing';
 import { UserFacingError } from '../errors';
 import { deleteTenantMedia, withStoredImages } from '../media';
 import { mediaKeyFromPath } from '../storage';
@@ -31,10 +32,16 @@ async function defaultMenuId(ctx: TenantContext, tx: Tx | typeof db = db): Promi
   return (await tx.menu.create({ data: { organizationId: ctx.org.id, name: 'Menu' } })).id;
 }
 
-async function assertStation(ctx: TenantContext, stationId: string | null | undefined, tx: Tx | typeof db = db) {
+/**
+ * A station of this restaurant. A newly chosen station must be switched on (dishes sent to an
+ * off screen cannot be ordered); `keep` is the current one, accepted as it is so that saving a
+ * dish's price while its Café is off does not lose the dish's routing.
+ */
+async function assertStation(ctx: TenantContext, stationId: string | null | undefined, tx: Tx | typeof db = db, keep?: string | null) {
   if (!stationId) return null;
   const s = await tx.kitchenStation.findFirst({ where: { id: stationId, organizationId: ctx.org.id } });
   if (!s) throw new UserFacingError('Invalid station.');
+  if (!s.isActive && s.id !== keep) throw new UserFacingError(`${s.name} is switched off. Switch it on first, or choose another station.`);
   return s.id;
 }
 
@@ -55,6 +62,8 @@ export const categoryInput = z.object({
   id: z.string().optional(),
   translations: translationsInput,
   defaultStationId: z.string().nullable().optional(),
+  /** Its dishes need no preparation (handed over at the counter). Left unchanged when not sent. */
+  noPreparation: z.boolean().optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -64,18 +73,21 @@ export async function saveCategory(ctx: TenantContext, input: unknown) {
   const sourceName = data.translations[sourceLanguage]?.name?.trim();
   if (!sourceName) throw new UserFacingError(`Enter the category name in the source language (${sourceLanguage}).`);
   return db.$transaction(async (tx) => {
-    const stationId = await assertStation(ctx, data.defaultStationId, tx);
     let categoryId = data.id;
     if (categoryId) {
       const existing = await tx.menuCategory.findFirst({ where: { id: categoryId, organizationId: ctx.org.id } });
       if (!existing) throw new UserFacingError('Category not found.', 404);
-      await tx.menuCategory.update({ where: { id: categoryId }, data: { defaultStationId: stationId, isActive: data.isActive } });
+      const stationId = await assertStation(ctx, data.defaultStationId, tx, existing.defaultStationId);
+      // Choosing a station means the dishes are prepared: it ends "no preparation".
+      const noPreparation = stationId ? { noPreparation: false } : data.noPreparation !== undefined ? { noPreparation: data.noPreparation } : {};
+      await tx.menuCategory.update({ where: { id: categoryId }, data: { defaultStationId: stationId, isActive: data.isActive, ...noPreparation } });
     } else {
+      const stationId = await assertStation(ctx, data.defaultStationId, tx);
       const menuId = await defaultMenuId(ctx, tx);
       const max = await tx.menuCategory.aggregate({ where: { organizationId: ctx.org.id, menuId }, _max: { sortOrder: true } });
       categoryId = (
         await tx.menuCategory.create({
-          data: { organizationId: ctx.org.id, menuId, defaultStationId: stationId, isActive: data.isActive, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+          data: { organizationId: ctx.org.id, menuId, defaultStationId: stationId, noPreparation: !stationId && !!data.noPreparation, isActive: data.isActive, sortOrder: (max._max.sortOrder ?? 0) + 1 },
         })
       ).id;
     }
@@ -102,13 +114,17 @@ async function writeCategoryTranslations(tx: Tx, categoryId: string, translation
   }
 }
 
-/** Sets (or clears) the preparation station used by every dish of a category without its own station. */
+/**
+ * Sets (or clears) the preparation station used by every dish of a category without its own
+ * station. NO_PREPARATION marks the category's dishes as needing none (handed over at the counter).
+ */
 export async function setCategoryStation(ctx: TenantContext, categoryId: string, stationId: string | null) {
   const category = await db.menuCategory.findFirst({ where: { id: categoryId, organizationId: ctx.org.id } });
   if (!category) throw new UserFacingError('Category not found.', 404);
-  const station = await assertStation(ctx, stationId);
-  await db.menuCategory.update({ where: { id: category.id }, data: { defaultStationId: station } });
-  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.category_station_set', entityType: 'MenuCategory', entityId: category.id, metadata: { stationId: station } });
+  const noPreparation = stationId === NO_PREPARATION;
+  const station = noPreparation ? null : await assertStation(ctx, stationId, db, category.defaultStationId);
+  await db.menuCategory.update({ where: { id: category.id }, data: { defaultStationId: station, noPreparation } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'menu.category_station_set', entityType: 'MenuCategory', entityId: category.id, metadata: { stationId: station, noPreparation } });
 }
 
 export async function reorderCategories(ctx: TenantContext, orderedIds: string[]) {
@@ -144,6 +160,8 @@ export const productInput = z.object({
   id: z.string().optional(),
   categoryId: z.string().min(1),
   stationId: z.string().nullable().optional(),
+  /** Needs no preparation (handed over at the counter). Left unchanged when not sent. */
+  noPreparation: z.boolean().optional(),
   taxClassId: z.string().nullable().optional(),
   status: z.enum(['DRAFT', 'ACTIVE']).default('DRAFT'),
   isFeatured: z.boolean().default(false),
@@ -179,7 +197,8 @@ export async function saveProduct(ctx: TenantContext, input: unknown) {
   return db.$transaction(async (tx) => {
     const category = await tx.menuCategory.findFirst({ where: { id: data.categoryId, organizationId: ctx.org.id } });
     if (!category) throw new UserFacingError('Invalid category.');
-    const stationId = await assertStation(ctx, data.stationId, tx);
+    const current = data.id ? await assertProduct(ctx, data.id, tx) : null;
+    const stationId = await assertStation(ctx, data.stationId, tx, current?.stationId);
     if (data.taxClassId) {
       const tc = await tx.taxClass.findFirst({ where: { id: data.taxClassId, organizationId: ctx.org.id } });
       if (!tc) throw new UserFacingError('Invalid tax class.');
@@ -189,6 +208,8 @@ export async function saveProduct(ctx: TenantContext, input: unknown) {
       categoryId: category.id,
       menuId: category.menuId,
       stationId,
+      // An own station means the dish is prepared; otherwise keep (or set) "no preparation".
+      ...(stationId ? { noPreparation: false } : data.noPreparation !== undefined ? { noPreparation: data.noPreparation } : {}),
       taxClassId: data.taxClassId ?? null,
       status: data.status,
       isFeatured: data.isFeatured,

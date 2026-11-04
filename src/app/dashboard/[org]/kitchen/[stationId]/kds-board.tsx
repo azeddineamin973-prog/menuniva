@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ConnectionBadge, elapsed, playChime, usePolling } from '@/components/dashboard/use-polling';
+import { useFocusParam, useScrollToFocus } from '@/components/dashboard/focus';
+import { ConnectionBadge, elapsed, playChime, PollProblemNotice, StaleBanner, usePolling } from '@/components/dashboard/use-polling';
 import { Alert, Button, Icon, type IconName } from '@/components/ui';
+import { levelFor, ticketStartBy, type AttentionLevel, type Threshold } from '@/lib/attention';
 import { cn } from '@/lib/cn';
 import type { Messages } from '@/i18n';
 
@@ -11,7 +13,8 @@ const f = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\
 
 type Ticket = {
   id: string;
-  status: 'PENDING' | 'PREPARING' | 'READY';
+  /** CANCELLED: staff removed this station's last item; shown for a while so the cook stops. */
+  status: 'PENDING' | 'PREPARING' | 'READY' | 'CANCELLED';
   createdAt: string;
   startedAt: string | null;
   readyAt: string | null;
@@ -26,10 +29,31 @@ type Ticket = {
     pickupAt: string | null;
     isPriority?: boolean;
     table: { label: string } | null;
-    items: { id: string; quantity: number; nameSnapshot: string; variantNameSnapshot: string | null; notes: string | null; modifiers: { nameSnapshot: string; quantity: number }[] }[];
+    items: {
+      id: string;
+      quantity: number;
+      nameSnapshot: string;
+      variantNameSnapshot: string | null;
+      notes: string | null;
+      modifiers: { nameSnapshot: string; quantity: number }[];
+      /** Removed by staff after this station got the ticket. */
+      voidedAt: string | null;
+      voidReason: string | null;
+      /** Quantity reduced by staff after this station got the ticket. */
+      amendedAt: string | null;
+      originalQuantity: number | null;
+    }[];
   };
 };
-type Payload = { station: { id: string; name: string }; tickets: Ticket[] };
+/** `timing`: the location's attention times for tickets (Settings → Alerts & timings). */
+type Payload = { station: { id: string; name: string }; tickets: Ticket[]; timing?: { notStarted: Threshold; overdue: Threshold; leadMinutes: number } };
+
+/** Same rule as the attention summary: not started (from acceptance, or cooking time of a scheduled pickup), or preparing too long. */
+function ticketLevel(tk: Ticket, timing: Payload['timing'], now: number): AttentionLevel {
+  if (!timing || tk.status === 'READY' || tk.status === 'CANCELLED') return 'waiting';
+  if (tk.status === 'PENDING') return levelFor(now - ticketStartBy(new Date(tk.createdAt), tk.order.pickupAt ? new Date(tk.order.pickupAt) : null, timing.leadMinutes).getTime(), timing.notStarted);
+  return levelFor(now - new Date(tk.startedAt ?? tk.createdAt).getTime(), timing.overdue);
+}
 
 const POLL_MS = 4000;
 
@@ -37,7 +61,7 @@ const COLUMN = {
   PENDING: { dot: 'bg-info', bar: 'before:bg-info', icon: 'inbox' },
   PREPARING: { dot: 'bg-warning', bar: 'before:bg-warning', icon: 'flame' },
   READY: { dot: 'bg-success', bar: 'before:bg-success', icon: 'checkCircle' },
-} as const satisfies Record<Ticket['status'], { dot: string; bar: string; icon: IconName }>;
+} as const satisfies Record<Exclude<Ticket['status'], 'CANCELLED'>, { dot: string; bar: string; icon: IconName }>;
 const CHANNEL_ICON: Record<Ticket['order']['channel'], IconName> = { TABLE: 'tables', TAKEAWAY: 'bag', DELIVERY: 'truck' };
 
 /**
@@ -46,7 +70,7 @@ const CHANNEL_ICON: Record<Ticket['order']['channel'], IconName> = { TABLE: 'tab
  * tickets coloured by waiting time.
  */
 export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: string; stationId: string; stationName: string; canUpdate: boolean; t: Messages['staff'] }) {
-  const { data, online, lastOk, authError, refresh } = usePolling<Payload>(`/api/dashboard/${org}/kds/${stationId}`, POLL_MS);
+  const { data, health, refresh } = usePolling<Payload>(`/api/dashboard/${org}/kds/${stationId}`, POLL_MS);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +79,8 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
   const [canFullscreen, setCanFullscreen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const seen = useRef<Set<string> | null>(null);
+  // An attention link (?focus=ticket-…) scrolls to that ticket and marks it.
+  useScrollToFocus(useFocusParam(), !!data);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10000);
@@ -69,9 +95,15 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
 
   useEffect(() => {
     if (!data) return;
-    const ids = new Set(data.tickets.filter((t) => t.status === 'PENDING').map((t) => t.id));
-    if (seen.current && sound && [...ids].some((id) => !seen.current!.has(id))) playChime();
-    seen.current = ids;
+    // A new ticket, and a change staff made to a ticket already on screen, both chime.
+    const keys = new Set(
+      data.tickets.flatMap((t) => [
+        ...(t.status === 'PENDING' || t.status === 'CANCELLED' ? [`${t.status}:${t.id}`] : []),
+        ...t.order.items.filter((i) => i.voidedAt || i.amendedAt).map((i) => `change:${i.id}:${i.voidedAt ?? i.amendedAt}`),
+      ]),
+    );
+    if (seen.current && sound && [...keys].some((k) => !seen.current!.has(k))) playChime();
+    seen.current = keys;
   }, [data, sound]);
 
   const move = async (tk: Ticket, to: Ticket['status']) => {
@@ -90,10 +122,20 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
     setBusy(null);
   };
 
-  if (authError) return <Alert tone="danger">{t.sessionExpired}</Alert>;
+  if (health.problem)
+    return (
+      <div className="p-4">
+        <PollProblemNotice
+          problem={health.problem}
+          labels={{ expired: t.sessionExpired, forbidden: t.accessRemoved, notFound: t.stationGone, signIn: t.signInAgain, back: t.allStations }}
+          backHref={`/dashboard/${org}/kitchen`}
+        />
+      </div>
+    );
   const tickets = data?.tickets ?? [];
   const columns = [
-    { key: 'PENDING', title: t.kdsTodo, empty: t.kdsEmptyTodo, list: tickets.filter((t) => t.status === 'PENDING') },
+    // Cancelled tickets lead the first column: stop preparing them.
+    { key: 'PENDING', title: t.kdsTodo, empty: t.kdsEmptyTodo, list: [...tickets.filter((t) => t.status === 'CANCELLED'), ...tickets.filter((t) => t.status === 'PENDING')] },
     { key: 'PREPARING', title: t.kdsPreparing, empty: t.emptyPreparing, list: tickets.filter((t) => t.status === 'PREPARING') },
     { key: 'READY', title: t.kdsReady, empty: t.emptyReady, list: tickets.filter((t) => t.status === 'READY') },
   ] as const;
@@ -110,7 +152,7 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
           <Icon name="chevronLeft" className="rtl:rotate-180" />
         </Link>
         <h1 className="min-w-0 text-xl font-semibold tracking-tight sm:text-2xl">{data?.station.name ?? stationName}</h1>
-        <ConnectionBadge online={online} lastOk={lastOk} intervalMs={POLL_MS} labels={{ live: t.live, lost: t.connectionLost }} />
+        <ConnectionBadge health={health} labels={{ live: t.live, lost: t.connectionLost, reconnecting: t.reconnecting, connecting: t.connecting, lastUpdate: t.lastUpdate }} />
         <div className="ms-auto flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -137,6 +179,10 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
           )}
         </div>
       </header>
+      {/* Since when the tickets below have not been updated, while the connection is down. */}
+      <div className="mb-3 empty:hidden">
+        <StaleBanner health={health} text={t.staleBoard} />
+      </div>
       {error && (
         <div className="mb-3">
           <Alert tone="danger">{error}</Alert>
@@ -174,18 +220,28 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
               <div className="space-y-2.5">
                 {col.list.map((tk) => {
                   const from = tk.order.acceptedAt ?? tk.createdAt;
-                  const mins = (now - new Date(from).getTime()) / 60000;
-                  const late = tk.status !== 'READY' && mins > 20;
-                  const slow = tk.status !== 'READY' && mins > 10;
+                  const cancelled = tk.status === 'CANCELLED';
+                  const level = ticketLevel(tk, data?.timing, now);
+                  const late = level === 'urgent';
+                  const slow = level === 'warning';
                   return (
                     <article
                       key={tk.id}
+                      id={`ticket-${tk.id}`}
+                      data-level={level}
                       className={cn(
-                        'animate-fade-in rounded-xl border-2 bg-surface-2 p-3.5 sm:p-4',
-                        tk.status === 'READY' ? 'border-success/60' : late ? 'border-danger' : slow ? 'border-warning' : tk.order.isPriority ? 'border-danger/60' : 'border-line',
+                        'animate-fade-in scroll-mt-24 rounded-xl border-2 bg-surface-2 p-3.5 sm:p-4 data-[focused=true]:ring-4 data-[focused=true]:ring-warning/70',
+                        cancelled ? 'border-danger border-dashed opacity-80' : tk.status === 'READY' ? 'border-success/60' : late ? 'border-danger' : slow ? 'border-warning' : tk.order.isPriority ? 'border-danger/60' : 'border-line',
                       )}
                       data-testid="kds-ticket"
+                      data-status={tk.status}
                     >
+                      {cancelled && (
+                        <p className="mb-2 flex items-center gap-2 rounded-lg bg-danger px-2.5 py-1.5 text-base font-bold text-graphite" data-testid="kds-ticket-cancelled">
+                          <Icon name="alert" className="size-4 shrink-0" />
+                          {t.kdsTicketCancelled}
+                        </p>
+                      )}
                       <header className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="flex flex-wrap items-center gap-2 text-2xl font-bold tabular-nums">
@@ -216,13 +272,29 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
                       </header>
                       <ul className="mt-3 space-y-2 border-t border-line pt-3 text-lg leading-snug">
                         {tk.order.items.map((i) => (
-                          <li key={i.id}>
-                            <span className="me-1 inline-block min-w-7 font-bold text-accent tabular-nums">{i.quantity}×</span>
-                            {i.nameSnapshot}
+                          <li key={i.id} className={cn(i.voidedAt && 'text-muted')} data-testid={i.voidedAt ? 'kds-item-removed' : i.amendedAt ? 'kds-item-changed' : undefined}>
+                            {/* Changes made by staff after the ticket arrived stay visible on it. */}
+                            {i.voidedAt && (
+                              <span className="mb-0.5 flex items-start gap-1.5 text-base font-bold text-danger">
+                                <Icon name="alert" className="mt-1 size-4 shrink-0" />
+                                <span className="min-w-0">
+                                  {t.kdsItemRemoved}
+                                  {i.voidReason && <span className="block font-normal wrap-anywhere">{i.voidReason}</span>}
+                                </span>
+                              </span>
+                            )}
+                            {i.amendedAt && !i.voidedAt && i.originalQuantity !== null && (
+                              <span className="mb-0.5 flex items-center gap-1.5 text-base font-bold text-warning">
+                                <Icon name="alert" className="size-4 shrink-0" />
+                                {f(t.kdsItemChanged, { n: i.originalQuantity })}
+                              </span>
+                            )}
+                            <span className={cn('me-1 inline-block min-w-7 font-bold tabular-nums', i.voidedAt ? 'line-through' : 'text-accent')}>{i.quantity}×</span>
+                            <span className={cn(i.voidedAt && 'line-through')}>{i.nameSnapshot}</span>
                             {i.variantNameSnapshot && <span className="text-muted"> · {i.variantNameSnapshot}</span>}
                             {i.modifiers.length > 0 && <span className="block ps-8 text-base text-ink-2">{i.modifiers.map((x) => `${x.quantity > 1 ? `${x.quantity}× ` : ''}${x.nameSnapshot}`).join(', ')}</span>}
                             {i.notes && (
-                              <span className="mt-0.5 flex items-start gap-1.5 ps-8 text-base font-semibold text-warning">
+                              <span className="mt-0.5 flex items-start gap-1.5 ps-8 text-base font-semibold wrap-anywhere text-warning">
                                 <Icon name="alert" className="mt-1 size-4 shrink-0" />
                                 {i.notes}
                               </span>
@@ -231,12 +303,12 @@ export function KdsBoard({ org, stationId, stationName, canUpdate, t }: { org: s
                         ))}
                       </ul>
                       {tk.order.customerNotes && (
-                        <p className="mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-base text-warning">
+                        <p className="mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-base wrap-anywhere text-warning">
                           <Icon name="info" className="mt-1 size-4 shrink-0" />
                           {tk.order.customerNotes}
                         </p>
                       )}
-                      {canUpdate && (
+                      {canUpdate && !cancelled && (
                         <div className="mt-4 flex gap-2">
                           {tk.status === 'PENDING' && (
                             <Button size="lg" className="flex-1" icon="flame" loading={busy === tk.id} disabled={busy === tk.id} onClick={() => move(tk, 'PREPARING')} data-testid="kds-start">

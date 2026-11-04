@@ -55,7 +55,7 @@ async function computeSetupProgress(organizationId: string, locationId: string |
     db.menuProduct.count({ where: { ...productWhere, prices: { none: { channel: 'DINE_IN' } }, externalPrices: { some: {} } } }),
     location ? db.restaurantTable.count({ where: { locationId: location.id, isActive: true } }) : 0,
     location ? db.kitchenStation.count({ where: { locationId: location.id, isActive: true } }) : 0,
-    countUnrouted(organizationId),
+    location ? countUnrouted(organizationId, location.id) : 0,
     translationCounts(organizationId, targetLanguages),
   ]);
 
@@ -207,7 +207,7 @@ function kitchenStepMissing(productCount: number, stationCount: number, unrouted
   if (productCount === 0) return ['Add your menu first.'];
   const out: string[] = [];
   if (stationCount === 0) out.push('No stations yet. Create the ones you use, for example Kitchen and Café.');
-  else if (unrouted > 0) out.push(`${unrouted} dishes reach no kitchen screen. Assign a station per category in one step.`);
+  else if (unrouted > 0) out.push(`${unrouted} dishes reach no kitchen screen at this location, so guests cannot order them here. Assign a station per category in one step, or mark items that need none as “No preparation”.`);
   return out;
 }
 

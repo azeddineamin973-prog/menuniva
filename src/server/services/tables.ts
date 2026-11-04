@@ -4,10 +4,11 @@ import { z } from 'zod';
 import { freeSpot, TABLE_SHAPES } from '@/lib/floor-plan';
 import { audit } from '../audit';
 import { newPublicToken } from '../crypto';
-import { db } from '../db';
+import { db, type Tx } from '../db';
 import { env } from '../env';
 import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
+import { NO_PREPARATION } from './routing';
 
 // ---------------------------------------------------------------- stations
 
@@ -17,30 +18,84 @@ export const stationInput = z.object({
   name: z.string().trim().min(1).max(60),
   type: z.enum(['KITCHEN', 'CAFE', 'DESSERTS', 'DRINKS', 'OTHER']),
   isActive: z.boolean().default(true),
+  /** The owner read which dishes stop being orderable here while the station is off. */
+  confirmDependents: z.boolean().default(false),
 });
 
 export async function saveStation(ctx: TenantContext, input: unknown) {
   const d = stationInput.parse(input);
   await assertLocationAccess(ctx, d.locationId);
   if (d.id) {
-    const s = await db.kitchenStation.findFirst({ where: { id: d.id, organizationId: ctx.org.id } });
+    // A station is edited from its own location: staff limited to one location cannot reach
+    // another location's station by posting their own location id.
+    const s = await db.kitchenStation.findFirst({ where: { id: d.id, organizationId: ctx.org.id, locationId: d.locationId } });
     if (!s) throw new UserFacingError('Station not found.', 404);
-    await db.kitchenStation.update({ where: { id: s.id }, data: { name: d.name, type: d.type, isActive: d.isActive } });
+    await db.$transaction(async (tx) => {
+      if (s.isActive && !d.isActive) await assertStationCanSwitchOff(tx, ctx, s, d.confirmDependents);
+      await tx.kitchenStation.update({ where: { id: s.id }, data: { name: d.name, type: d.type, isActive: d.isActive } });
+    });
   } else {
     const max = await db.kitchenStation.aggregate({ where: { locationId: d.locationId }, _max: { sortOrder: true } });
     await db.kitchenStation.create({ data: { organizationId: ctx.org.id, locationId: d.locationId, name: d.name, type: d.type, sortOrder: (max._max.sortOrder ?? 0) + 1 } });
   }
-  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: d.id ? 'station.updated' : 'station.created', entityType: 'KitchenStation', entityId: d.id ?? null, metadata: { name: d.name } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: d.id ? 'station.updated' : 'station.created', entityType: 'KitchenStation', entityId: d.id ?? null, metadata: { name: d.name, isActive: d.isActive } });
 }
 
-/** Assigns a station to many products at once (routing). */
-export async function routeProducts(ctx: TenantContext, stationId: string | null, productIds: string[]) {
-  if (stationId) {
-    const s = await db.kitchenStation.findFirst({ where: { id: stationId, organizationId: ctx.org.id } });
-    if (!s) throw new UserFacingError('Station not found.');
+/**
+ * Switching a station off must not hide work or quietly move it (audit OPS-09):
+ * - open tickets, and new orders still waiting to be accepted with items for it, must be
+ *   finished or cancelled first: an off screen is not listed on the kitchen page;
+ * - dishes routed to it stop being orderable at this location while it is off. Nothing is moved
+ *   to another station and the routing is kept, so switching it back on restores everything.
+ * The station row stays locked until the switch is saved; accepting an order takes a shared lock
+ * on the same row, so an order cannot be accepted onto it in between.
+ */
+async function assertStationCanSwitchOff(tx: Tx, ctx: TenantContext, s: { id: string; name: string; locationId: string }, confirmed: boolean) {
+  await tx.$queryRaw`SELECT id FROM "KitchenStation" WHERE id = ${s.id} FOR UPDATE`;
+  const [open, waiting] = await Promise.all([
+    tx.kitchenTicket.findMany({ where: { stationId: s.id, status: { in: ['PENDING', 'PREPARING'] }, order: { status: { in: ['ACCEPTED', 'PREPARING', 'READY'] } } }, select: { order: { select: { number: true } } } }),
+    tx.order.findMany({ where: { organizationId: ctx.org.id, status: 'NEW', items: { some: { stationId: s.id, voidedAt: null } } }, select: { number: true } }),
+  ]);
+  const numbers = [...new Set([...open.map((t) => t.order.number), ...waiting.map((o) => o.number)])].sort((a, b) => a - b);
+  if (numbers.length) throw new UserFacingError(`${s.name} still has open orders (${numbers.map((n) => `#${n}`).join(', ')}). Finish or cancel them before switching it off.`);
+  const [dishes, others] = await Promise.all([
+    tx.menuProduct.count({
+      where: {
+        organizationId: ctx.org.id,
+        status: { not: 'ARCHIVED' },
+        OR: [{ stationId: s.id }, { stationId: null, noPreparation: false, category: { defaultStationId: s.id } }],
+      },
+    }),
+    tx.kitchenStation.count({ where: { locationId: s.locationId, isActive: true, id: { not: s.id } } }),
+  ]);
+  if (dishes > 0 && !confirmed) {
+    throw new UserFacingError(
+      others > 0
+        ? `${dishes === 1 ? '1 dish is' : `${dishes} dishes are`} prepared at ${s.name}. While it is off, guests cannot order ${dishes === 1 ? 'it' : 'them'} at this location; nothing is sent to another station, and the routing is kept for when you switch it back on. Confirm to switch it off.`
+        : `${s.name} is the last kitchen screen at this location. While it is off, orders are no longer shown on any kitchen screen, only on Live Orders, and Ready is set there by hand. Confirm to switch it off.`,
+    );
   }
-  const res = await db.menuProduct.updateMany({ where: { id: { in: productIds }, organizationId: ctx.org.id }, data: { stationId } });
-  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'station.products_routed', entityType: 'KitchenStation', entityId: stationId, metadata: { count: res.count } });
+}
+
+/**
+ * Sets how many dishes at once are prepared: a station, "use the category's" (null) or
+ * NO_PREPARATION (handed over at the counter). With `locationId` (the routing screen of one
+ * location), the station must belong to it, and a dish with its own station at another
+ * location is left as it is: changing it here would silently change that location.
+ */
+export async function routeProducts(ctx: TenantContext, stationId: string | null, productIds: string[], locationId?: string) {
+  if (locationId) await assertLocationAccess(ctx, locationId);
+  const noPreparation = stationId === NO_PREPARATION;
+  const target = noPreparation ? null : stationId;
+  if (target) {
+    const s = await db.kitchenStation.findFirst({ where: { id: target, organizationId: ctx.org.id } });
+    if (!s) throw new UserFacingError('Station not found.');
+    if (!s.isActive) throw new UserFacingError(`${s.name} is switched off. Switch it on first, or choose another station.`);
+    if (locationId && s.locationId !== locationId) throw new UserFacingError('Choose a station of this location.');
+  }
+  const where = { id: { in: productIds }, organizationId: ctx.org.id, ...(locationId ? { NOT: { station: { is: { locationId: { not: locationId } } } } } : {}) };
+  const res = await db.menuProduct.updateMany({ where, data: { stationId: target, noPreparation } });
+  await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'station.products_routed', entityType: 'KitchenStation', entityId: target, metadata: { count: res.count, noPreparation } });
   return res.count;
 }
 
@@ -185,6 +240,17 @@ export async function listTablesForLocation(ctx: TenantContext, locationId: stri
   return db.restaurantTable.findMany({
     where: { locationId, organizationId: ctx.org.id },
     orderBy: [{ area: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
-    include: { area: true, qrTokens: { where: { isActive: true }, take: 1 }, sessions: { where: { status: 'OPEN' }, take: 1 } },
+    include: {
+      area: true,
+      qrTokens: { where: { isActive: true }, take: 1 },
+      // Open seating with its PIN state (never the PIN itself) and the phones authorised for it.
+      sessions: {
+        where: { status: 'OPEN' },
+        take: 1,
+        select: { id: true, openedAt: true, openedById: true, pinIssuedAt: true, pinLockedAt: true, pinFailedAttempts: true, _count: { select: { devices: { where: { revokedAt: null } }, orders: { where: { status: 'NEW' } } } } },
+      },
+      // A guest at a closed table asked staff to open it.
+      staffTasks: { where: { type: 'OPEN_TABLE', status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, select: { id: true, createdAt: true }, take: 1 },
+    },
   });
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { login, seed, sql, type Seed } from './helpers';
+import { login, openCart, seed, sql, type Seed } from './helpers';
 
 /**
  * Audit BUG-08/09/10 (browser): no false "invalid code" flash, typed details survive closing the
@@ -51,21 +51,31 @@ test('BUG-08: a valid promo code never shows "not valid" while it is being check
   await g.context().close();
 });
 
-test('BUG-09: name and phone survive closing and reopening the cart; cleared after the order', async ({ browser }) => {
+test('BUG-09: name and phone survive going back to the menu and a reload; cleared after the order', async ({ browser }) => {
   const g = await (await browser.newContext()).newPage();
-  await cartWithHarira(g, `/r/${s.orgSlug}/order/pickup`);
+  const toCheckout = async () => {
+    await openCart(g);
+    await g.getByTestId('go-checkout').click();
+    await expect(g.getByTestId('checkout-step')).toBeVisible();
+  };
+  await g.goto(`/r/${s.orgSlug}/order/pickup`);
+  await g.getByTestId('customer-product').filter({ hasText: 'Seed harira' }).click();
+  await g.getByTestId('add-to-cart').click();
+  await toCheckout();
   await g.getByLabel('O seu nome').fill('Guest Keeps Data');
   await g.getByLabel('Telefone').fill('+351 911 222 333');
-  await g.getByRole('button', { name: 'Fechar' }).click();
-  await g.getByTestId('view-cart').click();
+  await g.getByTestId('checkout-edit-order').click(); // back to the menu to change the order
+  await toCheckout();
   await expect(g.getByLabel('O seu nome')).toHaveValue('Guest Keeps Data');
   await expect(g.getByLabel('Telefone')).toHaveValue('+351 911 222 333');
   await g.reload(); // also after a reload in the same tab
-  await g.getByTestId('view-cart').click();
   await expect(g.getByLabel('O seu nome')).toHaveValue('Guest Keeps Data');
   await g.getByTestId('submit-order').click();
   await expect(g).toHaveURL(/\/o\//);
-  await cartWithHarira(g, `/r/${s.orgSlug}/order/pickup`);
+  await g.goto(`/r/${s.orgSlug}/order/pickup`);
+  await g.getByTestId('customer-product').filter({ hasText: 'Seed harira' }).click();
+  await g.getByTestId('add-to-cart').click();
+  await toCheckout();
   await expect(g.getByLabel('O seu nome')).toHaveValue(''); // nothing personal kept after success
   await g.context().close();
 });

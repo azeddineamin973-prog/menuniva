@@ -1,5 +1,4 @@
 import 'server-only';
-import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import type { OrderStatus, PaymentStatus } from '@/generated/prisma/enums';
 import { audit } from '../audit';
@@ -7,8 +6,9 @@ import { db, type Tx } from '../db';
 import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { syncLoyaltyForOrder } from './loyalty';
-import { lockTable } from './orders';
+import { lockSession, lockTable, syncOrderReadiness } from './orders';
 import { recomputeOrderDiscounts } from './promotions';
+import { assertSeatsGuests, pinFields } from './table-access';
 
 const ACTIVE: OrderStatus[] = ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
 
@@ -39,25 +39,32 @@ async function ownedSession(ctx: TenantContext, sessionId: string, tx: Tx | type
 
 // ------------------------------------------------------------------ sessions (M8-01, M8-12)
 
-export function newTableCode(): string {
-  return String(randomInt(0, 10_000)).padStart(4, '0');
-}
-
-/** Staff opens a table (needed when the location requires a table code). Idempotent. */
-export async function openTableSession(ctx: TenantContext, tableId: string) {
+/**
+ * Staff open a table for a new party: a new session (new bill, new identity) and, under SESSION_PIN,
+ * a new 6-digit PIN that only staff can see. Guests' "please open my table" requests for this table
+ * are done. Idempotent: an already open table is returned as it is.
+ */
+export async function openTableSession(ctx: TenantContext, tableId: string): Promise<{ id: string; tableId: string; pin: string | null; existing: boolean }> {
+  assertSeatsGuests(ctx); // opening returns the new PIN
   const table = await db.restaurantTable.findFirst({ where: { id: tableId, organizationId: ctx.org.id }, include: { location: true } });
   if (!table) throw new UserFacingError('Table not found.', 404);
   await assertLocationAccess(ctx, table.locationId);
-  // Same per-table lock as guest ordering, so staff and guests cannot open two sessions at once.
+  if (!table.isActive) throw new UserFacingError('This table is switched off.');
+  // Same per-table lock as session creation for guests, so two sessions can never be open at once.
   return db.$transaction(async (tx) => {
     await lockTable(tx, tableId);
-    const existing = await tx.tableSession.findFirst({ where: { tableId, status: 'OPEN' } });
-    if (existing) return existing;
-    const session = await tx.tableSession.create({
-      data: { organizationId: ctx.org.id, locationId: table.locationId, tableId, openedById: ctx.userId, verificationCode: table.location.tableCodeRequired ? newTableCode() : null },
-    });
-    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_opened', entityType: 'TableSession', entityId: session.id, metadata: { table: table.label } }, tx);
-    return session;
+    const existing = await tx.tableSession.findFirst({ where: { tableId, status: 'OPEN' }, select: { id: true, tableId: true } });
+    if (existing) return { ...existing, pin: null, existing: true };
+    const session = await tx.tableSession.create({ data: { organizationId: ctx.org.id, locationId: table.locationId, tableId, openedById: ctx.userId }, select: { id: true, tableId: true } });
+    let pin: string | null = null;
+    if (table.location.tableOrderingPolicy === 'SESSION_PIN') {
+      const issued = pinFields(session.id, ctx.userId);
+      pin = issued.pin;
+      await tx.tableSession.update({ where: { id: session.id }, data: issued.data });
+    }
+    await tx.staffTask.updateMany({ where: { tableId, type: 'OPEN_TABLE', status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, data: { status: 'DONE', doneAt: new Date() } });
+    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_opened', entityType: 'TableSession', entityId: session.id, metadata: { table: table.label, pin: !!pin } }, tx);
+    return { ...session, pin, existing: false };
   });
 }
 
@@ -72,17 +79,24 @@ export async function closeTableSession(ctx: TenantContext, input: unknown) {
   const session = await ownedSession(ctx, d.sessionId);
   if (session.status !== 'OPEN') throw new UserFacingError('This table is already closed.');
   await db.$transaction(async (tx) => {
-    // Same table lock as guest ordering: an order placed while the table is being closed either
-    // counts in the checks below or waits and starts a new session, never lands on a closed one.
+    // Same table lock as session creation, then the exclusive lock on the session row that every
+    // order in flight shares (orders.ts shareOpenSession): an order placed while the table is being
+    // closed either commits first and counts in the checks below, or finds the session closed. It
+    // never lands on a closed bill.
     await lockTable(tx, session.tableId);
+    await lockSession(tx, session.id);
     const orders = await tx.order.findMany({ where: { tableSessionId: session.id, organizationId: ctx.org.id, status: { not: 'CANCELLED' } }, select: { status: true, totalCents: true, paidCents: true } });
     if (orders.some((o) => ACTIVE.includes(o.status) && o.status !== 'READY' && o.status !== 'DELIVERED')) throw new UserFacingError('Some orders are still being prepared. Complete or cancel them first.');
     const balanceCents = orders.reduce((s, o) => s + o.totalCents - o.paidCents, 0);
     if (balanceCents > 0 && !d.note) throw new UserFacingError(`There is an unpaid balance of ${(balanceCents / 100).toFixed(2)} €. Record the payment, or give a reason to close anyway.`);
     const bill = { balanceCents };
-    const r = await tx.tableSession.updateMany({ where: { id: session.id, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: new Date(), closedById: ctx.userId, closeNote: d.note ?? null } });
+    // The PIN and the legacy code die with the seating; every phone authorised for it is revoked in
+    // this same transaction, so a guest who left cannot order onto the next party's bill.
+    const now = new Date();
+    const r = await tx.tableSession.updateMany({ where: { id: session.id, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: now, closedById: ctx.userId, closeNote: d.note ?? null, pinCipher: null, verificationCode: null } });
     if (r.count !== 1) throw new UserFacingError('This table is already closed.');
-    await tx.staffTask.updateMany({ where: { tableSessionId: session.id, status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, data: { status: 'DONE', doneAt: new Date() } });
+    const revoked = await tx.tableSessionDevice.updateMany({ where: { tableSessionId: session.id, revokedAt: null }, data: { revokedAt: now, revokedById: ctx.userId } });
+    await tx.staffTask.updateMany({ where: { tableSessionId: session.id, status: { in: ['OPEN', 'ACKNOWLEDGED'] } }, data: { status: 'DONE', doneAt: now } });
     // Orders that were ready (served) are completed when the table closes.
     const served = await tx.order.findMany({ where: { tableSessionId: session.id, status: 'READY' }, select: { id: true } });
     for (const o of served) {
@@ -90,7 +104,7 @@ export async function closeTableSession(ctx: TenantContext, input: unknown) {
       if (u.count) await tx.orderStatusEvent.create({ data: { orderId: o.id, fromStatus: 'READY', toStatus: 'COMPLETED', actorType: 'STAFF', actorUserId: ctx.userId, note: 'Table closed' } });
       if (u.count) await syncLoyaltyForOrder(tx, o.id);
     }
-    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_closed', entityType: 'TableSession', entityId: session.id, metadata: { balanceCents: bill.balanceCents, note: d.note ?? null } }, tx);
+    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_closed', entityType: 'TableSession', entityId: session.id, metadata: { balanceCents: bill.balanceCents, note: d.note ?? null, devicesRevoked: revoked.count } }, tx);
   });
 }
 
@@ -123,30 +137,69 @@ export async function getSessionBill(ctx: TenantContext, sessionId: string) {
 
 // ------------------------------------------------------------------ item changes (M8-05)
 
-export const itemChangeSchema = z.object({ itemId: z.string().min(1), quantity: z.number().int().min(0).max(50), reason: z.string().trim().min(3).max(300) });
+export const itemChangeSchema = z.object({
+  itemId: z.string().min(1),
+  quantity: z.number().int().min(0).max(50),
+  reason: z.string().trim().min(3).max(300),
+  /** Staff confirm they told the station: required once the station started or finished the item. */
+  kitchenNotified: z.boolean().default(false),
+});
+
+/** The order has left the restaurant (or is finished): what was handed over can no longer change. */
+const FROZEN: OrderStatus[] = ['OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED'];
 
 /**
  * Reduces the quantity of an order line or voids it (quantity 0). Requires a reason; recorded
  * with before/after in the audit log. Amounts already paid can never be removed.
+ *
+ * Stage rules (everything re-read under the order lock that payments also take):
+ * - NEW: the kitchen has not seen it, any reduction is allowed.
+ * - ACCEPTED / PREPARING / READY: the station has the ticket. The change is shown on it (removed
+ *   or "was N"); once the station has started or finished the item, staff must also confirm they
+ *   told the station. Removing the last item is refused: that is a cancellation (Cancel order).
+ * - OUT_FOR_DELIVERY / DELIVERED / COMPLETED / CANCELLED: refused.
  */
 export async function changeOrderItem(ctx: TenantContext, input: unknown) {
   const d = itemChangeSchema.parse(input);
   await db.$transaction(async (tx) => {
-    const item = await tx.orderItem.findFirst({ where: { id: d.itemId, organizationId: ctx.org.id }, include: { order: true, allocations: { where: { payment: { status: 'RECORDED' } } } } });
-    if (!item) throw new UserFacingError('Item not found.', 404);
-    await assertLocationAccess(ctx, item.order.locationId);
-    await lockOrders(tx, [item.orderId]);
+    const found = await tx.orderItem.findFirst({ where: { id: d.itemId, organizationId: ctx.org.id }, select: { orderId: true, order: { select: { locationId: true } } } });
+    if (!found) throw new UserFacingError('Item not found.', 404);
+    await assertLocationAccess(ctx, found.order.locationId);
+    await lockOrders(tx, [found.orderId]);
+    // Read again under the lock: a payment for this item, or another change of it, committed a
+    // moment ago is taken into account instead of being overwritten.
+    const item = await tx.orderItem.findUniqueOrThrow({ where: { id: d.itemId }, include: { allocations: { where: { payment: { status: 'RECORDED' } } } } });
     const order = await tx.order.findUniqueOrThrow({ where: { id: item.orderId } });
     if (item.voidedAt) throw new UserFacingError('This item was already removed.');
     if (order.status === 'CANCELLED' || order.status === 'COMPLETED') throw new UserFacingError('Completed or cancelled orders cannot be changed.');
+    if (FROZEN.includes(order.status)) throw new UserFacingError('This order is out for delivery or delivered. Its items and total can no longer change.');
     if (d.quantity >= item.quantity) throw new UserFacingError('To add more, place a new order. Here you can only reduce or remove.');
+    const atStation = order.status !== 'NEW';
+    // Counter items (no station) are handled by front of house itself: nobody else to tell.
+    const started = !!item.stationId && (item.prepStatus === 'PREPARING' || item.prepStatus === 'READY');
+    if (atStation && started && !d.kitchenNotified) {
+      throw new UserFacingError(
+        item.prepStatus === 'READY'
+          ? 'This item is already prepared. Tell the station, then confirm that you did to change it.'
+          : 'The kitchen has already started this item. Tell the station, then confirm that you did to change it.',
+      );
+    }
     const perUnit = item.unitPriceCents + item.modifiersUnitCents;
     const newLine = perUnit * d.quantity;
     const allocated = item.allocations.reduce((s, a) => s + a.amountCents, 0);
     if (allocated > newLine) throw new UserFacingError('Part of this item is already paid. Void that payment first.');
+    if (atStation && d.quantity === 0) {
+      const others = await tx.orderItem.count({ where: { orderId: order.id, voidedAt: null, id: { not: item.id } } });
+      if (others === 0) throw new UserFacingError('This is the last item of the order. Cancel the order instead (with a reason), so every station is told.');
+    }
+    const now = new Date();
     await tx.orderItem.update({
       where: { id: item.id },
-      data: d.quantity === 0 ? { voidedAt: new Date(), voidedById: ctx.userId, voidReason: d.reason, prepStatus: 'CANCELLED' } : { quantity: d.quantity, lineTotalCents: newLine },
+      data:
+        d.quantity === 0
+          ? { voidedAt: now, voidedById: ctx.userId, voidReason: d.reason, prepStatus: 'CANCELLED' }
+          : // Once the station has the ticket, it shows the line as changed ("was N").
+            { quantity: d.quantity, lineTotalCents: newLine, ...(atStation ? { amendedAt: now, originalQuantity: item.originalQuantity ?? item.quantity } : {}) },
     });
     const lines = await tx.orderItem.findMany({ where: { orderId: order.id, voidedAt: null } });
     const subtotal = lines.reduce((s, l) => s + l.lineTotalCents, 0);
@@ -157,13 +210,19 @@ export async function changeOrderItem(ctx: TenantContext, input: unknown) {
     if (order.paidCents > total) throw new UserFacingError('The new total would be lower than what was already paid. Void a payment first.');
     await tx.order.update({ where: { id: order.id }, data: { subtotalCents: subtotal, discountCents: discount, totalCents: total, paymentStatus: paymentStatusFor(order.paidCents, total) } });
     await syncLoyaltyForOrder(tx, order.id);
+    let stationTicketCancelled = false;
     if (item.stationId) {
       const remaining = lines.filter((l) => l.stationId === item.stationId).length;
-      if (remaining === 0) await tx.kitchenTicket.updateMany({ where: { orderId: order.id, stationId: item.stationId }, data: { status: 'CANCELLED' } });
+      // The cancelled ticket stays on that station's screen for a while, with the removed line.
+      if (remaining === 0) stationTicketCancelled = (await tx.kitchenTicket.updateMany({ where: { orderId: order.id, stationId: item.stationId }, data: { status: 'CANCELLED' } })).count > 0;
     }
     if (lines.length === 0) {
+      // Only reachable for NEW orders (see above): the kitchen never had a ticket.
       await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: d.reason } });
       await tx.orderStatusEvent.create({ data: { orderId: order.id, fromStatus: order.status, toStatus: 'CANCELLED', actorType: 'STAFF', actorUserId: ctx.userId, note: `All items removed: ${d.reason}` } });
+    } else if (atStation) {
+      // Removing a station's last open item, or the counter's last waiting one, can complete the order.
+      await syncOrderReadiness(tx, order.id, ctx.userId);
     }
     await audit(
       {
@@ -172,7 +231,24 @@ export async function changeOrderItem(ctx: TenantContext, input: unknown) {
         action: d.quantity === 0 ? 'order.item_voided' : 'order.item_quantity_reduced',
         entityType: 'OrderItem',
         entityId: item.id,
-        metadata: { orderNumber: order.number, item: item.nameSnapshot, from: item.quantity, to: d.quantity, reason: d.reason, totalBefore: order.totalCents, totalAfter: total, discountBefore: order.discountCents, discountAfter: discount },
+        metadata: {
+          orderNumber: order.number,
+          item: item.nameSnapshot,
+          from: item.quantity,
+          to: d.quantity,
+          reason: d.reason,
+          totalBefore: order.totalCents,
+          totalAfter: total,
+          discountBefore: order.discountCents,
+          discountAfter: discount,
+          // Where the order was when it changed, and what the station was told.
+          orderStatus: order.status,
+          prepStatus: item.prepStatus,
+          stationId: item.stationId,
+          shownOnStation: atStation && !!item.stationId,
+          stationTicketCancelled,
+          kitchenNotified: d.kitchenNotified,
+        },
       },
       tx,
     );
@@ -189,10 +265,14 @@ export async function transferSession(ctx: TenantContext, sessionId: string, toT
   if (target.id === session.tableId) throw new UserFacingError('This is already the current table.');
   await db.$transaction(async (tx) => {
     await lockTable(tx, target.id);
+    // Orders in flight on the old table finish first (they share this row's lock), then follow the move.
+    await lockSession(tx, session.id);
     const busy = await tx.tableSession.findFirst({ where: { tableId: target.id, status: 'OPEN' } });
     if (busy) throw new UserFacingError(`Table ${target.label} already has guests. Close it first.`);
     await tx.tableSession.update({ where: { id: session.id }, data: { tableId: target.id } });
     await tx.order.updateMany({ where: { tableSessionId: session.id }, data: { tableId: target.id } });
+    // The party's phones follow them: they order with the new table's QR, no new PIN needed.
+    await tx.tableSessionDevice.updateMany({ where: { tableSessionId: session.id }, data: { tableId: target.id } });
     await tx.staffTask.updateMany({ where: { tableSessionId: session.id }, data: { tableId: target.id } });
     await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'table.session_transferred', entityType: 'TableSession', entityId: session.id, metadata: { from: session.table.label, to: target.label } }, tx);
   });
@@ -216,7 +296,11 @@ export const paymentSchema = z.object({
 /**
  * Records a payment taken at the restaurant (cash / card terminal / counter). No online
  * payment and no card data are handled by MenuNiva. Overpayment is refused; concurrent
- * payments are serialised with row locks.
+ * payments, cancellations and item changes are serialised with the order row lock.
+ *
+ * This is an operational record for reconciling with the till. It is NOT a Portuguese fiscal
+ * document (fatura / fatura-recibo): MenuNiva is not certified invoicing or POS software, and the
+ * legal document is issued by the restaurant's certified system.
  */
 export async function recordPayment(ctx: TenantContext, input: unknown) {
   const d = paymentSchema.parse(input);
@@ -239,6 +323,11 @@ export async function recordPayment(ctx: TenantContext, input: unknown) {
     // An order cancelled while this payment was being recorded takes no money.
     if (d.orderId && locked.some((o) => o.status === 'CANCELLED')) throw new UserFacingError('This order was cancelled.');
     orders = locked.filter((o) => o.status !== 'CANCELLED');
+    // "Cash on delivery" is cash a driver collected at the door for an order the guest said they
+    // would pay in cash. It is never a table bill, and never an order the guest pays by card.
+    if (d.method === 'CASH_ON_DELIVERY' && !orders.every((o) => o.channel === 'DELIVERY' && o.paymentMethodIntent !== 'CARD_TERMINAL')) {
+      throw new UserFacingError('“Cash on delivery” is only for delivery orders paid in cash at the door. Choose Cash or Card for this payment.');
+    }
     const created: string[] = [];
 
     if (d.itemIds?.length) {
@@ -288,17 +377,23 @@ export async function recordPayment(ctx: TenantContext, input: unknown) {
   });
 }
 
+/**
+ * Marks a recorded payment as given back (reversal). The record stays, with who voided it, when
+ * and why (audit OPS-49: the reason used to live only in the audit log). Serialised with payments,
+ * item changes and cancellation by the same order lock.
+ */
 export async function voidPayment(ctx: TenantContext, paymentId: string, reason: string) {
-  if (!reason?.trim()) throw new UserFacingError('Give a reason for voiding this payment.');
+  const why = reason?.trim().slice(0, 300);
+  if (!why) throw new UserFacingError('Give a reason for voiding this payment.');
   await db.$transaction(async (tx) => {
     const p = await tx.paymentRecord.findFirst({ where: { id: paymentId, organizationId: ctx.org.id }, include: { order: true } });
     if (!p) throw new UserFacingError('Payment not found.', 404);
     await assertLocationAccess(ctx, p.order.locationId);
     await lockOrders(tx, [p.orderId]);
-    const r = await tx.paymentRecord.updateMany({ where: { id: p.id, status: 'RECORDED' }, data: { status: 'VOIDED', voidedAt: new Date(), voidedById: ctx.userId } });
+    const r = await tx.paymentRecord.updateMany({ where: { id: p.id, status: 'RECORDED' }, data: { status: 'VOIDED', voidedAt: new Date(), voidedById: ctx.userId, voidReason: why } });
     if (r.count !== 1) throw new UserFacingError('This payment was already voided.');
     await recomputeOrderPayment(tx, p.orderId);
-    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'payment.voided', entityType: 'PaymentRecord', entityId: p.id, metadata: { amountCents: p.amountCents, reason } }, tx);
+    await audit({ organizationId: ctx.org.id, actorUserId: ctx.userId, action: 'payment.voided', entityType: 'PaymentRecord', entityId: p.id, metadata: { orderNumber: p.order.number, method: p.method, amountCents: p.amountCents, reason: why } }, tx);
   });
 }
 

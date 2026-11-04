@@ -40,7 +40,10 @@ export default async function PublishPage({ params }: { params: Promise<{ org: s
               <input type="hidden" name="locationId" value={location.id} />
               <Checkbox name="confirm" label="I reviewed the dishes, prices and translations. Allergen information shown to guests has been verified by the restaurant." />
               {stations > 0 && unrouted.length > 0 && (
-                <Checkbox name="confirmUnrouted" label={`The ${unrouted.length} dishes without a kitchen station need no preparation (they will not appear on any kitchen screen).`} />
+                <Checkbox
+                  name="confirmUnrouted"
+                  label={`Publish anyway: the ${unrouted.length} dishes without a station here stay unavailable to guests until they get one, or are marked “No preparation” on Kitchen stations.`}
+                />
               )}
             </ActionForm>
           )}

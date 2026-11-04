@@ -137,15 +137,18 @@ export async function applyRetention(now = new Date()) {
     }
   }
   const day = 86400_000;
-  const [sessions, resets, setupTokens, invitations, buckets, errors] = await Promise.all([
+  const [sessions, resets, setupTokens, invitations, buckets, tableDevices, errors] = await Promise.all([
     db.session.deleteMany({ where: { expiresAt: { lt: now } } }),
     db.passwordResetToken.deleteMany({ where: { OR: [{ expiresAt: { lt: new Date(now.getTime() - 30 * day) } }, { usedAt: { lt: new Date(now.getTime() - 30 * day) } }] } }),
     db.platformSetupToken.deleteMany({ where: { expiresAt: { lt: new Date(now.getTime() - 30 * day) } } }),
     db.invitation.deleteMany({ where: { acceptedAt: null, OR: [{ expiresAt: { lt: new Date(now.getTime() - 30 * day) } }, { revokedAt: { lt: new Date(now.getTime() - 30 * day) } }] } }),
     db.rateLimitBucket.deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * day) } } }),
+    // Phone authorisations of table seatings closed more than 30 days ago (only hashes; orders keep
+    // their data, the link to the phone is cleared).
+    db.tableSessionDevice.deleteMany({ where: { tableSession: { status: 'CLOSED', closedAt: { lt: new Date(now.getTime() - 30 * day) } } } }),
     db.errorLog.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 90 * day) } } }),
   ]);
-  return { guestData: totals, failedRestaurants, platform: { sessions: sessions.count, resetTokens: resets.count, setupTokens: setupTokens.count, invitations: invitations.count, rateLimitBuckets: buckets.count, errorLogs: errors.count } };
+  return { guestData: totals, failedRestaurants, platform: { sessions: sessions.count, resetTokens: resets.count, setupTokens: setupTokens.count, invitations: invitations.count, rateLimitBuckets: buckets.count, tableDevices: tableDevices.count, errorLogs: errors.count } };
 }
 
 async function retainOrg(org: { id: string; settings: { dataRetentionDays: number } | null }, now: Date, totals: { orders: number; reservations: number; feedback: number; loyalty: number }) {

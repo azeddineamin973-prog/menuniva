@@ -39,6 +39,7 @@ const PUBLIC_PAGES: Record<string, string> = {
   'onboarding/new/page.tsx': 'redirects to login without a session',
   'r/[org]/[[...location]]/page.tsx': 'public menu of a published restaurant',
   'r/[org]/order/[mode]/page.tsx': 'public takeaway/delivery ordering',
+  'r/[org]/order/[mode]/checkout/page.tsx': 'public takeaway/delivery checkout (cart in the browser; the order API checks everything)',
   'r/[org]/reserve/page.tsx': 'public reservation request',
   'r/[org]/feedback/page.tsx': 'public private-feedback form',
   't/[token]/page.tsx': 'table QR token',
@@ -64,6 +65,17 @@ const MEMBER_ONLY_PAGES: Record<string, string> = {
   'dashboard/[org]/page.tsx': 'overview checks overview.view itself and redirects staff to their workspace',
   'dashboard/[org]/forbidden/page.tsx': 'static access notice',
   'dashboard/[org]/unavailable/page.tsx': 'static “not in plan” notice',
+};
+// Dashboard route handlers that only require membership (tenantRoute(…, undefined, …)), with reason.
+// No single permission is held by every role (kitchen staff: kds.*, drivers: delivery.driver only), so
+// the route cannot demand one; the service computes each part only behind its own ctx.can() check,
+// scoped to the member's locations (behaviour: tests/integration/nav-counts-access.test.ts).
+const MEMBER_ONLY_ROUTES: Record<string, { reason: string; service: string; gates: string[] }> = {
+  'api/dashboard/[org]/counts/route.ts': {
+    reason: 'sidebar badges + attention summary for every role',
+    service: '../../src/server/services/nav-counts.ts',
+    gates: ["ctx.can('orders.view')", "ctx.can('tasks.manage')", "ctx.can('payments.record')", "ctx.can('reservations.manage')", "ctx.can('reviews.view')", 'attentionFor(ctx'],
+  },
 };
 
 describe('M13-01 authorization audit (static)', () => {
@@ -93,7 +105,14 @@ describe('M13-01 authorization audit (static)', () => {
       for (const fn of fns) {
         if (f.startsWith('api/dashboard/')) {
           const m = fn.body.match(/(?:tenantRoute\([^,]+,[^,]+,|requireTenantAction\([^,]+,)\s*'([a-zA-Z.]+)'/);
-          if (!m) problems.push(`${f} ${fn.name}: no tenantRoute()/requireTenantAction() with a permission`);
+          const memberOnly = MEMBER_ONLY_ROUTES[f];
+          if (memberOnly) {
+            // Membership is still checked (tenantRoute), read-only, and every count stays behind its gate.
+            if (fn.name !== 'GET') problems.push(`${f} ${fn.name}: member-only routes may only read`);
+            if (!/tenantRoute\([^,]+,[^,]+,\s*undefined\s*,/.test(fn.body)) problems.push(`${f} ${fn.name}: member-only route without tenantRoute(req, org, undefined, …)`);
+            const service = readFileSync(path.resolve(__dirname, memberOnly.service), 'utf8');
+            for (const g of memberOnly.gates) if (!service.includes(g)) problems.push(`${f}: ${memberOnly.service} lost its gate ${g}`);
+          } else if (!m) problems.push(`${f} ${fn.name}: no tenantRoute()/requireTenantAction() with a permission`);
           else if (!perms.has(m[1])) problems.push(`${f} ${fn.name}: unknown permission ${m[1]}`);
           if (fn.name !== 'GET' && fn.body.includes('requireTenantAction(') && !fn.body.includes('assertSameOrigin(')) problems.push(`${f} ${fn.name}: write without origin check`);
         } else if (f.startsWith('api/account/')) {
@@ -103,6 +122,7 @@ describe('M13-01 authorization audit (static)', () => {
         } else if (!PUBLIC_ROUTES[f]) problems.push(`${f} ${fn.name}: not classified`);
       }
     }
+    for (const f of Object.keys(MEMBER_ONLY_ROUTES)) if (!files.includes(f)) problems.push(`${f}: listed as member-only but no longer exists`);
     expect(problems).toEqual([]);
   });
 

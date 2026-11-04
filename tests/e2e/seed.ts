@@ -58,7 +58,9 @@ async function main() {
   const table = await db.restaurantTable.create({ data: { organizationId: org.id, locationId: location.id, label: '07', qrTokens: { create: { token: `seed${prefix}`.padEnd(22, 'x').slice(0, 22) } } }, include: { qrTokens: true } });
   await db.restaurantLocation.update({
     where: { id: location.id },
-    data: { isPublished: true, tableOrderingEnabled: true, addressLine1: 'Rua E2E, 1', city: 'Braga', phone: '+351 900 000 001' },
+    // As an existing restaurant after the migration (OPEN, pending cap 50) for the existing browser suites; tests/e2e/secure-qr.spec.ts switches
+    // its own restaurant to SESSION_PIN (the default for new locations).
+    data: { isPublished: true, tableOrderingEnabled: true, tableOrderingPolicy: 'OPEN', tablePendingOrderCap: 50, addressLine1: 'Rua E2E, 1', city: 'Braga', phone: '+351 900 000 001' },
   });
   await db.restaurantOrganization.update({ where: { id: org.id }, data: { status: 'ACTIVE' } });
   console.log(

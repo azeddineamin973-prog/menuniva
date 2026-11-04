@@ -4,6 +4,8 @@ import { Alert, ButtonLink, Card, CardHeader, Field, Input, PageHeader, Select }
 import { LANGUAGE_NATIVE_NAME, LANGUAGE_TAG } from '@/i18n/config';
 import { getMenuAdmin, pickName } from '@/server/services/menu';
 import { unroutedDishes } from '@/server/services/publish';
+import { NO_PREPARATION, prepRoute } from '@/server/services/routing';
+import { currentLocation } from '@/server/current-location';
 import { requireTenantPage } from '@/server/tenant';
 import { SetupStepNav } from '@/components/dashboard/setup-nav';
 import { quickAddCategoryAction, setCategoryStationAction } from './actions';
@@ -13,15 +15,19 @@ import { MenuTabs } from './menu-tabs';
 export default async function MenuPage({ params }: { params: Promise<{ org: string }> }) {
   const { org } = await params;
   const ctx = await requireTenantPage(org, 'menu.view');
-  const { categories, stations, org: o } = await getMenuAdmin(ctx);
+  const [{ categories, stations: allStations, org: o }, location] = await Promise.all([getMenuAdmin(ctx), currentLocation(ctx)]);
   const base = `/dashboard/${ctx.org.slug}`;
   const canEdit = ctx.can('menu.edit');
   const canImport = ctx.can('import.manage');
   const langs = [o.sourceLanguage, o.defaultLanguage, ...o.enabledLanguages];
   const enabled = o.enabledLanguages.length;
-  // Visible dishes that reach no Kitchen/Café screen (e.g. imported into a category without a station).
-  const unrouted = stations.length > 0 ? await unroutedDishes(ctx.org.id) : [];
-  const unroutedByCategory = categories.filter((c) => unrouted.some((u) => u.categoryId === c.id));
+  // Stations are per location; the menu is shared. Routing is shown for the location being worked in.
+  const stations = allStations.filter((s) => s.locationId === location?.id);
+  // Visible dishes guests cannot order here: no switched-on station of this location prepares them.
+  const unrouted = location && stations.length > 0 ? await unroutedDishes(ctx.org.id, location.id) : [];
+  const unroutedIds = new Set(unrouted.map((u) => u.id));
+  // A category another location's station prepares is fixed from that location: changing it here would change it there too.
+  const unroutedByCategory = categories.filter((c) => unrouted.some((u) => u.categoryId === c.id) && (!c.defaultStation || c.defaultStation.locationId === location?.id));
 
   const view: MenuCategoryView[] = categories.map((c) => ({
     id: c.id,
@@ -42,7 +48,8 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
         dineIn: price('DINE_IN'),
         takeaway: price('TAKEAWAY'),
         delivery: price('DELIVERY'),
-        noStation: !p.station && !c.defaultStation,
+        noStation: unroutedIds.has(p.id),
+        noPreparation: !!location && prepRoute({ ...p, category: c }, location.id).kind === 'none',
         allergens: p._count.allergens > 0,
         missingTranslations: Math.max(0, enabled - p.translations.length),
       };
@@ -96,8 +103,8 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
 
       {unrouted.length > 0 && (
         <div className="mb-4" data-testid="unrouted-warning">
-          <Alert tone="warning" title={`${unrouted.length} visible dishes are not sent to any kitchen screen`}>
-            <p>{unrouted.slice(0, 8).map((u) => u.name).join(', ')}{unrouted.length > 8 ? '…' : ''}. Orders for them create no Kitchen/Café ticket.</p>
+          <Alert tone="warning" title={`${unrouted.length} visible dishes are not sent to any kitchen screen here`}>
+            <p>{unrouted.slice(0, 8).map((u) => u.name).join(', ')}{unrouted.length > 8 ? '…' : ''}. Guests cannot order them at {location?.name} until a station prepares them, or until you mark them as needing no preparation.</p>
             {canEdit && (
               <ul className="mt-2 space-y-2">
                 {unroutedByCategory.map((c) => (
@@ -106,9 +113,10 @@ export default async function MenuPage({ params }: { params: Promise<{ org: stri
                       <input type="hidden" name="org" value={ctx.org.slug} />
                       <input type="hidden" name="categoryId" value={c.id} />
                       <span className="text-sm font-medium">{pickName(c.translations, langs) ?? 'Untitled category'}</span>
-                      <Select name="stationId" defaultValue="" className="h-8 w-44 text-xs" aria-label={`Station for ${pickName(c.translations, langs) ?? 'category'}`} required>
+                      <Select name="stationId" defaultValue="" className="h-8 w-56 text-xs" aria-label={`Station for ${pickName(c.translations, langs) ?? 'category'}`} required>
                         <option value="" disabled>Choose a station…</option>
-                        {stations.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                        {stations.filter((st) => st.isActive).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                        <option value={NO_PREPARATION}>No preparation (handed over at the counter)</option>
                       </Select>
                     </ActionForm>
                   </li>

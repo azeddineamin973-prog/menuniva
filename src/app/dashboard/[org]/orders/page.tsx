@@ -13,7 +13,7 @@ export default async function LiveOrdersPage({ params }: { params: Promise<{ org
   if (!location) return <Alert tone="warning">No location available.</Alert>;
   return (
     <>
-      <PageHeader title={m.nav.liveOrders} description={`${location.name} · new orders stay highlighted until someone sees or accepts them.`} />
+      <PageHeader title={m.nav.liveOrders} description={`${location.name} · new orders stay highlighted on every screen until someone accepts or rejects them.`} />
       <LiveBoard org={ctx.org.slug} locationId={location.id} canManage={ctx.can('orders.manage')} canTasks={ctx.can('tasks.manage')} tag={LANGUAGE_TAG[ctx.user.preferredLanguage]} t={m.staff} />
     </>
   );

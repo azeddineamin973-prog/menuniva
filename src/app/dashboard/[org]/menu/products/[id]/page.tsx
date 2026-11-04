@@ -17,6 +17,7 @@ import { groupSchedules } from '@/lib/schedules';
 import { AllergenEditor } from '../allergen-editor';
 import { OptionsEditor } from '../options-editor';
 import { ProductEditor } from '../product-editor';
+import { NO_PREPARATION } from '@/server/services/routing';
 
 type Names = Partial<Record<LanguageCode, string>>;
 
@@ -91,7 +92,7 @@ export default async function ProductPage({ params }: { params: Promise<{ org: s
             id: product.id,
             taxClassId: product.taxClassId,
             categoryId: product.categoryId,
-            stationId: product.stationId,
+            stationId: product.stationId ?? (product.noPreparation ? NO_PREPARATION : null),
             status: product.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT',
             isFeatured: product.isFeatured,
             isPopular: product.isPopular,

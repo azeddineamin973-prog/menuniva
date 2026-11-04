@@ -415,6 +415,20 @@ export async function unassignReservationTable(ctx: TenantContext, reservationId
   await db.reservationTableAssignment.deleteMany({ where: { reservationId: r.id, tableId } });
 }
 
+/**
+ * Every reservation still in play from `from` onwards (requested, confirmed or seated), soonest
+ * first, so staff see future bookings without picking each date. Finished ones stay in the day view.
+ */
+export async function upcomingReservations(ctx: TenantContext, locationId: string, from: Date, take = 300) {
+  await assertLocationAccess(ctx, locationId);
+  return db.reservation.findMany({
+    where: { organizationId: ctx.org.id, locationId, startsAt: { gte: from }, status: { in: HOLDING } },
+    include: { assignments: { include: { table: { select: { id: true, label: true, seats: true } } } } },
+    orderBy: { startsAt: 'asc' },
+    take,
+  });
+}
+
 export async function reservationsForDay(ctx: TenantContext, locationId: string, dateStr: string) {
   await assertLocationAccess(ctx, locationId);
   const location = await db.restaurantLocation.findUniqueOrThrow({ where: { id: locationId } });

@@ -10,8 +10,11 @@ import { formatCents } from '@/lib/money';
 import { db } from '@/server/db';
 import { currentLocation } from '@/server/current-location';
 import { unroutedDishes } from '@/server/services/publish';
+import { usesStations } from '@/server/services/routing';
 import { getSetupProgress } from '@/server/services/setup-progress';
+import { attentionFor } from '@/server/services/attention';
 import { requireTenantPage } from '@/server/tenant';
+import { attentionText, type AttentionItem } from '@/lib/attention';
 import { startOfDayInZone } from '@/lib/time';
 
 const STATUS: Record<string, { label: string; tone: 'lime' | 'info' | 'warning' | 'success' | 'neutral' }> = {
@@ -46,7 +49,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
   const canMenu = ctx.can('menu.edit');
   const canPreview = ctx.can('menu.view');
 
-  const [setup, todayOrders, activeOrders, openTasks, todayValue, live, waiting, lowRatings, noPrice, soldOut, unrouted] = await Promise.all([
+  const [setup, todayOrders, activeOrders, openTasks, todayValue, live, work, lowRatings, noPrice, soldOut, unrouted] = await Promise.all([
     ctx.can('settings.manage') ? getSetupProgress(ctx.org.id, location?.id) : null,
     db.order.count({ where: { ...scope, createdAt: { gte: since } } }),
     db.order.count({ where: { ...scope, status: { in: [...ACTIVE] } } }),
@@ -55,20 +58,31 @@ export default async function OverviewPage({ params }: { params: Promise<{ org: 
     ctx.can('orders.view')
       ? db.order.findMany({ where: { ...scope, status: { in: [...ACTIVE] } }, orderBy: [{ isPriority: 'desc' }, { createdAt: 'asc' }], take: 6, include: { table: { select: { label: true } } } })
       : [],
-    ctx.can('orders.view') ? db.order.count({ where: { ...scope, status: 'NEW', acknowledgedAt: null } }) : 0,
+    // The same unresolved work as the attention bar on every page (one computation, server-side).
+    attentionFor(ctx),
     ctx.can('reviews.view') ? db.notification.count({ where: { ...scope, type: 'LOW_RATING', readAt: null } }) : 0,
     canMenu ? db.menuProduct.count({ where: { organizationId: ctx.org.id, status: { not: 'ARCHIVED' }, prices: { none: { channel: 'DINE_IN' } } } }) : 0,
     ctx.can('menu.availability') ? db.menuProduct.count({ where: { organizationId: ctx.org.id, status: 'ACTIVE', soldOut: true } }) : 0,
-    canMenu ? unroutedDishes(ctx.org.id).then((u) => u.length) : 0,
+    // Dishes guests cannot order at this location (only counted where kitchen screens are used).
+    canMenu && location ? usesStations(location.id).then((on) => (on ? unroutedDishes(ctx.org.id, location.id).then((u) => u.length) : 0)) : 0,
   ]);
   // Publish blockers are already listed by the setup checklist; the card only needs them when it is done.
   const link = canPreview && location ? await getRestaurantLink(ctx, location.id, { checks: ctx.can('settings.manage') }) : null;
 
   const attention: { icon: IconName; text: string; href: string; tone: 'lime' | 'warning' | 'danger' | 'info' }[] = [];
-  if (waiting) attention.push({ icon: 'orders', text: `${waiting} new order${waiting === 1 ? '' : 's'} waiting to be accepted`, href: `${base}/orders`, tone: 'lime' });
-  if (openTasks && ctx.can('tasks.manage')) attention.push({ icon: 'bell', text: `${openTasks} table request${openTasks === 1 ? '' : 's'} (waiter or bill)`, href: `${base}/tasks`, tone: 'lime' });
+  const NAV_ICON: Record<AttentionItem['nav'], IconName> = { liveOrders: 'orders', kitchen: 'kitchen', tasks: 'bell', reservations: 'calendar', myDeliveries: 'truck' };
+  for (const i of work.items.slice(0, 5)) {
+    const age = Math.floor(i.ageSec / 60);
+    attention.push({
+      icon: NAV_ICON[i.nav],
+      text: `${attentionText(i, m.shell.attention)}${i.locationName ? ` · ${i.locationName}` : ''} · ${age < 1 ? '<1' : age} min`,
+      href: i.href,
+      tone: i.level === 'urgent' ? 'danger' : i.level === 'warning' ? 'warning' : 'lime',
+    });
+  }
+  if (work.total > 5) attention.push({ icon: 'alert', text: `${work.total - 5} more in the Needs attention bar above`, href: `${base}/orders`, tone: 'info' });
   if (lowRatings) attention.push({ icon: 'star', text: `${lowRatings} low rating${lowRatings === 1 ? '' : 's'} to follow up`, href: `${base}/reviews`, tone: 'danger' });
-  if (unrouted) attention.push({ icon: 'station', text: `${unrouted} visible dish${unrouted === 1 ? ' is' : 'es are'} not sent to any kitchen screen`, href: `${base}/stations`, tone: 'warning' });
+  if (unrouted) attention.push({ icon: 'station', text: `${unrouted} visible dish${unrouted === 1 ? ' is' : 'es are'} not sent to any kitchen screen, so guests cannot order ${unrouted === 1 ? 'it' : 'them'} here`, href: `${base}/stations`, tone: 'warning' });
   if (noPrice) attention.push({ icon: 'tag', text: `${noPrice} dish${noPrice === 1 ? ' has' : 'es have'} no dine-in price`, href: `${base}/menu/quick`, tone: 'warning' });
   if (soldOut) attention.push({ icon: 'eyeOff', text: `${soldOut} dish${soldOut === 1 ? ' is' : 'es are'} marked sold out`, href: `${base}/menu/quick`, tone: 'info' });
   if (location && !location.isPublished && ctx.can('settings.manage')) attention.push({ icon: 'globe', text: `${location.name} is not published yet`, href: `${base}/setup/publish`, tone: 'warning' });

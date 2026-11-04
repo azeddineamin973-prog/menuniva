@@ -8,14 +8,25 @@ import { getPlatformConfig } from './services/platform-config';
 /** Feature modules available to an organization right now (plan + trial + Super Admin toggles). */
 /** Base modules (plan, or all during an included trial), Super Admin overrides and the result. */
 export async function orgModuleState(organizationId: string, now = new Date(), tx: Tx | typeof db = db) {
-  const [org, config] = await Promise.all([
-    tx.restaurantOrganization.findUnique({ where: { id: organizationId }, select: { enabledModules: true, disabledModules: true, subscription: { select: { status: true, trialEndsAt: true, plan: { select: { features: true } } } } } }),
+  // One statement for the organisation, its subscription and the plan: as a nested Prisma read these
+  // were three queries one after the other, and every page, guard and guest order asks for this, each
+  // time paying the database round trip three times (final QA, +80 ms: about 0.25 s per call). The
+  // trial is decided in SQL against `now` as UTC, the way Prisma stores DateTime (timestamp(3)).
+  const [rows, config] = await Promise.all([
+    tx.$queryRaw<{ enabledModules: string[]; disabledModules: string[]; hasSubscription: boolean; trialActive: boolean; planFeatures: string[] | null }[]>`
+      SELECT o."enabledModules"::text[] AS "enabledModules", o."disabledModules"::text[] AS "disabledModules",
+             (s.id IS NOT NULL) AS "hasSubscription",
+             COALESCE(s.status = 'TRIALING' AND (s."trialEndsAt" IS NULL OR s."trialEndsAt" > (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')), false) AS "trialActive",
+             p.features::text[] AS "planFeatures"
+        FROM "RestaurantOrganization" o
+        LEFT JOIN "Subscription" s ON s."organizationId" = o.id
+        LEFT JOIN "SubscriptionPlan" p ON p.id = s."planId"
+       WHERE o.id = ${organizationId}`,
     getPlatformConfig(tx),
   ]);
+  const org = rows[0];
   if (!org) return null;
-  const sub = org.subscription;
-  const trialActive = !!sub && sub.status === 'TRIALING' && (!sub.trialEndsAt || sub.trialEndsAt > now);
-  const common = { planFeatures: sub?.plan.features ?? null, trialActive, trialIncludesAll: config.trialIncludesAllModules };
+  const common = { planFeatures: org.hasSubscription ? (org.planFeatures ?? []) : null, trialActive: org.trialActive, trialIncludesAll: config.trialIncludesAllModules };
   return {
     base: effectiveModules({ ...common, enabled: [], disabled: [] }),
     effective: effectiveModules({ ...common, enabled: org.enabledModules, disabled: org.disabledModules }),

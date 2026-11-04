@@ -28,15 +28,15 @@ export default async function TicketPrintPage({ params }: { params: Promise<{ or
           {t.items.map((i, k) => (
             <li key={k}>
               <p className="font-bold">{i.quantity} × {i.name}</p>
-              {i.detail && <p className="ps-4 text-sm">{i.detail}</p>}
-              {i.notes && <p className="ps-4 text-sm font-bold">! {i.notes}</p>}
+              {i.detail && <p className="ps-4 text-sm wrap-anywhere">{i.detail}</p>}
+              {i.notes && <p className="ps-4 text-sm font-bold wrap-anywhere">! {i.notes}</p>}
             </li>
           ))}
         </ul>
         {t.orderNotes && (
           <>
             <hr className="my-2 border-dashed border-black" />
-            <p className="text-sm font-bold">Nota: {t.orderNotes}</p>
+            <p className="text-sm font-bold wrap-anywhere">Nota: {t.orderNotes}</p>
           </>
         )}
       </div>

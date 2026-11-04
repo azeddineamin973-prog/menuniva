@@ -6,7 +6,7 @@ import { db } from '../db';
 import { UserFacingError } from '../errors';
 import { assertLocationAccess, type TenantContext } from '../tenant';
 import { pickName } from './menu';
-import { unroutedDishes, unroutedWhere } from './routing';
+import { countUnrouted, NO_PREPARATION, unroutedDishes } from './routing';
 
 /**
  * Routing a whole menu to Kitchen / Café in one pass.
@@ -117,6 +117,21 @@ export type CategoryRouting = {
   overridden: number;
   currentStationId: string | null;
   currentStationName: string | null;
+  /**
+   * The category's routing seen from this location: a station here (switched on or off), a
+   * station of another location, "no preparation", or nothing yet.
+   */
+  current: 'station' | 'station_off' | 'other_location' | 'no_preparation' | 'none';
+  /** Name of the other location, when `current` is other_location. */
+  currentLocationName: string | null;
+  /** False when another location's station prepares it: changing it here would change that location. */
+  editable: boolean;
+  /**
+   * What the routing form shows and saves for this row: the current routing whenever there is
+   * one, a suggestion only when there is none. A suggestion never replaces a routing the
+   * restaurant chose (a café "Pastelaria" is not moved to the Kitchen because of its name).
+   */
+  formDefault: string;
   suggestedType: StationType | null;
   /** A real station of the suggested type, when the restaurant has one. */
   suggestedStationId: string | null;
@@ -140,18 +155,19 @@ export async function routingReview(ctx: TenantContext, locationId: string): Pro
   await assertLocationAccess(ctx, locationId);
   const org = await db.restaurantOrganization.findUniqueOrThrow({ where: { id: ctx.org.id }, select: { sourceLanguage: true, enabledLanguages: true } });
   const langs: LanguageCode[] = [org.sourceLanguage, ...org.enabledLanguages];
-  const [stations, categories, unrouted] = await Promise.all([
+  const [stations, categories, unrouted, unassignedProducts] = await Promise.all([
     db.kitchenStation.findMany({ where: { locationId, organizationId: ctx.org.id }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, type: true, isActive: true } }),
     db.menuCategory.findMany({
       where: { organizationId: ctx.org.id, isActive: true },
       orderBy: { sortOrder: 'asc' },
       include: {
         translations: { select: { language: true, name: true } },
-        defaultStation: { select: { id: true, name: true } },
+        defaultStation: { select: { id: true, name: true, isActive: true, locationId: true, location: { select: { name: true } } } },
         products: { where: { status: { not: 'ARCHIVED' } }, select: { id: true, stationId: true } },
       },
     }),
-    unroutedDishes(ctx.org.id),
+    unroutedDishes(ctx.org.id, locationId),
+    countUnrouted(ctx.org.id, locationId),
   ]);
   const active = stations.filter((s) => s.isActive);
   const missingTypes = new Set<StationType>();
@@ -161,63 +177,96 @@ export async function routingReview(ctx: TenantContext, locationId: string): Pro
     // once at least one station exists to send it to.
     const suggestedType = suggestStationType(name) ?? (active.length > 0 ? 'KITCHEN' : null);
     const match = suggestedType ? TYPE_FALLBACKS[suggestedType].map((t) => active.find((s) => s.type === t)).find(Boolean) : undefined;
+    const s = c.defaultStation;
+    const current: CategoryRouting['current'] = s
+      ? s.locationId !== locationId
+        ? 'other_location'
+        : s.isActive
+          ? 'station'
+          : 'station_off'
+      : c.noPreparation
+        ? 'no_preparation'
+        : 'none';
     // Report the exact type only when the restaurant has nothing that could serve it.
-    if (suggestedType && !match) missingTypes.add(suggestedType);
+    if (current === 'none' && suggestedType && !match) missingTypes.add(suggestedType);
     return {
       categoryId: c.id,
       name,
       products: c.products.length,
       overridden: c.products.filter((p) => p.stationId).length,
       currentStationId: c.defaultStationId,
-      currentStationName: c.defaultStation?.name ?? null,
+      currentStationName: s?.name ?? null,
+      current,
+      currentLocationName: current === 'other_location' ? (s?.location.name ?? null) : null,
+      editable: current !== 'other_location',
+      formDefault: current === 'station' || current === 'station_off' ? c.defaultStationId! : current === 'no_preparation' ? NO_PREPARATION : current === 'none' ? (match?.id ?? '') : '',
       suggestedType: suggestedType ?? null,
       suggestedStationId: match?.id ?? null,
       suggestedStationName: match?.name ?? null,
     };
   });
-  const unassignedProducts = await db.menuProduct.count({ where: { organizationId: ctx.org.id, ...unroutedWhere({ not: 'ARCHIVED' }) } });
   return {
     stations,
     categories: out,
     unrouted,
     unassignedProducts,
     missingTypes: [...missingTypes],
-    assignable: out.filter((c) => c.suggestedStationId && c.suggestedStationId !== c.currentStationId).length,
+    // Only categories with no routing at all get a pre-filled suggestion.
+    assignable: out.filter((c) => c.current === 'none' && c.suggestedStationId).length,
   };
 }
 
 export const assignCategoriesSchema = z.object({
   assignments: z
-    .array(z.object({ categoryId: z.string().min(1), stationId: z.string().min(1).nullable() }))
+    .array(z.object({ categoryId: z.string().min(1), stationId: z.string().min(1).nullable(), noPreparation: z.boolean().default(false) }))
     .min(1, 'Nothing to assign.')
     .max(500),
+  /** The location whose routing screen sent this: its stations only, and other locations' routing is kept. */
+  locationId: z.string().min(1).optional(),
 });
 
 /**
  * Sets the default station of many categories at once. Dishes inherit it unless they carry their
  * own station, which is left alone — an owner who routed one dish by hand keeps that choice.
+ * `noPreparation` marks a category whose dishes need none (handed over at the counter).
  */
 export async function assignCategoryStations(ctx: TenantContext, input: unknown): Promise<{ categories: number; products: number }> {
   const d = assignCategoriesSchema.parse(input);
-  // Every station id is checked against this tenant before anything is written.
-  const stationIds = [...new Set(d.assignments.map((a) => a.stationId).filter((v): v is string => !!v))];
-  if (stationIds.length) {
-    const found = await db.kitchenStation.findMany({ where: { id: { in: stationIds }, organizationId: ctx.org.id }, select: { id: true } });
-    if (found.length !== stationIds.length) throw new UserFacingError('Invalid station.');
-  }
+  if (d.locationId) await assertLocationAccess(ctx, d.locationId);
   const categoryIds = [...new Set(d.assignments.map((a) => a.categoryId))];
-  const owned = await db.menuCategory.findMany({ where: { id: { in: categoryIds }, organizationId: ctx.org.id }, select: { id: true } });
-  const ownedIds = new Set(owned.map((c) => c.id));
-  const valid = d.assignments.filter((a) => ownedIds.has(a.categoryId));
+  const owned = await db.menuCategory.findMany({ where: { id: { in: categoryIds }, organizationId: ctx.org.id }, select: { id: true, defaultStationId: true, defaultStation: { select: { locationId: true } } } });
+  const ownedById = new Map(owned.map((c) => [c.id, c]));
+  // Every station id is checked against this tenant before anything is written.
+  const stationIds = [...new Set(d.assignments.map((a) => (a.noPreparation ? null : a.stationId)).filter((v): v is string => !!v))];
+  const found = stationIds.length ? await db.kitchenStation.findMany({ where: { id: { in: stationIds }, organizationId: ctx.org.id }, select: { id: true, name: true, isActive: true, locationId: true } }) : [];
+  if (found.length !== stationIds.length) throw new UserFacingError('Invalid station.');
+  const stationById = new Map(found.map((s) => [s.id, s]));
+  const valid = d.assignments.filter((a) => ownedById.has(a.categoryId));
   if (valid.length === 0) throw new UserFacingError('No categories found.', 404);
+  for (const a of valid) {
+    const cat = ownedById.get(a.categoryId)!;
+    const target = a.noPreparation ? null : a.stationId;
+    const unchanged = !a.noPreparation && target === cat.defaultStationId;
+    if (unchanged) continue;
+    if (d.locationId && cat.defaultStation && cat.defaultStation.locationId !== d.locationId) {
+      throw new UserFacingError('A category is prepared at a station of another location. Change it from that location’s station page: changing it here would change that location too.');
+    }
+    const s = target ? stationById.get(target)! : null;
+    if (s && !s.isActive) throw new UserFacingError(`${s.name} is switched off. Switch it on first, or choose another station.`);
+    if (s && d.locationId && s.locationId !== d.locationId) throw new UserFacingError('Choose a station of this location.');
+  }
 
-  // Group by station so this is a handful of updateMany calls rather than one per category.
-  const byStation = new Map<string | null, string[]>();
-  for (const a of valid) byStation.set(a.stationId, [...(byStation.get(a.stationId) ?? []), a.categoryId]);
+  // Group by routing so this is a handful of updateMany calls rather than one per category.
+  const byRoute = new Map<string, { stationId: string | null; noPreparation: boolean; ids: string[] }>();
+  for (const a of valid) {
+    const route = { stationId: a.noPreparation ? null : a.stationId, noPreparation: a.noPreparation };
+    const key = `${route.stationId}|${route.noPreparation}`;
+    byRoute.set(key, { ...route, ids: [...(byRoute.get(key)?.ids ?? []), a.categoryId] });
+  }
   const { categories, products } = await db.$transaction(async (tx) => {
     let changed = 0;
-    for (const [stationId, ids] of byStation) {
-      const res = await tx.menuCategory.updateMany({ where: { id: { in: ids }, organizationId: ctx.org.id }, data: { defaultStationId: stationId } });
+    for (const { stationId, noPreparation, ids } of byRoute.values()) {
+      const res = await tx.menuCategory.updateMany({ where: { id: { in: ids }, organizationId: ctx.org.id }, data: { defaultStationId: stationId, noPreparation } });
       changed += res.count;
     }
     const affected = await tx.menuProduct.count({ where: { organizationId: ctx.org.id, status: { not: 'ARCHIVED' }, categoryId: { in: valid.map((a) => a.categoryId) }, stationId: null } });

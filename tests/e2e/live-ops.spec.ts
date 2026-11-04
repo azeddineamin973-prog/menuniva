@@ -55,17 +55,18 @@ test('M7-05: new orders trigger visual + sound + browser notification; persisten
   expect(r.status()).toBe(201);
   const card = page.getByTestId('column-new').getByTestId('order-card');
   await expect(card).toHaveCount(1, { timeout: 15_000 });
-  await expect(page.getByTestId('unread-count')).toContainText('1');
+  await expect(page.getByTestId('sidebar').getByTestId('nav-badge-liveOrders')).toHaveText('1');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __chimes: number }).__chimes)).toBeGreaterThan(baseline);
   await expect.poll(() => page.evaluate(() => (window as unknown as { __notes: string[] }).__notes.length)).toBeGreaterThan(0);
   await expect(page).toHaveTitle(/^\(1\)/);
 
-  // Still NEW and highlighted after a reload until someone acknowledges it
+  // Still NEW, highlighted and counted after a reload: only Accept or Reject ends that (no "Seen").
   await page.reload();
-  await expect(page.getByTestId('unread-count')).toBeVisible();
-  await card.getByRole('button', { name: 'Seen' }).click();
-  await expect(page.getByTestId('unread-count')).toHaveCount(0);
-  await expect(page.getByTestId('column-new').getByTestId('order-card')).toHaveCount(1); // still NEW, just acknowledged
+  await expect(page.getByTestId('sidebar').getByTestId('nav-badge-liveOrders')).toHaveText('1');
+  await expect(card).toHaveCount(1);
+  await expect(page).toHaveTitle(/^\(1\)/);
+  await expect(card.getByRole('button', { name: 'Seen' })).toHaveCount(0);
+  await expect(card.getByTestId('action-ACCEPTED')).toBeVisible();
 
   // Mute is remembered on this device
   await page.getByRole('button', { name: /Enable sound/ }).click();
@@ -73,6 +74,56 @@ test('M7-05: new orders trigger visual + sound + browser notification; persisten
   await page.reload();
   await page.getByRole('button', { name: /Enable sound/ }).click();
   await expect(page.getByRole('button', { name: /Alerts muted/ })).toBeVisible();
+});
+
+test('M7-05b: a NEW order waits on every device until one person accepts it; the other device follows and the counts agree', async ({ browser, request }) => {
+  const devices = await Promise.all([browser.newContext(), browser.newContext()]);
+  const [owner, waiter] = await Promise.all(devices.map((c) => c.newPage()));
+  await login(owner, s.owner, s.password);
+  await login(waiter, s.waiter, s.password);
+  for (const p of [owner, waiter]) {
+    await p.goto(`/dashboard/${s.orgSlug}/orders`);
+    await expect(p.getByTestId('connection-status')).toHaveAttribute('data-state', 'live');
+  }
+  const waitingBefore = await owner.getByTestId('column-new').getByTestId('order-card').count();
+  const r = await guestOrder(request);
+  expect(r.status()).toBe(201);
+  const number = String((await r.json()).orderNumber);
+  const waiting = waitingBefore + 1;
+  for (const p of [owner, waiter]) {
+    await expect(p.locator(`[data-testid=order-card][data-order-number="${number}"]`)).toHaveAttribute('data-status', 'NEW', { timeout: 15_000 });
+    await expect(p.getByTestId('sidebar').getByTestId('nav-badge-liveOrders')).toHaveText(String(waiting), { timeout: 15_000 });
+    await expect(p).toHaveTitle(new RegExp(`^\\(${waiting}\\)`));
+  }
+  // The waiter takes it on (Accept); the owner's tablet follows without anyone touching it.
+  await waiter.locator(`[data-testid=order-card][data-order-number="${number}"]`).getByTestId('action-ACCEPTED').click();
+  for (const p of [owner, waiter]) {
+    await expect(p.locator(`[data-testid=order-card][data-order-number="${number}"]`)).toHaveAttribute('data-status', 'ACCEPTED', { timeout: 15_000 });
+    if (waitingBefore) await expect(p.getByTestId('sidebar').getByTestId('nav-badge-liveOrders')).toHaveText(String(waitingBefore), { timeout: 15_000 });
+    else await expect(p.getByTestId('sidebar').getByTestId('nav-badge-liveOrders')).toHaveCount(0, { timeout: 15_000 });
+  }
+  await Promise.all(devices.map((c) => c.close()));
+});
+
+test('M7-06: the attention summary is on every page and links straight to the waiting order (audit OPS-01)', async ({ page, request }) => {
+  const r = await guestOrder(request);
+  expect(r.status()).toBe(201);
+  const number = (await r.json()).orderNumber as number;
+  await login(page, s.waiter, s.password);
+  for (const path of ['/tables', '/bills', '/menu']) {
+    await page.goto(`/dashboard/${s.orgSlug}${path}`);
+    await expect(page.getByTestId('attention-bar')).toBeVisible();
+  }
+  // The bell lists every item; this one opens Live Orders on that exact card.
+  await page.getByTestId('notifications').getByRole('button').first().click();
+  await page.getByRole('menuitem', { name: new RegExp(`Order #${number} not accepted`) }).click();
+  await expect(page).toHaveURL(/\/orders\?focus=order-/);
+  const card = page.locator(`[data-testid=order-card][data-order-number="${number}"]`);
+  await expect(card).toHaveAttribute('data-focused', 'true');
+  // Accepting resolves it: the item leaves the summary.
+  await card.getByTestId('action-ACCEPTED').click();
+  await expect(card).toHaveAttribute('data-status', 'ACCEPTED');
+  await expect.poll(async () => (await page.request.get(`/api/dashboard/${s.orgSlug}/counts`).then((x) => x.json())).attention.items.some((i: { orderNumber?: number; kind: string }) => i.kind === 'order_unaccepted' && i.orderNumber === number)).toBe(false);
 });
 
 test('M7-10: connection loss is shown, and the board reloads authoritative state on reconnect', async ({ page, context, request }) => {
@@ -87,6 +138,30 @@ test('M7-10: connection loss is shown, and the board reloads authoritative state
   await context.setOffline(false);
   await expect(page.getByTestId('connection-status')).toContainText('Live', { timeout: 12_000 });
   await expect(page.getByTestId('order-card')).toHaveCount(before + 1);
+});
+
+test('M7-10b: a poll that never answers stops showing Live, says since when, and the board recovers by itself', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  await login(page, s.owner, s.password);
+  await page.goto(`/dashboard/${s.orgSlug}/orders`);
+  await expect(page.getByTestId('connection-status')).toHaveAttribute('data-state', 'live');
+  await expect(page.getByTestId('column-new')).toBeVisible();
+  const before = await page.getByTestId('order-card').count();
+  // Every Live Orders request from now on hangs (no answer, no error).
+  const held: { abort: () => Promise<void> }[] = [];
+  await page.route('**/orders/live?**', (route) => void held.push(route));
+  await expect(page.getByTestId('connection-status')).not.toHaveAttribute('data-state', 'live', { timeout: 20_000 });
+  await expect(page.getByTestId('connection-status')).not.toContainText('Live');
+  await expect(page.getByTestId('stale-banner')).toContainText('Not updated since');
+  expect((await guestOrder(request)).status()).toBe(201);
+  // Network healthy again: the next try answers, with the order that came in meanwhile.
+  await page.unroute('**/orders/live?**');
+  await expect(page.getByTestId('order-card')).toHaveCount(before + 1, { timeout: 40_000 });
+  await expect(page.getByTestId('connection-status')).toHaveAttribute('data-state', 'live');
+  await expect(page.getByTestId('stale-banner')).toHaveCount(0);
+  // The hung request (still unanswered) was given up on instead of blocking the polls after it.
+  expect(held.length).toBeGreaterThanOrEqual(1);
+  for (const r of held) await r.abort().catch(() => undefined);
 });
 
 test('M8-04: waiter handles "call waiter" and "request bill" from the table', async ({ page, request }) => {

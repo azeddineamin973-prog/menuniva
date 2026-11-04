@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/ui';
 import { db } from '@/server/db';
 import { requireTenantPage } from '@/server/tenant';
 import { CategoryEditor } from './category-editor';
+import { NO_PREPARATION } from '@/server/services/routing';
 import { ScheduleEditor } from '../../schedule-editor';
 import { groupSchedules } from '@/lib/schedules';
 
@@ -26,7 +27,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ org: 
         languages={o.enabledLanguages}
         stations={stations.map((s) => ({ id: s.id, name: s.name }))}
         initial={{
-          defaultStationId: category.defaultStationId,
+          defaultStationId: category.defaultStationId ?? (category.noPreparation ? NO_PREPARATION : null),
           isActive: category.isActive,
           translations: Object.fromEntries(category.translations.map((t) => [t.language, { name: t.name, description: t.description ?? '' }])),
         }}

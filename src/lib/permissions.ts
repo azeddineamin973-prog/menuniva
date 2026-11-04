@@ -14,6 +14,7 @@ export const PERMISSIONS = [
   'tasks.manage', // waiter calls & bill requests
   'tables.view',
   'tables.manage',
+  'tables.sessions', // open a table for guests, see / issue its PIN, remove an authorised phone
   'kds.view',
   'kds.update',
   'stations.manage',
@@ -49,6 +50,7 @@ export const ROLE_PERMISSIONS: Record<MembershipRole, readonly Permission[]> = {
     'payments.record',
     'tasks.manage',
     'tables.view',
+    'tables.sessions',
     'menu.view',
     'menu.availability',
     'reservations.manage',

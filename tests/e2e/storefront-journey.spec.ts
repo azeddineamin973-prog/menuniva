@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login, seed, sql, type Seed } from './helpers';
+import { login, openCart, seed, sql, type Seed } from './helpers';
 import { screenshot } from './net-fixtures';
 
 let s: Seed;
@@ -39,7 +39,7 @@ test('the public menu can be searched, and a dish offers the real ways to order'
   const actions = page.getByTestId('sheet-order-actions');
   // The guest sees the restaurant's own language (Portuguese here), not the dashboard language.
   await expect(actions).toContainText(/Como prefere encomendar|How would you like to order/);
-  await expect(actions.getByRole('link', { name: /Levantar|pickup/i })).toBeVisible();
+  await expect(actions.getByRole('link', { name: /Recolha|pickup/i })).toBeVisible();
   await screenshot(page, 'storefront-dish-browse-only');
 
   // The "order at table" notice appears exactly once, not twice.
@@ -57,9 +57,10 @@ test('pickup: a guest orders, the restaurant sees it, staff prepare it and mark 
   await guest.getByRole('radio', { name: 'Cuscuz' }).check();
   await guest.getByRole('button', { name: '+' }).click();
   await guest.getByTestId('add-to-cart').click();
-  await guest.getByTestId('view-cart').click();
+  await openCart(guest);
 
   await expect(guest.getByTestId('cart-line')).toHaveCount(1);
+  await guest.getByTestId('go-checkout').click();
   await guest.getByLabel(/O seu nome|Your name/).fill('E2E Storefront Guest');
   await guest.getByLabel(/Telefone|Phone/).fill('+351 911 222 333');
   await expect(guest.getByTestId('pickup-select')).toBeVisible();
@@ -140,9 +141,11 @@ test('reservations: a guest books a table, sees it in the dashboard, and can can
   await expect(guest.getByTestId('reservation-status')).toHaveAttribute('data-status', 'REQUESTED');
   await screenshot(guest, 'storefront-reservation');
 
-  // It is in the restaurant's dashboard, saved in the database.
+  // It is in the restaurant's dashboard, saved in the database. Looked for in the bookings list: when the
+  // first free slot is within two hours (a run late in the evening books tomorrow 00:00), the request is
+  // also, correctly, an urgent item in the attention bar, so the name is on the page twice.
   await page.goto(`/dashboard/${s.orgSlug}/reservations?date=${tomorrow}`);
-  await expect(page.getByText('E2E Reservation Guest')).toBeVisible();
+  await expect(page.getByTestId('reservation-row').filter({ hasText: 'E2E Reservation Guest' })).toBeVisible();
   const [row] = await sql<{ status: string; partySize: number }>(`SELECT status, "partySize" FROM "Reservation" WHERE name = 'E2E Reservation Guest'`);
   expect(row).toMatchObject({ status: 'REQUESTED', partySize: 2 });
 

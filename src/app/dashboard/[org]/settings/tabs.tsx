@@ -1,10 +1,11 @@
 import { Tabs } from '@/components/ui';
 
-export function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' | 'tax' | 'privacy' }) {
+export function SettingsTabs({ base, active }: { base: string; active: 'details' | 'branding' | 'channels' | 'alerts' | 'tax' | 'privacy' }) {
   const tabs = [
     { key: 'details', label: 'Details & languages', href: `${base}/settings`, icon: 'building' },
     { key: 'branding', label: 'Branding', href: `${base}/settings/branding`, icon: 'sparkles' },
     { key: 'channels', label: 'Ordering channels & links', href: `${base}/settings/channels`, icon: 'bag' },
+    { key: 'alerts', label: 'Alerts & timings', href: `${base}/settings/alerts`, icon: 'bell' },
     { key: 'tax', label: 'Tax (IVA)', href: `${base}/settings/tax`, icon: 'bill' },
     { key: 'privacy', label: 'Privacy (GDPR)', href: `${base}/settings/privacy`, icon: 'shield' },
   ] as const;

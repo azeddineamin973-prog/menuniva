@@ -36,6 +36,17 @@ export async function issueSetupToken(): Promise<string> {
   return token;
 }
 
+/**
+ * Pickup / delivery pages: on desktop the order is a column next to the menu; on phones and
+ * tablets a bar at the bottom opens it. Makes the order visible on either.
+ */
+export async function openCart(page: Page) {
+  const bar = page.getByTestId('view-cart');
+  const aside = page.getByTestId('cart-aside');
+  await expect(bar.or(aside).first()).toBeVisible();
+  if (await bar.isVisible()) await bar.click();
+}
+
 export async function login(page: Page, email: string, password: string) {
   await page.goto('/login');
   await page.getByTestId('login-form').locator('input[name=email]').fill(email);

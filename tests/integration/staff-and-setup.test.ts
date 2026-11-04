@@ -50,7 +50,7 @@ describe('table requests (call waiter / bill)', () => {
     const tasks = await listOpenTasks(f.ctx, f.location.id);
     expect(tasks.map((t) => t.type).sort()).toEqual(['CALL_WAITER', 'REQUEST_BILL']);
     expect(tasks[0].table?.label).toBe('05');
-    await updateTask(f.ctx, a.taskId, 'DONE');
+    await updateTask(f.ctx, a.taskId!, 'DONE');
     expect((await listOpenTasks(f.ctx, f.location.id)).length).toBe(1);
   });
 });

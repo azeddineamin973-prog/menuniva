@@ -3,43 +3,44 @@ import { Icon, type IconName } from '@/components/ui/icons';
 import { LinkIcon } from '@/components/ui/link-pending';
 import { cn } from '@/lib/cn';
 
-export type OrderMode = { key: string; label: string; href: string; icon: IconName; external?: boolean; active?: boolean };
+export type OrderChoiceItem = { key: 'pickup' | 'delivery'; title: string; lines: string[]; href: string; icon: IconName; unavailable?: string };
 
 /**
- * How to order: one segmented, horizontally scrollable control with only the channels the
- * restaurant enabled. The active channel is filled; external platforms are marked as such.
+ * "How would you like your order?": one large card per ordering method the restaurant offers
+ * (pickup at the restaurant, the restaurant's own delivery). Each card says what to expect
+ * (ready time, delivery fee) before the guest starts.
  */
-export function OrderModeBar({ modes, label, className }: { modes: OrderMode[]; label: string; className?: string }) {
-  if (modes.length === 0) return null;
+export function OrderChoice({ title, items }: { title: string; items: OrderChoiceItem[] }) {
+  if (items.length === 0) return null;
   return (
-    <nav aria-label={label} className={cn('relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)} data-testid="order-modes">
-      <ul className="flex w-max min-w-full gap-1 rounded-2xl bg-sf-card p-1 shadow-sm ring-1 ring-sf-text/[0.07] sm:w-full">
-        {modes.map((m) => {
-          const cls = cn(
-            'flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3.5 text-sm font-medium whitespace-nowrap transition-colors motion-reduce:transition-none',
-            'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sf-primary',
-            m.active ? 'bg-sf-primary text-sf-on-primary shadow-sm' : 'hover:bg-sf-text/[0.05]',
-          );
-          return (
-            <li key={m.key} className="flex-1">
-              {m.external ? (
-                <a href={m.href} target="_blank" rel="noopener noreferrer" className={cls} data-mode={m.key}>
-                  {m.label}
-                  <Icon name="external" className="size-3.5 opacity-60" />
-                  <span className="sr-only">(opens another website)</span>
-                </a>
-              ) : (
-                <Link href={m.href} aria-current={m.active ? 'page' : undefined} className={cn(cls, 'relative')} data-mode={m.key}>
-                  {/* Spinner in place of the icon until the ordering page has loaded. */}
-                  <LinkIcon icon={m.icon} className="size-[18px] shrink-0" />
-                  {m.label}
-                </Link>
-              )}
-            </li>
-          );
-        })}
+    <section aria-labelledby="order-choice-title" data-testid="order-choice">
+      <h2 id="order-choice-title" className="mb-2.5 font-serif text-xl sm:text-2xl">{title}</h2>
+      <ul className={cn('grid gap-2.5', items.length > 1 && 'sm:grid-cols-2')}>
+        {items.map((it) => (
+          <li key={it.key}>
+            <Link
+              href={it.href}
+              className="group relative flex min-h-[5.75rem] items-center gap-4 rounded-3xl bg-sf-card p-4 ring-1 ring-sf-line transition-[box-shadow,transform] hover:shadow-[var(--sf-shadow-card)] hover:ring-sf-primary/40 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sf-primary motion-reduce:transition-none"
+              data-mode={it.key}
+            >
+              <span className="flex size-13 shrink-0 items-center justify-center rounded-2xl bg-sf-primary text-sf-on-primary shadow-sm">
+                <LinkIcon icon={it.icon} className="size-6" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[17px] leading-snug font-semibold">{it.title}</span>
+                {it.lines.map((l, i) => (
+                  <span key={i} className={cn('block text-sm leading-snug', i === 0 ? 'mt-0.5 text-sf-muted' : 'text-sf-muted')}>
+                    {l}
+                  </span>
+                ))}
+                {it.unavailable && <span className="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">{it.unavailable}</span>}
+              </span>
+              <Icon name="chevronRight" className="size-5 shrink-0 opacity-50 transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
+            </Link>
+          </li>
+        ))}
       </ul>
-    </nav>
+    </section>
   );
 }
 

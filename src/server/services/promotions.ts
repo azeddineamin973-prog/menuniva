@@ -75,13 +75,25 @@ export async function recomputeOrderDiscounts(tx: Tx, orderId: string, oldSubtot
 
 export async function computeDiscounts(
   tx: Tx | typeof db,
-  p: { organizationId: string; locationId: string; channel: OrderChannel; couponCode?: string | null; lines: QuotedLine[]; subtotalCents: number; now?: Date },
+  p: {
+    organizationId: string;
+    locationId: string;
+    channel: OrderChannel;
+    couponCode?: string | null;
+    lines: QuotedLine[];
+    subtotalCents: number;
+    now?: Date;
+    promotionsEnabled?: boolean;
+    /** loadRules() for the same organisation, location, channel and code, read alongside the price quote. */
+    preloaded?: Promise<Awaited<ReturnType<typeof loadRules>>>;
+  },
 ) {
   // Without the promotions module no promotion applies; a typed code is reported as invalid.
   // The module check must use `tx`: computeDiscounts runs inside the order transaction, and asking
   // the pool for a second connection there starved the pool with 10+ simultaneous orders (BUG-01).
-  const enabled = await hasModule(p.organizationId, 'promotions', tx);
-  const { rules, couponStatus } = enabled ? await loadRules(tx, p) : { rules: [], couponStatus: p.couponCode ? ('invalid' as const) : ('none' as const) };
+  // A caller that already read the organisation's modules passes the answer (one read fewer).
+  const enabled = p.promotionsEnabled ?? (await hasModule(p.organizationId, 'promotions', tx));
+  const { rules, couponStatus } = enabled ? await (p.preloaded ?? loadRules(tx, p)) : { rules: [], couponStatus: p.couponCode ? ('invalid' as const) : ('none' as const) };
   const res = applyPromotions(
     p.lines.map((l, i) => ({ key: String(i), productId: l.productId, categoryId: l.categoryId, unitCents: l.unitPriceCents + l.modifiersUnitCents, quantity: l.quantity })),
     rules,

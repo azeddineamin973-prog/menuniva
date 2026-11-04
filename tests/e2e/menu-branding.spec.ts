@@ -70,7 +70,7 @@ test('M1-08/M3-04/M6-05: branding upload and colours appear on the SEO-ready sto
   await page.goto(`/r/${s.orgSlug}`);
   const shell = page.getByTestId('storefront');
   await expect(shell).toHaveAttribute('style', /--sf-primary:\s*#1F5C4A/i);
-  await expect(shell).toHaveClass(/sf-pattern/);
+  await expect(shell.locator('header').first()).toHaveClass(/sf-band-pattern/); // Moroccan preset: quiet pattern in the brand band only
   const logo = shell.locator('header img').first();
   const src = await logo.getAttribute('src');
   expect(src).toMatch(/^\/media\/.+\.png$/);

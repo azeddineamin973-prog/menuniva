@@ -23,21 +23,21 @@ for (const width of [320, 390]) {
   test(`phone ${width}: ordering switcher, open status and menu fit the screen`, async ({ browser }) => {
     const page = await browser.newPage({ viewport: { width, height: 800 }, hasTouch: true, isMobile: true });
     await page.goto(`/r/${s.orgSlug}`);
-    const modes = page.getByTestId('order-modes');
-    await expect(modes.getByRole('link', { name: 'Menu' })).toHaveAttribute('aria-current', 'page');
-    await expect(modes.getByRole('link', { name: 'Levantar no restaurante' })).toBeVisible();
-    await expect(modes.getByRole('link', { name: 'Reservar mesa' })).toBeVisible();
+    const modes = page.getByTestId('order-choice');
+    await expect(modes.getByRole('link', { name: /Recolha no restaurante/ })).toBeVisible();
+    await expect(page.getByTestId('other-modes').getByRole('link', { name: 'Reservar mesa' })).toBeVisible();
     // Delivery is off, so it is not offered; the external platform is a separate link, not a mode.
-    await expect(modes.getByRole('link', { name: /Entrega/ })).toHaveCount(0);
+    await expect(modes.getByRole('link', { name: /entrega/i })).toHaveCount(0);
     await expect(modes.getByRole('link', { name: /Glovo/ })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /Pedir na Glovo/ })).toHaveAttribute('href', 'https://glovoapp.com/pt/en/braga/e2e-design/');
     await expect(page.getByTestId('hero-open-status')).toHaveAttribute('data-open', 'true');
     expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
 
     // The pickup page highlights its own channel and keeps the way back to the menu.
-    await modes.getByRole('link', { name: 'Levantar no restaurante' }).click();
+    await modes.getByRole('link', { name: /Recolha no restaurante/ }).click();
     await expect(page).toHaveURL(/\/order\/pickup/);
-    await expect(page.getByTestId('order-modes').getByRole('link', { name: 'Levantar no restaurante' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('order-mode')).toContainText('Recolha no restaurante');
+    await expect(page.getByTestId('back-to-menu')).toHaveAttribute('href', new RegExp(`/r/${s.orgSlug}`));
     expect(await noSideScroll(page)).toBeLessThanOrEqual(0);
     await page.close();
   });

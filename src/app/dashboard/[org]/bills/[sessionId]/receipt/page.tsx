@@ -48,6 +48,9 @@ export default async function ReceiptPage({ params }: { params: Promise<{ org: s
         <p className="flex justify-between"><span>Pago / Paid</span><span>{formatCents(bill.paidCents)}</span></p>
         <p className="flex justify-between"><span>Em falta / Due</span><span>{formatCents(bill.balanceCents)}</span></p>
         <p className="mt-2 text-center text-[10px]">Preços com IVA incluído. Peça a sua fatura ao restaurante.</p>
+        <p className="mt-1 text-center text-[10px]" data-testid="not-certified">
+          Registo operacional de pagamentos, sem validade fiscal: o MenuNiva não é software de faturação certificado nem POS certificado. / Operational payment record with no fiscal value: MenuNiva is not certified invoicing or POS software.
+        </p>
       </div>
     </div>
   );

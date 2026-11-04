@@ -61,6 +61,6 @@ export const SUB_PAGES: Record<string, Record<string, string>> = {
   kitchen: { '*': 'Station display', 'tickets/*/print': 'Print ticket' },
   bills: { '*': 'Table bill', '*/receipt': 'Receipt' },
   tables: { print: 'Printable QR sheet' },
-  settings: { branding: 'Branding', channels: 'Ordering channels', tax: 'Tax (IVA)', privacy: 'Privacy (GDPR)' },
+  settings: { branding: 'Branding', channels: 'Ordering channels', alerts: 'Alerts & timings', tax: 'Tax (IVA)', privacy: 'Privacy (GDPR)' },
   setup: { preview: 'Preview', publish: 'Publish' },
 };

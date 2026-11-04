@@ -71,29 +71,29 @@ test('M8: merged bill, reduce item with reason, split payments, receipt, ticket 
   expect(audit.map((a) => a.action).sort()).toEqual(['order.item_quantity_reduced', 'payment.recorded', 'payment.recorded', 'table.session_closed']);
 });
 
-test('M8-12: table code required — guest must wait for staff to open the table and enter the code', async ({ page, browser }) => {
-  await sql(`UPDATE "RestaurantLocation" SET "tableCodeRequired" = true WHERE id = $1`, [s.locationId]);
+test('M8-12 (SESSION_PIN): guest waits for staff to open the table, then enters the PIN once', async ({ page, browser }) => {
+  await sql(`UPDATE "RestaurantLocation" SET "tableOrderingPolicy" = 'SESSION_PIN' WHERE id = $1`, [s.locationId]);
   const guest = await browser.newPage();
   await guest.goto(`/t/${s.qrToken}`);
   await guest.getByTestId('customer-product').filter({ hasText: 'Seed harira' }).click();
   await guest.getByTestId('add-to-cart').click();
   await guest.getByTestId('view-cart').click();
-  await expect(guest.getByTestId('table-code-input')).toBeVisible();
-  await guest.getByTestId('submit-order').click();
-  await expect(guest.getByTestId('cart-sheet').getByRole('alert')).toContainText('ainda não está aberta');
-
+  await expect(guest.getByTestId('table-closed-box')).toBeVisible();
+  await expect(guest.getByTestId('submit-order')).toBeDisabled();
   await login(page, s.waiter, s.password);
   await page.goto(`/dashboard/${s.orgSlug}/tables`);
   await page.getByTestId('open-table').click();
-  const code = (await page.getByTestId('table-code').innerText()).replace(/\D/g, '');
-  expect(code).toMatch(/^\d{4}$/);
-
-  await guest.getByTestId('table-code-input').fill(code === '0000' ? '1111' : '0000');
+  await page.getByTestId('table-pin-07-show').click();
+  const pin = (await page.getByTestId('table-pin-07-value').innerText()).trim();
+  expect(pin).toMatch(/^\d{6}$/);
+  await guest.reload();
+  await guest.getByTestId('view-cart').click();
+  await guest.getByTestId('table-pin-input').fill(pin === '000000' ? '111111' : '000000');
   await guest.getByTestId('submit-order').click();
   await expect(guest.getByTestId('cart-sheet').getByRole('alert')).toContainText('não está correto');
-  await guest.getByTestId('table-code-input').fill(code);
+  await guest.getByTestId('table-pin-input').fill(pin);
   await guest.getByTestId('submit-order').click();
   await expect(guest).toHaveURL(/\/o\//);
-  await sql(`UPDATE "RestaurantLocation" SET "tableCodeRequired" = false WHERE id = $1`, [s.locationId]);
+  await sql(`UPDATE "RestaurantLocation" SET "tableOrderingPolicy" = 'OPEN' WHERE id = $1`, [s.locationId]);
   await guest.close();
 });

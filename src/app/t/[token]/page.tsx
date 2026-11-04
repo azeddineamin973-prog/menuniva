@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { GRANT_COOKIE, grantTokensFrom, tableAccessFor } from '@/server/services/table-access';
 import { MenuApp } from '@/components/storefront/menu-app';
 import { StorefrontShell } from '@/components/storefront/shell';
 import { getMessages } from '@/i18n';
@@ -35,13 +37,16 @@ export default async function TablePage({ params, searchParams }: { params: Prom
     );
   }
 
-  const [menu, upsellRules] = await Promise.all([getPublicMenu(location.id, lang, 'TABLE'), upsellRulesFor(org.id)]);
+  // Whether this phone may order here: table open by staff, and (SESSION_PIN) the PIN entered once.
+  // Only states are sent to the page, never a PIN or a token.
+  const grantTokens = grantTokensFrom((await cookies()).get(GRANT_COOKIE)?.value);
+  const [menu, upsellRules, tableAccess] = await Promise.all([getPublicMenu(location.id, lang, 'TABLE'), upsellRulesFor(org.id), tableAccessFor(table, grantTokens)]);
   const base = orderingState(location, org.status, 'TABLE');
   const state = base.canOrder && !(await hasModule(org.id, 'table_ordering')) ? { canOrder: false as const, reason: 'channel_disabled' as const } : base;
   const orderingMessage = state.canOrder ? undefined : state.reason === 'paused' ? m.customer.orderingPaused : m.customer.tableOrderingDisabled;
 
   return (
-    <StorefrontShell branding={branding} restaurantName={org.name} subtitle={table.area?.name ?? location.name} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
+    <StorefrontShell branding={branding} restaurantName={org.name} subtitle={table.area?.name ?? location.name} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy} homeHref={`/t/${token}`} homeLabel={m.ordering.backToMenu}>
       <MenuApp
         channel="TABLE"
         scope={{ qrToken: token, orgSlug: org.slug, locationSlug: location.slug, locationId: location.id }}
@@ -50,12 +55,12 @@ export default async function TablePage({ params, searchParams }: { params: Prom
         menu={menu}
         canOrder={state.canOrder}
         orderingMessage={orderingMessage}
-        m={{ customer: m.customer, common: m.common, allergens: m.allergens, validation: m.validation }}
+        m={{ customer: m.customer, common: m.common, allergens: m.allergens, validation: m.validation, ordering: m.ordering }}
         allergyNotice={allergyNoticeFor(settings, lang, m.customer.allergyNoticeDefault)}
         pricesIncludeVat={settings?.pricesIncludeTax ?? true}
         tableLabel={table.label}
         upsellRules={upsellRules}
-        tableCodeRequired={location.tableCodeRequired}
+        tableAccess={tableAccess}
       />
     </StorefrontShell>
   );

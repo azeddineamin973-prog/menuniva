@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { ActionForm } from '@/components/forms/action-form';
 import { InlineAction } from '@/components/forms/inline-action';
 import { FloorPlan } from '@/components/storefront/floor-plan';
@@ -29,6 +29,7 @@ import {
   type TableShape,
 } from '@/lib/floor-plan';
 import type { SavedFloorPlan } from '@/server/services/floor-plan';
+import { tableAssignmentAction } from '../../reservations/actions';
 import { addPlanTablesAction, removeAreaAction, saveAreaAction, saveFloorPlanAction } from '../actions';
 
 type Table = { id: string; label: string; seats: number | null; areaId: string | null; planX: number | null; planY: number | null; planShape: TableShape; planRotation: number };
@@ -62,6 +63,43 @@ const metres = (u: number) => (u / 100).toLocaleString('en', { maximumFractionDi
 const newLabelId = () => Math.random().toString(36).slice(2, 10);
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
+/** Small label above a dense row of controls. */
+const subLabel = 'text-[11px] font-medium text-muted';
+
+/**
+ * One panel of the side inspector: a titled, compact card. Several of these stack beside the
+ * canvas instead of one long column, so the whole builder fits on a screen.
+ */
+function Block({ title, action, children, testId, tone }: { title: ReactNode; action?: ReactNode; children: ReactNode; testId?: string; tone?: 'selected' }) {
+  return (
+    <section className={cn('rounded-[var(--radius-card)] border bg-surface', tone === 'selected' ? 'border-[var(--mn-focus)]/40 ring-1 ring-[var(--mn-focus)]/20' : 'border-line')} data-testid={testId}>
+      <header className="flex min-h-9 items-center justify-between gap-2 border-b border-line px-3">
+        <h3 className="truncate text-[13px] font-semibold text-ink">{title}</h3>
+        {action}
+      </header>
+      <div className="space-y-2.5 p-3">{children}</div>
+    </section>
+  );
+}
+
+/** A labelled row: name on the left, its controls on the right. Keeps the inspector short. */
+function Row({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('flex items-center justify-between gap-2', className)}>
+      <span className={cn(subLabel, 'shrink-0')}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function CloseButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button type="button" onClick={onClick} className="-me-1 flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink pointer-coarse:size-10" aria-label={label}>
+      <Icon name="x" className="size-4" />
+    </button>
+  );
+}
+
 /**
  * Floor plan builder for one location. Each dining area is a room the restaurant draws itself: its
  * size, its labels (entrance, bar…) and its existing tables, dragged into place (or moved with the
@@ -69,6 +107,9 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
  * a tidy arrangement of the tables already there; nothing is invented and nothing is saved until
  * the owner presses Save. Each area is saved on its own; unsaved areas are marked and leaving the
  * page asks for confirmation.
+ *
+ * Layout: the canvas is the page, and the controls sit beside it in a side panel that follows the
+ * screen (sticky) and scrolls on its own, so building a room needs no page scrolling.
  */
 export function FloorPlanEditor({
   org,
@@ -78,6 +119,9 @@ export function FloorPlanEditor({
   canEdit,
   guestStyle,
   guestMap,
+  reservationsOn = false,
+  reservationsEnabled = true,
+  canSetMode = false,
 }: {
   org: string;
   locationId: string;
@@ -87,6 +131,12 @@ export function FloorPlanEditor({
   guestStyle: CSSProperties;
   /** Guests currently see the plan when booking. */
   guestMap: boolean;
+  /** The reservations module is available to this restaurant. */
+  reservationsOn?: boolean;
+  /** Online reservations are switched on for this location. */
+  reservationsEnabled?: boolean;
+  /** This staff member may change how tables get onto online requests. */
+  canSetMode?: boolean;
 }) {
   const [areaId, setAreaId] = useState<string | null>(areas[0]?.id ?? null);
   // Local edits and the last saved state, on top of what the server sent (new tables and areas
@@ -99,7 +149,11 @@ export function FloorPlanEditor({
   const [view, setView] = useState<'edit' | 'guest'>('edit');
   const [newLabel, setNewLabel] = useState('');
   const svgRef = useRef<SVGSVGElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const workRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ kind: 'table' | 'label'; id: string; dx: number; dy: number; pointer: number } | null>(null);
+
+  const [workTop, setWorkTop] = useState(0);
 
   const areaIds = new Set(areas.map((a) => a.id));
   // An edit that points at a removed area no longer counts: the server's state wins.
@@ -144,6 +198,37 @@ export function FloorPlanEditor({
   const sel = selTable ? itemOf(selTable) : null;
   const selLabel = selection?.kind === 'label' ? (plan.labels.find((l) => l.id === selection.id) ?? null) : null;
   const isDirty = area ? dirtyIn(area) : false;
+  // Tables drawn on any room of this location: what a guest would see on the booking page.
+  const placedAnywhere = tables.some((t) => {
+    const it = itemOf(t);
+    return !!it.areaId && areaIds.has(it.areaId) && it.x !== null && it.y !== null;
+  });
+  const noSeats = here.filter((t) => !itemOf(t).seats).length;
+
+  // Selecting something brings its settings into view: the panel scrolls, never the page, so the
+  // canvas stays where it is while dragging.
+  const selectedId = selection?.id ?? null;
+  useEffect(() => {
+    if (selectedId) panelRef.current?.scrollTo({ top: 0 });
+  }, [selectedId]);
+
+  // How far down the page the workspace starts, so on a wide screen it takes exactly the rest of
+  // the window: the canvas and the side panel then scroll inside themselves instead of making the
+  // page longer. Re-measured whenever anything above it changes height.
+  const hasArea = !!current;
+  useEffect(() => {
+    const el = workRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setWorkTop(Math.round(el.getBoundingClientRect().top + window.scrollY));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [hasArea]);
 
   // -------------------------------------------------------------- edits
   const setItem = (id: string, patch: Partial<Item>) =>
@@ -347,21 +432,21 @@ export function FloorPlanEditor({
   );
 
   const addTables = canEdit && area && (
-    <ActionForm action={addPlanTablesAction} submitLabel="Add to plan" submitVariant="secondary" resetOnSuccess successText="Added" testId="add-plan-tables">
+    <ActionForm action={addPlanTablesAction} submitLabel="Add to plan" submitVariant="secondary" resetOnSuccess successText="Added" testId="add-plan-tables" className="space-y-2.5!">
       <input type="hidden" name="org" value={org} />
       <input type="hidden" name="locationId" value={locationId} />
       <input type="hidden" name="areaId" value={area.id} />
-      <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
-        <label className="block min-w-0 text-xs font-medium text-muted">
+      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2">
+        <label className={cn('block min-w-0', subLabel)}>
           Table labels
           <Input name="labels" required placeholder="e.g. 1-6 or T1, T2" className="mt-1" data-testid="add-plan-labels" />
         </label>
-        <label className="block text-xs font-medium text-muted">
+        <label className={cn('block', subLabel)}>
           Seats
           <Input name="seats" type="number" min={1} max={50} placeholder="?" className="mt-1" data-testid="add-plan-seats" />
         </label>
       </div>
-      <label className="block text-xs font-medium text-muted">
+      <label className={cn('block', subLabel)}>
         Shape
         <Select name="shape" defaultValue="ROUND" className="mt-1" data-testid="add-plan-shape">
           {SHAPES.map((s) => (
@@ -371,6 +456,23 @@ export function FloorPlanEditor({
           ))}
         </Select>
       </label>
+    </ActionForm>
+  );
+
+  /** One click from a saved plan to a plan guests can actually book on. */
+  const showToGuests = (
+    <ActionForm
+      action={tableAssignmentAction}
+      submitLabel="Show the plan to guests"
+      successText="Guests now choose on the plan"
+      className="flex flex-wrap items-center gap-2 space-y-0!"
+      testId="enable-guest-plan"
+    >
+      <input type="hidden" name="org" value={org} />
+      <input type="hidden" name="locationId" value={locationId} />
+      <input type="hidden" name="mode" value="guest" />
+      {/* A guest who leaves the choice to the restaurant still gets a free table held. */}
+      <input type="hidden" name="autoFallback" value="on" />
     </ActionForm>
   );
 
@@ -391,7 +493,7 @@ export function FloorPlanEditor({
   }
 
   return (
-    <div className="space-y-4" data-testid="floor-plan-editor">
+    <div className="space-y-3" data-testid="floor-plan-editor">
       {/* Dining areas and view */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Dining areas">
@@ -429,9 +531,13 @@ export function FloorPlanEditor({
           Add a dining area (for example Main room or Terrace) to start the floor plan.
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+        <div
+          ref={workRef}
+          style={{ '--fp-top': `${workTop}px` } as CSSProperties}
+          className={cn('grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]', workTop > 0 && 'xl:h-[calc(100dvh-var(--fp-top)-1.5rem)] xl:min-h-[26rem]')}
+        >
           {/* Canvas */}
-          <div className="min-w-0 space-y-2">
+          <div className="flex min-w-0 flex-col gap-2 xl:min-h-0">
             {canEdit && (
               <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-card)] border border-line bg-surface px-3 py-2" data-testid="plan-toolbar">
                 <p className="min-w-0 flex-1 text-[13px] text-ink-2">
@@ -442,6 +548,11 @@ export function FloorPlanEditor({
                     </span>
                   )}
                 </p>
+                {reservationsOn && guestMap && placedAnywhere && (
+                  <Badge tone="success" dot data-testid="guest-plan-live">
+                    Guests see this plan
+                  </Badge>
+                )}
                 {isDirty ? (
                   <Badge tone="warning" dot data-testid="unsaved">
                     Unsaved changes
@@ -464,13 +575,36 @@ export function FloorPlanEditor({
                 </ActionForm>
               </div>
             )}
+
+            {/* Saving the plan does not publish it: the booking page shows it only in "Guests
+                choose on the floor plan". Said here, where the plan is saved, with the switch. */}
+            {reservationsOn && placedAnywhere && !guestMap && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius-card)] border border-warning/25 bg-warning/10 px-3 py-2" data-testid="guest-plan-off">
+                <Icon name="alert" className="size-4 shrink-0 text-warning" />
+                <p className="min-w-0 flex-1 text-[13px] text-ink-2">
+                  <span className="font-medium text-ink">Guests do not see this plan yet.</span> The booking page still shows the simple form.
+                </p>
+                {canSetMode ? showToGuests : <span className="text-[13px] text-muted">Ask a manager to switch it on.</span>}
+              </div>
+            )}
+            {reservationsOn && placedAnywhere && guestMap && !reservationsEnabled && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius-card)] border border-warning/25 bg-warning/10 px-3 py-2.5" data-testid="reservations-off">
+                <Icon name="alert" className="size-4 shrink-0 text-warning" />
+                <p className="min-w-0 flex-1 text-[13px] text-ink-2">
+                  <span className="font-medium text-ink">Online reservations are off for this location.</span> Switch them on in Settings → Ordering channels before guests can book on this plan.
+                </p>
+              </div>
+            )}
+
+            {/* Below xl the plan keeps a readable width and scrolls sideways; from xl it is scaled
+                to fit the pane, so the whole room is always in view without page scrolling. */}
             {view === 'edit' ? (
-              <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface-2/60">
+              <div className="mn-scroll overflow-auto rounded-[var(--radius-card)] border border-line bg-surface-2/60 xl:min-h-0 xl:flex-1 xl:overflow-hidden">
                 <svg
                   ref={svgRef}
                   viewBox={`${-PAD} ${-PAD} ${plan.w + PAD * 2} ${plan.h + PAD * 2}`}
-                  className="block h-auto w-full select-none"
-                  style={{ minWidth: Math.max(560, Math.round((plan.w + PAD * 2) * 0.6)) }}
+                  className="block h-auto w-full min-w-[var(--fp-min-w)] select-none xl:h-full xl:min-w-0"
+                  style={{ '--fp-min-w': `${Math.max(560, Math.round((plan.w + PAD * 2) * 0.6))}px` } as CSSProperties}
                   role="group"
                   aria-label={`Floor plan of ${area.name}, ${metres(plan.w)} by ${metres(plan.h)} metres`}
                   data-testid="editor-canvas"
@@ -570,7 +704,7 @@ export function FloorPlanEditor({
                 </svg>
               </div>
             ) : (
-              <div style={guestStyle} className="rounded-[var(--radius-card)] p-3 text-sf-text sm:p-4" data-testid="editor-guest-view">
+              <div style={guestStyle} className="mn-scroll rounded-[var(--radius-card)] p-3 text-sf-text sm:p-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto" data-testid="editor-guest-view">
                 {here.length ? (
                   <FloorPlan
                     areas={[{ id: area.id, name: area.name, width: plan.w, height: plan.h, labels: plan.labels, tables: drawn }]}
@@ -582,52 +716,43 @@ export function FloorPlanEditor({
                 ) : (
                   <p className="p-6 text-center text-sm opacity-70">No tables on this plan yet.</p>
                 )}
-                <p className="mt-2 text-xs opacity-70">
-                  In your colours, with unsaved changes. Guests see free tables at the time they choose; tables without a seat count are never offered.
-                  {!guestMap && ' Guests do not see the floor plan yet: choose “Guests choose on the floor plan” above.'}
-                </p>
+                <p className="mt-2 text-xs opacity-70">In your colours, with unsaved changes. Guests see the tables free at the time they choose; tables without a seat count are never offered.</p>
               </div>
             )}
-            {canEdit && view === 'edit' && <p className="text-xs text-muted">Drag tables and labels to move them. With one selected, the arrow keys move it (Shift for bigger steps) and Delete takes it off the plan.</p>}
+            {canEdit && view === 'edit' && (
+              <p className="text-xs text-muted">Drag tables and labels to move them. With one selected, the arrow keys move it (Shift for bigger steps) and Delete takes it off the plan.</p>
+            )}
           </div>
 
-          {/* Side panel */}
-          <div className="space-y-4">
+          {/* Side panel: scrolls on its own inside the workspace, so the page does not grow. */}
+          <div ref={panelRef} className="mn-scroll space-y-3 xl:min-h-0 xl:overflow-y-auto xl:pe-0.5">
             {selTable && sel && (
-              <div className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4" data-testid="table-inspector">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold">Table {selTable.label}</p>
-                  <button type="button" onClick={() => setSelection(null)} className="flex size-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 pointer-coarse:size-11" aria-label="Close table settings">
-                    <Icon name="x" className="size-4" />
-                  </button>
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted">Seats</p>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" variant="secondary" size="sm" disabled={!canEdit || (sel.seats ?? 1) <= 1} onClick={() => setItem(selTable.id, { seats: Math.max(1, (sel.seats ?? 2) - 1) })} aria-label="One seat less" className="pointer-coarse:size-11">
+              <Block testId="table-inspector" tone="selected" title={`Table ${selTable.label}`} action={<CloseButton onClick={() => setSelection(null)} label="Close table settings" />}>
+                <Row label="Seats">
+                  <div className="flex items-center gap-1.5">
+                    <Button type="button" variant="secondary" size="sm" disabled={!canEdit || (sel.seats ?? 1) <= 1} onClick={() => setItem(selTable.id, { seats: Math.max(1, (sel.seats ?? 2) - 1) })} aria-label="One seat less" className="px-2!">
                       <Icon name="minus" className="size-4" />
                     </Button>
-                    <Input type="number" min={1} max={50} value={sel.seats ?? ''} placeholder="?" disabled={!canEdit} onChange={(e) => setItem(selTable.id, { seats: e.target.value ? Math.max(1, Math.min(50, Number(e.target.value))) : null })} className="w-20 text-center" aria-label={`Seats at table ${selTable.label}`} data-testid="inspector-seats" />
-                    <Button type="button" variant="secondary" size="sm" disabled={!canEdit || (sel.seats ?? 0) >= 50} onClick={() => setItem(selTable.id, { seats: Math.min(50, (sel.seats ?? 1) + 1) })} aria-label="One seat more" className="pointer-coarse:size-11">
+                    <Input type="number" min={1} max={50} value={sel.seats ?? ''} placeholder="?" disabled={!canEdit} onChange={(e) => setItem(selTable.id, { seats: e.target.value ? Math.max(1, Math.min(50, Number(e.target.value))) : null })} className="h-8! w-14 px-1 text-center pointer-coarse:h-10!" aria-label={`Seats at table ${selTable.label}`} data-testid="inspector-seats" />
+                    <Button type="button" variant="secondary" size="sm" disabled={!canEdit || (sel.seats ?? 0) >= 50} onClick={() => setItem(selTable.id, { seats: Math.min(50, (sel.seats ?? 1) + 1) })} aria-label="One seat more" className="px-2!">
                       <Icon name="plus" className="size-4" />
                     </Button>
                   </div>
-                  {!sel.seats && <p className="mt-1 text-xs text-warning">Without a seat count, the table is never offered online.</p>}
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted">Shape</p>
-                  <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Table shape">
+                </Row>
+                {!sel.seats && <p className="text-xs text-warning">Without a seat count, this table is never offered online.</p>}
+                <Row label="Shape">
+                  <div className="grid flex-1 grid-cols-3 gap-1" role="group" aria-label="Table shape">
                     {SHAPES.map((s) => (
-                      <button key={s.key} type="button" disabled={!canEdit} aria-pressed={sel.shape === s.key} onClick={() => setItem(selTable.id, { shape: s.key, rotation: s.key === 'RECTANGLE' ? sel.rotation : 0 })} className={cn('h-9 rounded-lg text-[13px] font-medium ring-1 pointer-coarse:h-11', sel.shape === s.key ? 'bg-ink text-bg ring-ink' : 'ring-line hover:ring-line-strong')} data-testid={`shape-${s.key}`}>
+                      <button key={s.key} type="button" disabled={!canEdit} aria-pressed={sel.shape === s.key} onClick={() => setItem(selTable.id, { shape: s.key, rotation: s.key === 'RECTANGLE' ? sel.rotation : 0 })} className={cn('h-8 rounded-md px-2 text-xs font-medium ring-1 pointer-coarse:h-10', sel.shape === s.key ? 'bg-ink text-bg ring-ink' : 'text-ink-2 ring-line hover:ring-line-strong')} data-testid={`shape-${s.key}`}>
                         {s.label}
                       </button>
                     ))}
                   </div>
-                </div>
+                </Row>
                 {canEdit && (
                   <>
                     <Nudge onMove={(dx, dy) => nudge('table', selTable.id, dx, dy)} what={`table ${selTable.label}`} />
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-line pt-2.5">
                       {sel.shape === 'RECTANGLE' && (
                         <Button type="button" variant="secondary" size="sm" icon="refresh" onClick={() => setItem(selTable.id, { rotation: sel.rotation === 90 ? 0 : 90 })} data-testid="inspector-rotate">
                           Turn 90°
@@ -639,105 +764,108 @@ export function FloorPlanEditor({
                     </div>
                   </>
                 )}
-              </div>
+              </Block>
             )}
 
             {selLabel && (
-              <div className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4" data-testid="label-inspector">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold">Label</p>
-                  <button type="button" onClick={() => setSelection(null)} className="flex size-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 pointer-coarse:size-11" aria-label="Close label settings">
-                    <Icon name="x" className="size-4" />
-                  </button>
-                </div>
+              <Block testId="label-inspector" tone="selected" title="Label" action={<CloseButton onClick={() => setSelection(null)} label="Close label settings" />}>
                 <Input value={selLabel.text} maxLength={LABEL_LIMITS.maxLength} disabled={!canEdit} onChange={(e) => e.target.value.trim() && updateLabel(selLabel.id, { text: e.target.value.slice(0, LABEL_LIMITS.maxLength) })} aria-label="Label text" data-testid="label-text" />
                 {canEdit && (
                   <>
                     <Nudge onMove={(dx, dy) => nudge('label', selLabel.id, dx, dy)} what={`label ${selLabel.text}`} />
-                    <Button type="button" variant="dangerGhost" size="sm" icon="trash" onClick={() => removeLabel(selLabel.id)} data-testid="label-remove">
-                      Remove label
-                    </Button>
+                    <div className="border-t border-line pt-2.5">
+                      <Button type="button" variant="dangerGhost" size="sm" icon="trash" onClick={() => removeLabel(selLabel.id)} data-testid="label-remove">
+                        Remove label
+                      </Button>
+                    </div>
                   </>
                 )}
-              </div>
+              </Block>
             )}
 
             {canEdit && (
-              <div className="space-y-4 rounded-[var(--radius-card)] border border-line bg-surface p-4" data-testid="area-panel">
-                <ActionForm action={saveAreaAction} submitLabel="Rename" submitVariant="secondary" successText="Renamed" className="flex items-end gap-2 space-y-0!" testId="rename-area-form">
+              <Block testId="area-panel" title="Room">
+                <ActionForm action={saveAreaAction} submitLabel="Rename" submitVariant="secondary" successText="Renamed" className="flex items-center gap-2 space-y-0!" testId="rename-area-form">
                   <input type="hidden" name="org" value={org} />
                   <input type="hidden" name="locationId" value={locationId} />
                   <input type="hidden" name="id" value={area.id} />
-                  <label className="block min-w-0 flex-1 text-xs font-medium text-muted">
-                    Area name
-                    <Input key={area.id} name="name" defaultValue={area.name} required maxLength={80} className="mt-1" data-testid="rename-area" />
-                  </label>
+                  <Input key={area.id} name="name" defaultValue={area.name} required maxLength={80} aria-label="Area name" className="min-w-0 flex-1" data-testid="rename-area" />
                 </ActionForm>
 
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted">Room size (about, in metres)</p>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      key={`w${area.id}${plan.w}`}
-                      type="number"
-                      step="0.1"
-                      min={ROOM_LIMITS.minW / 100}
-                      max={ROOM_LIMITS.maxW / 100}
-                      defaultValue={plan.w / 100}
-                      onBlur={(e) => resizeRoom(Number(e.target.value) * 100, plan.h)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), resizeRoom(Number(e.currentTarget.value) * 100, plan.h))}
-                      aria-label="Room width in metres"
-                      className="w-20"
-                      data-testid="room-width"
-                    />
-                    <span className="text-muted">×</span>
-                    <Input
-                      key={`h${area.id}${plan.h}`}
-                      type="number"
-                      step="0.1"
-                      min={ROOM_LIMITS.minH / 100}
-                      max={ROOM_LIMITS.maxH / 100}
-                      defaultValue={plan.h / 100}
-                      onBlur={(e) => resizeRoom(plan.w, Number(e.target.value) * 100)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), resizeRoom(plan.w, Number(e.currentTarget.value) * 100))}
-                      aria-label="Room depth in metres"
-                      className="w-20"
-                      data-testid="room-height"
-                    />
-                    <span className="text-xs text-muted">m</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="space-y-1.5 border-t border-line pt-2.5">
+                  <Row label="Size (m)">
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        key={`w${area.id}${plan.w}`}
+                        type="number"
+                        step="0.1"
+                        min={ROOM_LIMITS.minW / 100}
+                        max={ROOM_LIMITS.maxW / 100}
+                        defaultValue={plan.w / 100}
+                        onBlur={(e) => resizeRoom(Number(e.target.value) * 100, plan.h)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), resizeRoom(Number(e.currentTarget.value) * 100, plan.h))}
+                        aria-label="Room width in metres"
+                        className="h-8! w-16 px-2 text-center pointer-coarse:h-10!"
+                        data-testid="room-width"
+                      />
+                      <span className="text-xs text-muted">×</span>
+                      <Input
+                        key={`h${area.id}${plan.h}`}
+                        type="number"
+                        step="0.1"
+                        min={ROOM_LIMITS.minH / 100}
+                        max={ROOM_LIMITS.maxH / 100}
+                        defaultValue={plan.h / 100}
+                        onBlur={(e) => resizeRoom(plan.w, Number(e.target.value) * 100)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), resizeRoom(plan.w, Number(e.currentTarget.value) * 100))}
+                        aria-label="Room depth in metres"
+                        className="h-8! w-16 px-2 text-center pointer-coarse:h-10!"
+                        data-testid="room-height"
+                      />
+                    </div>
+                  </Row>
+                  <div className="grid grid-cols-4 gap-1">
                     {ROOM_PRESETS.map((p) => (
-                      <button key={p.label} type="button" onClick={() => resizeRoom(p.w, p.h)} aria-pressed={plan.w === p.w && plan.h === p.h} className={cn('h-7 rounded-md px-2 text-xs ring-1 pointer-coarse:h-9', plan.w === p.w && plan.h === p.h ? 'bg-ink text-bg ring-ink' : 'text-ink-2 ring-line hover:ring-line-strong')} data-testid={`room-preset-${p.label.toLowerCase()}`}>
-                        {p.label} {metres(p.w)}×{metres(p.h)}
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => resizeRoom(p.w, p.h)}
+                        aria-pressed={plan.w === p.w && plan.h === p.h}
+                        aria-label={`${p.label} room, ${metres(p.w)} by ${metres(p.h)} metres`}
+                        title={`${p.label} — ${metres(p.w)} × ${metres(p.h)} m`}
+                        className={cn('h-7 rounded-md px-1 text-[11px] font-medium tabular-nums ring-1 pointer-coarse:h-9', plan.w === p.w && plan.h === p.h ? 'bg-ink text-bg ring-ink' : 'text-ink-2 ring-line hover:ring-line-strong')}
+                        data-testid={`room-preset-${p.label.toLowerCase()}`}
+                      >
+                        {metres(p.w)}×{metres(p.h)}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted">Labels (entrance, bar, window…)</p>
-                  <div className="flex gap-2">
-                    <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLabel())} maxLength={LABEL_LIMITS.maxLength} placeholder="e.g. Entrance" aria-label="New label text" data-testid="new-label" />
-                    <Button type="button" variant="secondary" onClick={addLabel} disabled={!newLabel.trim() || plan.labels.length >= LABEL_LIMITS.maxPerArea} data-testid="add-label">
-                      Add
-                    </Button>
-                  </div>
+                <div className="border-t border-line pt-2.5">
+                  <Row label="Labels">
+                    <div className="flex min-w-0 flex-1 gap-1.5">
+                      <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLabel())} maxLength={LABEL_LIMITS.maxLength} placeholder="Entrance, bar, window…" aria-label="New label text" className="h-8! min-w-0 flex-1 pointer-coarse:h-10!" data-testid="new-label" />
+                      <Button type="button" variant="secondary" size="sm" onClick={addLabel} disabled={!newLabel.trim() || plan.labels.length >= LABEL_LIMITS.maxPerArea} data-testid="add-label">
+                        Add
+                      </Button>
+                    </div>
+                  </Row>
                 </div>
 
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted">Arrange the tables on this plan</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {LAYOUT_TEMPLATES.map((tpl) => (
-                      <button key={tpl.key} type="button" disabled={!here.length} onClick={() => arrange(tpl.key)} title={tpl.description} className="h-9 rounded-lg px-1 text-[13px] font-medium text-ink-2 ring-1 ring-line hover:text-ink hover:ring-line-strong disabled:opacity-40 pointer-coarse:h-11" data-testid={`template-${tpl.key}`}>
-                        {tpl.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted">A starting point for the tables already here: move them to match your room, then save. Nothing is saved until you do; Discard brings back the saved plan.</p>
+                <div className="border-t border-line pt-2.5">
+                  <Row label="Arrange">
+                    <div className="grid flex-1 grid-cols-3 gap-1" role="group" aria-label="Arrange the tables on this plan">
+                      {LAYOUT_TEMPLATES.map((tpl) => (
+                        <button key={tpl.key} type="button" disabled={!here.length} onClick={() => arrange(tpl.key)} title={`${tpl.description} A starting point you then adjust; nothing is saved until you press Save.`} className="h-8 rounded-md px-1 text-xs font-medium text-ink-2 ring-1 ring-line hover:text-ink hover:ring-line-strong disabled:opacity-40 pointer-coarse:h-10" data-testid={`template-${tpl.key}`}>
+                          {tpl.label}
+                        </button>
+                      ))}
+                    </div>
+                  </Row>
                 </div>
 
-                <div className="border-t border-line pt-3">
+                <div className="border-t border-line pt-2.5">
                   <InlineAction
                     action={removeAreaAction}
                     fields={{ org, locationId, areaId: area.id }}
@@ -751,28 +879,35 @@ export function FloorPlanEditor({
                     testId="remove-area"
                   />
                 </div>
-              </div>
+              </Block>
             )}
 
-            <div className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold">Tables</p>
-                {canEdit && notPlaced.length > 1 && (
+            <Block
+              title="Tables"
+              action={
+                canEdit && notPlaced.length > 1 ? (
                   <Button type="button" size="sm" variant="secondary" onClick={placeAll} data-testid="place-all">
                     Place all {notPlaced.length}
                   </Button>
-                )}
-              </div>
+                ) : undefined
+              }
+            >
+              {noSeats > 0 && (
+                <p className="flex items-start gap-1.5 text-xs text-warning">
+                  <Icon name="alert" className="mt-px size-3.5 shrink-0" />
+                  {noSeats} table{noSeats === 1 ? '' : 's'} on this plan {noSeats === 1 ? 'has' : 'have'} no seat count, so {noSeats === 1 ? 'it is' : 'they are'} never offered online.
+                </p>
+              )}
               {notPlaced.length === 0 && elsewhere.length === 0 ? (
-                <p className="text-sm text-muted">{tables.length ? 'Every table is on a plan.' : 'No tables yet.'}</p>
+                <p className="text-[13px] text-muted">{tables.length ? 'Every table is on a plan.' : 'No tables yet.'}</p>
               ) : (
-                <ul className="space-y-1.5" data-testid="unplaced-tables">
+                <ul className="-mx-1 space-y-0.5" data-testid="unplaced-tables">
                   {[...notPlaced, ...elsewhere].map((t) => {
                     const it = itemOf(t);
                     const other = elsewhere.includes(t) ? areas.find((a) => a.id === it.areaId)?.name : null;
                     return (
-                      <li key={t.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2">
-                        <span className="min-w-0 truncate text-sm">
+                      <li key={t.id} className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 hover:bg-surface-2">
+                        <span className="min-w-0 truncate text-[13px]">
                           <span className="font-medium">Table {t.label}</span>
                           <span className="text-muted">
                             {' '}
@@ -791,14 +926,14 @@ export function FloorPlanEditor({
                 </ul>
               )}
               {addTables && (
-                <details className="group border-t border-line pt-3" data-testid="add-tables-panel">
-                  <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+                <details className="group border-t border-line pt-2.5" data-testid="add-tables-panel">
+                  <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 text-[13px] font-medium text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
                     <Icon name="plus" className="size-4" /> Add tables to {area.name}
                   </summary>
                   <div className="pt-2">{addTables}</div>
                 </details>
               )}
-            </div>
+            </Block>
           </div>
         </div>
       )}
@@ -808,19 +943,16 @@ export function FloorPlanEditor({
 
 /** Arrow buttons to move the selected table or label one grid step (touch screens have no arrow keys). */
 function Nudge({ onMove, what }: { onMove: (dx: number, dy: number) => void; what: string }) {
-  const btn = 'flex size-9 items-center justify-center rounded-lg text-ink-2 ring-1 ring-line hover:text-ink hover:ring-line-strong pointer-coarse:size-11';
+  const btn = 'flex h-8 flex-1 items-center justify-center rounded-md text-ink-2 ring-1 ring-line hover:text-ink hover:ring-line-strong pointer-coarse:h-10';
   const step = PLAN_GRID * 2;
   return (
-    <div>
-      <p className="mb-1 text-xs font-medium text-muted">Move</p>
-      <div className="grid w-fit grid-cols-3 gap-1" role="group" aria-label={`Move ${what}`}>
-        <span />
-        <button type="button" className={btn} onClick={() => onMove(0, -step)} aria-label="Move up" data-testid="nudge-up">
-          <Icon name="arrowUp" className="size-4" />
-        </button>
-        <span />
+    <Row label="Move">
+      <div className="flex min-w-0 flex-1 gap-1" role="group" aria-label={`Move ${what}`}>
         <button type="button" className={btn} onClick={() => onMove(-step, 0)} aria-label="Move left" data-testid="nudge-left">
           <Icon name="arrowLeft" className="size-4" />
+        </button>
+        <button type="button" className={btn} onClick={() => onMove(0, -step)} aria-label="Move up" data-testid="nudge-up">
+          <Icon name="arrowUp" className="size-4" />
         </button>
         <button type="button" className={btn} onClick={() => onMove(0, step)} aria-label="Move down" data-testid="nudge-down">
           <Icon name="arrowDown" className="size-4" />
@@ -829,6 +961,6 @@ function Nudge({ onMove, what }: { onMove: (dx: number, dy: number) => void; wha
           <Icon name="arrowRight" className="size-4" />
         </button>
       </div>
-    </div>
+    </Row>
   );
 }

@@ -2,16 +2,21 @@
 
 import Link, { useLinkStatus } from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { logoutAction } from '@/app/(auth)/actions';
 import { LogoMark } from '@/components/brand/logo';
 import { Icon, type IconName } from '@/components/ui/icons';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { cn } from '@/lib/cn';
 import { SUB_PAGES } from '@/lib/nav';
+import { OFFLINE_AFTER_MS } from '@/lib/poll-health';
+import type { AttentionLevel, AttentionSummary } from '@/lib/attention';
+import { AttentionBar, attentionMenuItems, type AttentionLabels } from './attention';
 import { ThemeToggle } from './theme-toggle';
+import { useConnectionState, usePolling } from './use-polling';
 
-export type SidebarLink = { href: string; label: string; group: string; key: string; icon: IconName; badge?: number };
+/** `badgeLevel`: the most urgent attention item of that section (badge turns amber or red). */
+export type SidebarLink = { href: string; label: string; group: string; key: string; icon: IconName; badge?: number; badgeLevel?: AttentionLevel };
 export type ShellLabels = {
   more: string;
   openMenu: string;
@@ -20,6 +25,8 @@ export type ShellLabels = {
   navigation: string;
   quickNav: string;
   switchRestaurant: string;
+  /** "Counts not updating · last update {time}" */
+  countsStale: string;
   short: Record<string, string>;
 };
 export type ShellAlert = { key: string; label: string; count: number; href: string; icon: IconName };
@@ -35,6 +42,9 @@ export type ShellProps = {
   user: { name: string; email: string; role: string };
   setup: { href: string; completed: number; total: number } | null;
   alerts: ShellAlert[];
+  /** Unresolved work for this person (server-side), kept live by the shell's poll. */
+  attention: AttentionSummary | null;
+  attentionLabels: AttentionLabels;
   initialCollapsed: boolean;
   signOutLabel: string;
   themeLabels: { dark: string; light: string };
@@ -49,6 +59,71 @@ const GROUP_KEYS = ['operate', 'menu', 'grow', 'manage'];
  * one tap away under "More".
  */
 const BOTTOM_PRIORITY = ['liveOrders', 'kitchen', 'myDeliveries', 'tables', 'menu', 'tasks', 'reservations', 'bills', 'overview'];
+
+const COUNTS_POLL_MS = 10_000;
+/** Other dashboard code can fire this after an action (e.g. acknowledging an order) to update badges at once. */
+export const NAV_COUNTS_EVENT = 'mn:nav-counts';
+
+/**
+ * Keeps the sidebar badges current on every page. The layout only renders on full navigations,
+ * so without this a new order stayed invisible until the owner opened Live Orders. Fresh server
+ * props (after a navigation or router.refresh) take over until the next poll answers.
+ */
+/** `/counts`: one number per sidebar key, plus the attention summary. */
+type NavStatusJson = { attention?: AttentionSummary; [key: string]: number | AttentionSummary | undefined };
+function useLiveCounts(slug: string, links: SidebarLink[]) {
+  const pathname = usePathname();
+  const { data, health, refresh } = usePolling<NavStatusJson>(`/api/dashboard/${slug}/counts`, COUNTS_POLL_MS);
+  // New server links = fresher numbers: ignore the poll result we had until the next one arrives.
+  const [linksSeen, setLinksSeen] = useState(links);
+  const [ignored, setIgnored] = useState<typeof data>(null);
+  if (linksSeen !== links) {
+    setLinksSeen(links);
+    setIgnored(data);
+  }
+  const counts = health.problem || !data || data === ignored ? null : data;
+  // The numbers stop being current when polling keeps failing (one quick retry is not enough to
+  // say so), the server refuses, the device is offline, or no answer came for 30 s (a request
+  // that hangs fails nothing until its timeout). The badges keep their last numbers, marked stale.
+  const [mountedAt] = useState(() => Date.now());
+  const { now } = useConnectionState(health, 5000);
+  const since = health.lastOk?.getTime() ?? mountedAt;
+  const stale = !!health.problem || health.browserOffline || health.failures >= 2 || now - since >= OFFLINE_AFTER_MS;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    refresh();
+  }, [pathname, refresh]);
+  useEffect(() => {
+    const onChange = () => refresh();
+    window.addEventListener(NAV_COUNTS_EVENT, onChange);
+    return () => window.removeEventListener(NAV_COUNTS_EVENT, onChange);
+  }, [refresh]);
+  // Ages in the attention summary grow from the moment the numbers were read (server props: page load).
+  const sinceAnswerMs = Math.max(0, now - (counts ? (health.lastOk?.getTime() ?? mountedAt) : mountedAt));
+  return { counts, staleSince: stale ? new Date(since) : null, sinceAnswerMs };
+}
+
+/** Set (to its explanation) while the badge numbers are not updating: badges are dimmed and say why. */
+const StaleCounts = createContext<string | null>(null);
+
+/** Changes each time `count` goes up, so a `key` on it replays the bump animation. */
+function useBump(count = 0) {
+  const prev = useRef(count);
+  const [bump, setBump] = useState(0);
+  useEffect(() => {
+    if (count > prev.current) setBump((b) => b + 1);
+    prev.current = count;
+  }, [count]);
+  return bump;
+}
+
+const capped = (n: number) => (n > 99 ? '99+' : String(n));
+/** Badge colour by the section's most urgent attention item (the number stays the section's count). */
+const BADGE_TONE: Record<AttentionLevel, string> = { waiting: 'bg-lime text-lime-ink', warning: 'bg-warning text-graphite', urgent: 'bg-danger text-white dark:text-graphite' };
 
 function initials(name: string) {
   return (
@@ -67,8 +142,25 @@ function initials(name: string) {
  * and a top bar with breadcrumbs, search, notifications and theme. Phones: top bar, a drawer
  * with the full navigation and a bottom bar with the four most used sections for the role.
  */
-export function AppShell(props: ShellProps) {
-  const { links, labels, org, alerts, initialCollapsed, banners, children } = props;
+export function AppShell(serverProps: ShellProps) {
+  const { counts, staleSince, sinceAnswerMs } = useLiveCounts(serverProps.org.slug, serverProps.links);
+  const staleTime = staleSince?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const staleText = staleTime ? serverProps.labels.countsStale.replace('{time}', staleTime) : null;
+  const props = useMemo<ShellProps>(() => {
+    const attention = counts?.attention ?? serverProps.attention;
+    const level = (key: string) => attention?.byNav[key as keyof AttentionSummary['byNav']]?.level;
+    const live = <T extends { key: string }>(x: T, field: 'badge' | 'count') => {
+      const v = counts?.[x.key];
+      return typeof v === 'number' ? { ...x, [field]: v } : x;
+    };
+    return {
+      ...serverProps,
+      attention,
+      links: serverProps.links.map((l) => ({ ...live(l, 'badge'), badgeLevel: level(l.key) })),
+      alerts: serverProps.alerts.map((a) => live(a, 'count')),
+    };
+  }, [serverProps, counts]);
+  const { links, labels, org, alerts, attention, attentionLabels, currentLocationId, initialCollapsed, banners, children } = props;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -119,63 +211,68 @@ export function AppShell(props: ShellProps) {
     openerRef.current = e.currentTarget;
     setOpen((v) => !v);
   };
-  const alertTotal = alerts.reduce((n, a) => n + a.count, 0);
+  // The bell lists the attention items, plus the alerts that are not operational work (low ratings).
+  const alertTotal = (attention?.total ?? 0) + alerts.reduce((n, a) => n + a.count, 0);
 
   return (
-    <div className="min-h-dvh lg:flex">
-      <aside
-        className={cn('sticky top-0 hidden h-dvh shrink-0 border-e border-line bg-surface transition-[width] duration-200 lg:block', collapsed ? 'w-16' : 'w-60')}
-        data-collapsed={collapsed}
-        data-testid="sidebar"
-      >
-        <SidebarContent {...props} collapsed={collapsed} isActive={isActive} onToggleCollapsed={toggleCollapsed} />
-      </aside>
+    <StaleCounts.Provider value={staleText}>
+      <div className="min-h-dvh lg:flex">
+        <aside
+          className={cn('sticky top-0 hidden h-dvh shrink-0 border-e border-line bg-surface transition-[width] duration-200 lg:block', collapsed ? 'w-16' : 'w-60')}
+          data-collapsed={collapsed}
+          data-testid="sidebar"
+        >
+          <SidebarContent {...props} collapsed={collapsed} isActive={isActive} onToggleCollapsed={toggleCollapsed} />
+        </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar {...props} isActive={isActive} alertTotal={alertTotal} onOpenSearch={() => setSearchOpen(true)} onOpenMenu={openDrawer} drawerOpen={open} />
-        {banners}
-        {/* Bottom padding on phones keeps the last controls clear of the bottom navigation bar. */}
-        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[90rem] flex-1 px-4 pt-5 pb-24 outline-none sm:px-6 lg:px-8 lg:pt-7 lg:pb-10">
-          {children}
-        </main>
-      </div>
-
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden" id="mobile-nav" role="dialog" aria-modal="true" aria-label={labels.openMenu}>
-          <button type="button" aria-hidden tabIndex={-1} title={labels.closeMenu} className="animate-fade-in absolute inset-0 bg-black/45" onClick={() => setOpen(false)} />
-          <div ref={drawerRef} className="animate-slide-in absolute inset-y-0 start-0 w-[86%] max-w-[18rem] border-e border-line bg-surface shadow-lg">
-            <SidebarContent {...props} collapsed={false} isActive={isActive} />
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar {...props} isActive={isActive} alertTotal={alertTotal} sinceAnswerMs={sinceAnswerMs} onOpenSearch={() => setSearchOpen(true)} onOpenMenu={openDrawer} drawerOpen={open} />
+          {/* On every page: what is still unresolved and late, with a link to each item. */}
+          <AttentionBar attention={attention} labels={attentionLabels} orgSlug={org.slug} currentLocationId={currentLocationId} sinceAnswerMs={sinceAnswerMs} />
+          {banners}
+          {/* Bottom padding on phones keeps the last controls clear of the bottom navigation bar. */}
+          <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[90rem] flex-1 px-4 pt-5 pb-24 outline-none sm:px-6 lg:px-8 lg:pt-7 lg:pb-10">
+            {children}
+          </main>
         </div>
-      )}
 
-      {bottom.length > 0 && (
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden print:hidden" aria-label={labels.quickNav} data-testid="bottom-nav">
-          <ul className="mx-auto flex max-w-xl">
-            {bottom.map((l) => (
-              <li key={l.href} className="flex-1">
-                <BottomItem href={l.href} label={labels.short[l.key] ?? l.label} active={isActive(l.href)} badge={l.badge} icon={l.icon} />
+        {open && (
+          <div className="fixed inset-0 z-50 lg:hidden" id="mobile-nav" role="dialog" aria-modal="true" aria-label={labels.openMenu}>
+            <button type="button" aria-hidden tabIndex={-1} title={labels.closeMenu} className="animate-fade-in absolute inset-0 bg-black/45" onClick={() => setOpen(false)} />
+            <div ref={drawerRef} className="animate-slide-in absolute inset-y-0 start-0 w-[86%] max-w-[18rem] border-e border-line bg-surface shadow-lg">
+              <SidebarContent {...props} collapsed={false} isActive={isActive} />
+            </div>
+          </div>
+        )}
+
+        {bottom.length > 0 && (
+          <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden print:hidden" aria-label={labels.quickNav} data-testid="bottom-nav">
+            <ul className="mx-auto flex max-w-xl">
+              {bottom.map((l) => (
+                <li key={l.href} className="flex-1">
+                  <BottomItem href={l.href} label={labels.short[l.key] ?? l.label} active={isActive(l.href)} badge={l.badge} badgeLevel={l.badgeLevel} icon={l.icon} />
+                </li>
+              ))}
+              <li className="flex-1">
+                <button
+                  type="button"
+                  onClick={openDrawer}
+                  aria-expanded={open}
+                  aria-controls="mobile-nav"
+                  className={cn('relative flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium', moreActive ? 'text-ink' : 'text-muted')}
+                  data-testid="bottom-nav-more"
+                >
+                  <Icon name="more" className="size-6" strokeWidth={moreActive ? 2 : 1.6} />
+                  <span>{labels.more}</span>
+                </button>
               </li>
-            ))}
-            <li className="flex-1">
-              <button
-                type="button"
-                onClick={openDrawer}
-                aria-expanded={open}
-                aria-controls="mobile-nav"
-                className={cn('relative flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium', moreActive ? 'text-ink' : 'text-muted')}
-                data-testid="bottom-nav-more"
-              >
-                <Icon name="more" className="size-6" strokeWidth={moreActive ? 2 : 1.6} />
-                <span>{labels.more}</span>
-              </button>
-            </li>
-          </ul>
-        </nav>
-      )}
+            </ul>
+          </nav>
+        )}
 
-      {searchOpen && <CommandPalette links={[...props.links, ...props.accountLinks]} slug={org.slug} onClose={() => setSearchOpen(false)} />}
-    </div>
+        {searchOpen && <CommandPalette links={[...props.links, ...props.accountLinks]} slug={org.slug} onClose={() => setSearchOpen(false)} />}
+      </div>
+    </StaleCounts.Provider>
   );
 }
 
@@ -241,6 +338,9 @@ function SidebarContent({
 }
 
 function NavLink({ link: l, active, collapsed }: { link: SidebarLink; active: boolean; collapsed: boolean }) {
+  const bump = useBump(l.badge);
+  const stale = useContext(StaleCounts);
+  const waiting = !!l.badge;
   return (
     <Link
       href={l.href}
@@ -253,14 +353,31 @@ function NavLink({ link: l, active, collapsed }: { link: SidebarLink; active: bo
       )}
     >
       {active && <span className="absolute inset-y-1.5 start-0 w-0.5 rounded-full bg-lime" aria-hidden />}
-      <Icon name={l.icon} className={cn('size-[18px]', active ? 'text-ink' : 'text-muted group-hover:text-ink-2')} />
+      {/* Waiting items: the icon rings every few seconds (not on the page you are already on). */}
+      <Icon
+        name={l.icon}
+        className={cn('size-[18px] origin-[50%_15%]', active ? 'text-ink' : waiting ? 'animate-ring text-ink' : 'text-muted group-hover:text-ink-2')}
+        data-testid={waiting && !active ? `nav-ringing-${l.key}` : undefined}
+      />
       <span className={cn('min-w-0 flex-1 truncate', collapsed && 'sr-only')}>{l.label}</span>
       <PendingDot />
-      {!!l.badge &&
+      {waiting &&
         (collapsed ? (
-          <span className="absolute end-1 top-1 size-2 rounded-full bg-lime ring-2 ring-surface" aria-label={String(l.badge)} />
+          <span className={cn('absolute end-1 top-1 flex size-2.5', stale && 'opacity-50')} aria-label={String(l.badge)}>
+            <span className="absolute inset-0 animate-ping rounded-full bg-lime opacity-75" aria-hidden />
+            <span key={bump} className={cn('relative size-2.5 rounded-full ring-2 ring-surface', BADGE_TONE[l.badgeLevel ?? 'waiting'], bump > 0 && 'animate-bump')} />
+          </span>
         ) : (
-          <span className="rounded-md bg-lime px-1.5 text-[11px] leading-[18px] font-semibold text-lime-ink tabular-nums">{l.badge}</span>
+          <span
+            key={bump}
+            className={cn('min-w-5 rounded-md px-1.5 text-center text-[11px] leading-[18px] font-semibold tabular-nums', BADGE_TONE[l.badgeLevel ?? 'waiting'], bump > 0 && 'animate-bump', stale && 'opacity-50')}
+            title={stale ?? undefined}
+            data-stale={stale ? 'true' : undefined}
+            data-level={l.badgeLevel}
+            data-testid={`nav-badge-${l.key}`}
+          >
+            {capped(l.badge!)}
+          </span>
         ))}
     </Link>
   );
@@ -415,11 +532,18 @@ function TopBar({
   labels,
   alerts,
   alertTotal,
+  attention,
+  attentionLabels,
+  currentLocationId,
+  sinceAnswerMs,
   onOpenSearch,
   onOpenMenu,
   drawerOpen,
-}: ShellProps & { alertTotal: number; isActive: (href: string) => boolean; onOpenSearch: () => void; onOpenMenu: (e: React.MouseEvent<HTMLElement>) => void; drawerOpen: boolean }) {
+}: ShellProps & { alertTotal: number; sinceAnswerMs: number; isActive: (href: string) => boolean; onOpenSearch: () => void; onOpenMenu: (e: React.MouseEvent<HTMLElement>) => void; drawerOpen: boolean }) {
   const pathname = usePathname();
+  const bump = useBump(alertTotal);
+  const stale = useContext(StaleCounts);
+  const topLevel = attention?.items[0]?.level;
   const crumbs = useMemo(() => {
     // While setup is unfinished the wizard is not in either list (it has its own sidebar card).
     const setupLink: SidebarLink[] = setup ? [{ href: setup.href, label: 'Setup wizard', group: 'account', key: 'setup', icon: 'wand' }] : [];
@@ -440,7 +564,8 @@ function TopBar({
       <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-1 lg:block" data-testid="breadcrumbs">
         <ol className="flex min-w-0 items-center gap-1.5 text-[13px]">
           {crumbs.map((c, i) => (
-            <li key={c.href} className="flex min-w-0 items-center gap-1.5">
+            // On the overview the restaurant crumb and "Overview" share a link, so the key needs the position.
+            <li key={`${i}:${c.href}`} className="flex min-w-0 items-center gap-1.5">
               {i > 0 && <Icon name="chevronRight" className="size-3.5 text-muted/60 rtl:rotate-180" />}
               {i === crumbs.length - 1 ? (
                 <span className="truncate font-medium text-ink" aria-current="page">
@@ -470,20 +595,47 @@ function TopBar({
         <Icon name="search" className="size-5" />
       </button>
 
+      {/* The badge numbers stopped updating: say so (and since when) instead of showing old counts as current. */}
+      {stale && (
+        <span
+          className="inline-flex h-8 max-w-[20rem] shrink-0 items-center gap-1.5 rounded-lg border border-warning/30 bg-warning/10 px-2 text-xs font-medium text-warning lg:max-w-none"
+          role="status"
+          title={stale}
+          data-testid="nav-counts-stale"
+        >
+          <Icon name="alert" className="size-4 shrink-0" />
+          <span className="sr-only sm:not-sr-only sm:truncate">{stale}</span>
+        </span>
+      )}
+
       <Menu
         label={alertTotal ? `Notifications (${alertTotal})` : 'Notifications'}
         triggerClassName="relative flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 hover:text-ink lg:size-9"
         trigger={
           <>
-            <Icon name="bell" className="size-5 lg:size-[18px]" />
-            {alertTotal > 0 && <span className="absolute end-0.5 top-0.5 min-w-4 rounded-full bg-lime px-1 text-center text-[10px] leading-4 font-bold text-lime-ink ring-2 ring-bg tabular-nums">{alertTotal > 99 ? '99+' : alertTotal}</span>}
+            <Icon name="bell" className={cn('size-5 origin-top lg:size-[18px]', alertTotal > 0 && 'animate-ring')} />
+            {alertTotal > 0 && (
+              <span
+                key={bump}
+                className={cn('absolute end-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[10px] leading-4 font-bold ring-2 ring-bg tabular-nums', BADGE_TONE[topLevel ?? 'waiting'], bump > 0 && 'animate-bump', stale && 'opacity-50')}
+                data-stale={stale ? 'true' : undefined}
+                data-level={topLevel}
+                data-testid="notifications-count"
+              >
+                {capped(alertTotal)}
+              </span>
+            )}
           </>
         }
-        header={<p className="text-sm font-semibold text-ink">Notifications</p>}
+        header={<p className="text-sm font-semibold text-ink">{attentionLabels.title}</p>}
         items={
           alertTotal
-            ? alerts.filter((a) => a.count > 0).map((a) => ({ label: a.label, href: a.href, icon: a.icon, hint: String(a.count) }))
-            : [{ type: 'label', label: 'You’re all caught up' }]
+            ? [
+                ...(attention ? attentionMenuItems(attention, attentionLabels, org.slug, currentLocationId, sinceAnswerMs) : []),
+                ...(attention && attention.total > attention.items.length ? [{ type: 'label' as const, label: `+${attention.total - attention.items.length}` }] : []),
+                ...alerts.filter((a) => a.count > 0).map((a) => ({ label: a.label, href: a.href, icon: a.icon, hint: String(a.count) })),
+              ]
+            : [{ type: 'label', label: attentionLabels.allClear }]
         }
         testId="notifications"
       />
@@ -621,15 +773,23 @@ function CommandPalette({ links, slug, onClose }: { links: SidebarLink[]; slug: 
 
 // ---------------------------------------------------------------- bottom bar
 
-function BottomItem({ href, label, active, badge, icon }: { href: string; label: string; active: boolean; badge?: number; icon: IconName }) {
+function BottomItem({ href, label, active, badge, badgeLevel, icon }: { href: string; label: string; active: boolean; badge?: number; badgeLevel?: AttentionLevel; icon: IconName }) {
+  const bump = useBump(badge);
+  const stale = useContext(StaleCounts);
   return (
-    <Link href={href} aria-current={active ? 'page' : undefined} className={cn('relative flex h-16 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium', active ? 'text-ink' : 'text-muted')}>
-      <Icon name={icon} className="size-6" strokeWidth={active ? 2 : 1.6} />
+    <Link href={href} aria-current={active ? 'page' : undefined} className={cn('relative flex h-16 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium', active ? 'text-ink' : badge ? 'text-ink' : 'text-muted')}>
+      <Icon name={icon} className={cn('size-6 origin-[50%_15%]', !active && !!badge && 'animate-ring')} strokeWidth={active ? 2 : 1.6} />
       <span className="max-w-full truncate">{label}</span>
       <PendingBar />
       {!!badge && (
-        <span className="absolute top-1.5 start-1/2 ms-2 min-w-5 rounded-full bg-lime px-1 text-center text-[10px] leading-5 font-semibold text-lime-ink tabular-nums" aria-label={`${badge}`}>
-          {badge > 99 ? '99+' : badge}
+        <span
+          key={bump}
+          className={cn('absolute top-1.5 start-1/2 ms-2 min-w-5 rounded-full px-1 text-center text-[10px] leading-5 font-semibold tabular-nums', BADGE_TONE[badgeLevel ?? 'waiting'], bump > 0 && 'animate-bump', stale && 'opacity-50')}
+          aria-label={`${badge}`}
+          data-stale={stale ? 'true' : undefined}
+          data-level={badgeLevel}
+        >
+          {capped(badge)}
         </span>
       )}
     </Link>

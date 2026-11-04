@@ -1,12 +1,15 @@
 import { notFound } from 'next/navigation';
 import { ActionForm } from '@/components/forms/action-form';
-import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Field, Input, PageHeader, Select, disclosureClass, humanize } from '@/components/ui';
+import { Alert, Badge, ButtonLink, Card, CardBody, CardHeader, Checkbox, Field, Input, PageHeader, Select, disclosureClass, humanize } from '@/components/ui';
 import { formatCents } from '@/lib/money';
 import { db } from '@/server/db';
 import { UserFacingError } from '@/server/errors';
 import { getSessionBill, PAYMENT_METHODS } from '@/server/services/bills';
 import { requireTenantPage } from '@/server/tenant';
-import { changeItemAction, closeSessionAction, recordPaymentAction, transferAction, voidPaymentAction } from '../actions';
+import { InlineAction } from '@/components/forms/inline-action';
+import { sessionAccessSummary } from '@/server/services/table-access';
+import { changeItemAction, closeSessionAction, recordPaymentAction, revokeDeviceAction, transferAction, voidPaymentAction } from '../actions';
+import { TablePinPanel } from '../../tables/table-access-panel';
 
 export const METHOD_LABEL: Record<(typeof PAYMENT_METHODS)[number], string> = {
   CASH: 'Cash',
@@ -32,6 +35,10 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
     : [];
   const canModify = ctx.can('orders.modifyItems');
   const open = session.status === 'OPEN';
+  const access = await sessionAccessSummary(ctx, session.id);
+  const canSessions = ctx.can('tables.sessions');
+  const activePhones = access.devices.filter((d) => d.active);
+  const time = (d: Date) => d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
   const payments = orders.flatMap((o) => o.payments.map((p) => ({ ...p, orderNumber: o.number })));
   const hidden = { org: ctx.org.slug, sessionId: session.id };
   const hiddenFields = (extra: Record<string, string> = {}) => (
@@ -44,7 +51,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
     <>
       <PageHeader
         title={`Table ${session.table.label}`}
-        description={`${open ? 'Open' : 'Closed'} since ${session.openedAt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}${session.verificationCode && open ? ` · table code ${session.verificationCode}` : ''}`}
+        description={`${open ? 'Open' : 'Closed'} since ${time(session.openedAt)}${open && access.policy === 'SESSION_PIN' ? ` · ${activePhones.length === 1 ? '1 phone' : `${activePhones.length} phones`} authorised` : ''}`}
         actions={<ButtonLink href={`/dashboard/${ctx.org.slug}/bills/${session.id}/receipt`} variant="secondary" target="_blank">Print receipt (not an invoice)</ButtonLink>}
       />
       {/* Three figures side by side even on a phone: the waiter sees total, paid and balance at once. */}
@@ -74,13 +81,18 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                       </div>
                       <span className="tabular-nums">{formatCents(i.lineTotalCents)}</span>
                       {bi && (bi.fullyPaid ? <Badge tone="success">paid</Badge> : bi.allocatedCents > 0 ? <Badge tone="warning">part paid</Badge> : null)}
-                      {canModify && open && !i.voidedAt && o.status !== 'COMPLETED' && o.status !== 'CANCELLED' && (
+                      {canModify && open && !i.voidedAt && !['OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED'].includes(o.status) && (
                         <details className="w-full">
                           <summary className={disclosureClass}>Reduce or remove</summary>
-                          <ActionForm action={changeItemAction} submitLabel="Apply change" submitVariant="danger" className="mt-2 flex flex-wrap items-end gap-2 space-y-0">
+                          <ActionForm action={changeItemAction} submitLabel="Apply change" submitVariant="danger" className="mt-2 flex flex-wrap items-end gap-2 space-y-0" testId={`change-item-${i.id}`}>
                             {hiddenFields({ itemId: i.id })}
                             <Field label="New quantity" htmlFor={`q-${i.id}`}><Input id={`q-${i.id}`} name="quantity" type="number" min={0} max={i.quantity - 1} defaultValue={i.quantity - 1} className="w-24" /></Field>
                             <Field label="Reason (kept in the audit log)" htmlFor={`r-${i.id}`}><Input id={`r-${i.id}`} name="reason" required minLength={3} className="w-64" /></Field>
+                            {/* Once a station started or finished the item, the change needs an explicit OK. */}
+                            {o.status !== 'NEW' && i.stationId && (i.prepStatus === 'PREPARING' || i.prepStatus === 'READY') && (
+                              <Checkbox name="kitchenNotified" label={i.prepStatus === 'READY' ? 'Already prepared: I told the station' : 'The kitchen started it: I told the station'} />
+                            )}
+                            {o.status !== 'NEW' && i.stationId && <p className="w-full text-xs text-muted">The station sees this change on its screen.</p>}
                           </ActionForm>
                         </details>
                       )}
@@ -91,7 +103,10 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
             </Card>
           ))}
           <Card>
-            <CardHeader title="Payments" description="Only payments recorded by staff. Card payments are taken on your own terminal." />
+            <CardHeader
+              title="Payments"
+              description="Only payments recorded by staff, to reconcile with your till. Card payments are taken on your own terminal. This is not a fiscal invoice (fatura or fatura-recibo), and MenuNiva is not certified invoicing or POS software: issue the legal document from your certified system."
+            />
             {payments.length === 0 ? (
               <CardBody className="text-sm text-muted">No payments yet.</CardBody>
             ) : (
@@ -102,6 +117,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                       <span className={p.status === 'VOIDED' ? 'line-through' : 'font-medium'}>{formatCents(p.amountCents)}</span> · {METHOD_LABEL[p.method]} · order #{p.orderNumber}
                       {p.allocations.length > 0 && <span className="text-xs text-muted"> · {p.allocations.length} item(s)</span>}
                       {p.status === 'VOIDED' && <Badge tone="danger">voided</Badge>}
+                      {p.status === 'VOIDED' && p.voidReason && <span className="block text-xs text-muted">Voided: {p.voidReason}</span>}
                     </span>
                     {canModify && p.status === 'RECORDED' && (
                       <ActionForm action={voidPaymentAction} submitLabel="Void" submitVariant="secondary" className="flex items-center gap-2 space-y-0">
@@ -124,6 +140,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
                   {hiddenFields()}
                   <Field label="Method" htmlFor="method">
                     <Select id="method" name="method" defaultValue="CASH">
+                      {/* Cash on delivery is refused by the server on table bills too. */}
                       {PAYMENT_METHODS.filter((x) => x !== 'CASH_ON_DELIVERY').map((x) => <option key={x} value={x}>{METHOD_LABEL[x]}</option>)}
                     </Select>
                   </Field>
@@ -143,6 +160,33 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
               </CardBody>
             </Card>
           )}
+          {open && access.policy === 'SESSION_PIN' && canSessions && (
+            <Card data-testid="session-access">
+              <CardHeader title="Guest phones" description="Each phone entered the table PIN once for this seating. Closing the table removes them all." />
+              <CardBody className="space-y-3">
+                <TablePinPanel org={ctx.org.slug} sessionId={session.id} locked={access.locked} failures={access.failures} phones={activePhones.length} testId="bill-pin" />
+                {access.devices.length === 0 ? (
+                  <p className="text-sm text-muted">No phone has entered the PIN yet.</p>
+                ) : (
+                  <ul className="divide-y divide-line text-sm" data-testid="session-devices">
+                    {access.devices.map((d) => (
+                      <li key={d.id} className="flex items-center gap-2 py-2" data-testid="session-device">
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium">Phone {d.n}</span>
+                          <span className="text-muted"> · joined {time(d.enrolledAt)} · {d.orders === 1 ? '1 order' : `${d.orders} orders`}</span>
+                        </span>
+                        {d.active ? (
+                          <InlineAction action={revokeDeviceAction} fields={{ org: ctx.org.slug, deviceId: d.id }} label="Remove" variant="dangerGhost" size="sm" confirm={`Remove phone ${d.n}? It will need the PIN again to order.`} testId="revoke-device" />
+                        ) : (
+                          <Badge>{d.revokedAt ? 'removed' : 'expired'}</Badge>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardBody>
+            </Card>
+          )}
           {open && freeTables.length > 0 && (
             <Card>
               <CardHeader title="Move to another table" />
@@ -158,7 +202,7 @@ export default async function BillPage({ params }: { params: Promise<{ org: stri
           )}
           {open && (
             <Card>
-              <CardHeader title="Close table" description="Closing frees the table for the next guests. Served orders are completed." />
+              <CardHeader title="Close table" description="Closing frees the table for the next guests, ends this seating's PIN and removes every guest phone. Served orders are completed." />
               <CardBody>
                 <ActionForm action={closeSessionAction} submitLabel="Close table" submitVariant="dark" testId="close-form">
                   {hiddenFields()}

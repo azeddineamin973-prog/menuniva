@@ -90,6 +90,13 @@ test('restaurant setup → QR table order → kitchen & café → completed', as
   await expect(qrImg).toHaveJSProperty('complete', true);
   const tableHref = await page.getByTestId('open-table-link').first().getAttribute('href');
   expect(tableHref).toMatch(/^\/t\/[A-Za-z0-9_-]{22}$/);
+  // A new restaurant uses table PINs (SESSION_PIN, the default): staff open the table when they seat
+  // the guests and read its PIN to them.
+  await expect(page.getByTestId('table-policy-note')).toContainText('PIN');
+  await page.getByTestId('table-card').first().getByTestId('open-table').click();
+  await page.getByTestId('table-pin-01-show').click();
+  const pin = (await page.getByTestId('table-pin-01-value').innerText()).trim();
+  expect(pin).toMatch(/^\d{6}$/);
 
   // 7. Publish
   await page.goto(`${base}/setup/publish`);
@@ -117,6 +124,7 @@ test('restaurant setup → QR table order → kitchen & café → completed', as
   await guest.getByTestId('add-to-cart').click();
   await guest.getByTestId('view-cart').click();
   await expect(guest.getByTestId('cart-total')).toHaveText('19,40 €'); // from the server quote
+  await guest.getByTestId('table-pin-input').fill(pin); // entered once on this phone, with the order
   await guest.getByTestId('submit-order').click();
   await expect(guest).toHaveURL(/\/o\/[A-Za-z0-9_-]{32}$/);
   await expect(guest.getByTestId('order-status')).toHaveAttribute('data-status', 'NEW');
@@ -130,7 +138,7 @@ test('restaurant setup → QR table order → kitchen & café → completed', as
   await expect(card).toContainText('Table 01');
   await expect(card).toContainText('Prato de teste');
   await expect(card).toContainText('19.40');
-  await expect(page.getByTestId('unread-count')).toBeVisible();
+  await expect(page.getByTestId('sidebar').getByTestId('nav-badge-liveOrders')).toBeVisible();
   await card.getByTestId('action-ACCEPTED').click();
   await expect(page.getByTestId('column-accepted').getByTestId('order-card')).toHaveCount(1);
 

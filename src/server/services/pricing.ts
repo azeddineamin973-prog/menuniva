@@ -5,6 +5,7 @@ import { assertCents } from '@/lib/money';
 import { db, type Tx } from '../db';
 import { zonedParts } from '@/lib/time';
 import { localName, PRICE_CHANNEL, scheduleAllows } from './public-menu';
+import { prepRoute } from './routing';
 
 /**
  * Authoritative server-side pricing (Part 8): the browser sends only product/option IDs
@@ -28,7 +29,13 @@ export type QuotedLine = {
   productId: string;
   categoryId: string;
   variantId: string | null;
+  /** Switched-on station of the order's location; null for counter items. */
   stationId: string | null;
+  /**
+   * station: prepared at `stationId` (ticket on accept). none: needs no preparation, handed over
+   * at the counter. counter: the location uses no kitchen screens, Live Orders is the only list.
+   */
+  prep: 'station' | 'none' | 'counter';
   nameSnapshot: string;
   customerNameSnapshot: string;
   variantNameSnapshot: string | null;
@@ -42,41 +49,43 @@ export type QuotedLine = {
 
 export type Quote = { lines: QuotedLine[]; subtotalCents: number; issues: QuoteIssue[] };
 
-export async function quoteCart(params: { locationId: string; channel: OrderChannel; lang: LanguageCode; items: CartItemInput[]; now?: Date }, tx: Tx | typeof db = db): Promise<Quote> {
+/** The location fields pricing needs. A caller that already read the location passes it (two round trips fewer). */
+type PricingLocation = { id: string; organizationId: string; timeZone: string; organization: { sourceLanguage: LanguageCode } };
+
+export async function quoteCart(params: { locationId: string; channel: OrderChannel; lang: LanguageCode; items: CartItemInput[]; now?: Date; location?: PricingLocation }, tx: Tx | typeof db = db): Promise<Quote> {
   const items = cartSchema.parse(params.items);
-  const location = await tx.restaurantLocation.findUniqueOrThrow({ where: { id: params.locationId }, include: { organization: { select: { id: true, sourceLanguage: true } } } });
+  const location: PricingLocation =
+    params.location?.id === params.locationId
+      ? params.location
+      : await tx.restaurantLocation.findUniqueOrThrow({ where: { id: params.locationId }, select: { id: true, organizationId: true, timeZone: true, organization: { select: { sourceLanguage: true } } } });
   const orgId = location.organizationId;
   const source = location.organization.sourceLanguage;
   const priceChannel = PRICE_CHANNEL[params.channel];
   const local = zonedParts(params.now ?? new Date(), location.timeZone);
   const minuteOfDay = local.hour * 60 + local.minute;
   const ids = [...new Set(items.map((i) => i.productId))];
-  const products = await tx.menuProduct.findMany({
-    where: { id: { in: ids }, organizationId: orgId },
-    include: {
-      translations: true,
-      prices: true,
-      variants: true,
-      modifierGroups: { include: { options: true } },
-      locationOverrides: { where: { locationId: location.id } },
-      schedules: true,
-      category: { select: { defaultStationId: true, isActive: true, schedules: true } },
-    },
-  });
-  const byId = new Map(products.map((p) => [p.id, p]));
+  const products = await loadPricedProducts(tx, orgId, location.id, ids);
+  const withStations = products.stationsHere;
+  const byId = new Map(products.rows.map((p) => [p.id, p]));
   const issues: QuoteIssue[] = [];
   const lines: QuotedLine[] = [];
 
   items.forEach((item, index) => {
     const p = byId.get(item.productId);
-    if (!p || p.status !== 'ACTIVE' || !p.category.isActive) return void issues.push({ index, code: 'unavailable' });
+    if (!p || p.status !== 'ACTIVE' || !p.category?.isActive) return void issues.push({ index, code: 'unavailable' });
+    const category = p.category;
     const nameSource = p.translations.find((t) => t.language === source)?.name ?? p.translations[0]?.name ?? '';
     const nameCustomer = p.translations.find((t) => t.language === params.lang && t.status !== 'MACHINE')?.name ?? nameSource;
     const override = p.locationOverrides[0];
     if (override && !override.isAvailable) return void issues.push({ index, code: 'unavailable', name: nameCustomer });
     if (p.soldOut || override?.soldOut) return void issues.push({ index, code: 'sold_out', name: nameCustomer });
-    if (!scheduleAllows(p.category.schedules, local.weekday, minuteOfDay) || !scheduleAllows(p.schedules, local.weekday, minuteOfDay))
+    if (!scheduleAllows(category.schedules, local.weekday, minuteOfDay) || !scheduleAllows(p.schedules, local.weekday, minuteOfDay))
       return void issues.push({ index, code: 'unavailable', name: nameCustomer });
+    // Where it is prepared at THIS location. A dish that needs preparation but has no switched-on
+    // station here (forgotten, Café switched off, or only routed to another location's station)
+    // cannot be ordered: nobody would see it. Locations without kitchen screens keep the counter flow.
+    const route = prepRoute({ ...p, category }, location.id);
+    if (route.kind === 'missing' && withStations) return void issues.push({ index, code: 'unavailable', name: nameCustomer });
     const overridePrice = override ? { DINE_IN: override.dineInPriceCents, TAKEAWAY: override.takeawayPriceCents, DELIVERY: override.deliveryPriceCents }[priceChannel] : null;
     const base = overridePrice ?? p.prices.find((x) => x.channel === priceChannel)?.amountCents;
     if (base === undefined || base === null) return void issues.push({ index, code: 'not_on_channel', name: nameCustomer });
@@ -123,7 +132,8 @@ export async function quoteCart(params: { locationId: string; channel: OrderChan
       productId: p.id,
       categoryId: p.categoryId,
       variantId: item.variantId ?? null,
-      stationId: p.stationId ?? p.category.defaultStationId ?? null,
+      stationId: route.kind === 'station' ? route.stationId : null,
+      prep: route.kind === 'station' ? 'station' : route.kind === 'none' ? 'none' : 'counter',
       nameSnapshot: nameSource,
       customerNameSnapshot: nameCustomer,
       variantNameSnapshot: variantName,
@@ -138,4 +148,60 @@ export async function quoteCart(params: { locationId: string; channel: OrderChan
 
   const subtotalCents = assertCents(lines.reduce((s, l) => s + l.lineTotalCents, 0));
   return { lines, subtotalCents, issues };
+}
+
+/**
+ * Everything pricing needs about the cart's dishes, in ONE database round trip: every relation is read
+ * by the product ids from the cart, side by side, instead of Prisma's nested include (one round trip
+ * per level: four in a row, each paying the full database latency on every guest order; final QA).
+ * Every read is limited to this organisation's dishes; results are joined here in memory, with the
+ * same shape the include gave.
+ */
+async function loadPricedProducts(tx: Tx | typeof db, organizationId: string, locationId: string, ids: string[]) {
+  const ofCart = { productId: { in: ids }, product: { organizationId } };
+  const [products, translations, prices, variants, groups, options, overrides, schedules, stations, categories] = await Promise.all([
+    tx.menuProduct.findMany({ where: { id: { in: ids }, organizationId } }),
+    tx.productTranslation.findMany({ where: ofCart }),
+    tx.channelPrice.findMany({ where: ofCart }),
+    tx.productVariant.findMany({ where: ofCart }),
+    tx.modifierGroup.findMany({ where: ofCart }),
+    tx.modifierOption.findMany({ where: { group: ofCart } }),
+    tx.productLocationOverride.findMany({ where: { ...ofCart, locationId } }),
+    // The dishes' own time windows and those of their categories.
+    tx.availabilitySchedule.findMany({ where: { OR: [ofCart, { category: { organizationId, products: { some: { id: { in: ids } } } } }] } }),
+    // The organisation's stations (a short list): the dishes' and categories' stations, and whether this location uses any.
+    tx.kitchenStation.findMany({ where: { organizationId }, select: { id: true, locationId: true, isActive: true } }),
+    tx.menuCategory.findMany({ where: { organizationId, products: { some: { id: { in: ids } } } }, select: { id: true, isActive: true, defaultStationId: true, noPreparation: true } }),
+  ]);
+  const station = new Map(stations.map((s) => [s.id, s]));
+  const by = <T, K>(rows: T[], key: (r: T) => K) => {
+    const m = new Map<K, T[]>();
+    for (const r of rows) m.set(key(r), [...(m.get(key(r)) ?? []), r]);
+    return (k: K) => m.get(k) ?? [];
+  };
+  const [tr, pr, va, gr, op, ov, ps, cs] = [
+    by(translations, (r) => r.productId),
+    by(prices, (r) => r.productId),
+    by(variants, (r) => r.productId),
+    by(groups, (r) => r.productId),
+    by(options, (r) => r.groupId),
+    by(overrides, (r) => r.productId),
+    by(schedules, (r) => r.productId),
+    by(schedules, (r) => r.categoryId),
+  ];
+  const category = new Map(categories.map((c) => [c.id, { ...c, schedules: cs(c.id), defaultStation: c.defaultStationId ? (station.get(c.defaultStationId) ?? null) : null }]));
+  return {
+    stationsHere: stations.some((s) => s.locationId === locationId && s.isActive),
+    rows: products.map((p) => ({
+      ...p,
+      translations: tr(p.id),
+      prices: pr(p.id),
+      variants: va(p.id),
+      modifierGroups: gr(p.id).map((g) => ({ ...g, options: op(g.id) })),
+      locationOverrides: ov(p.id),
+      schedules: ps(p.id),
+      station: p.stationId ? (station.get(p.stationId) ?? null) : null,
+      category: category.get(p.categoryId) ?? null,
+    })),
+  };
 }

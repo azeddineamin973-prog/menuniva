@@ -21,7 +21,7 @@ export default async function ReservationStatusPage({ params }: { params: Promis
   const m = getMessages(lang);
   const when = new Intl.DateTimeFormat(LANGUAGE_TAG[lang], { timeZone: r.location.timeZone, dateStyle: 'full', timeStyle: 'short' }).format(r.startsAt);
   return (
-    <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={m.reservation.trackTitle} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
+    <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={m.reservation.trackTitle} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy} homeHref={`/r/${org.slug}`} homeLabel={m.ordering.backToMenu}>
       <div className="mx-auto max-w-md space-y-4 px-4 py-8 text-center">
         <p className="font-serif text-2xl">{when}</p>
         <p>{fmt(m.reservation.guests, { n: r.partySize })}</p>

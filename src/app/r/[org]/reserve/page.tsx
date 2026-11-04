@@ -7,7 +7,7 @@ import { db } from '@/server/db';
 import { orgModules } from '@/server/modules';
 import { guestFloorPlan } from '@/server/services/floor-plan';
 import { availability } from '@/server/services/reservations';
-import { canPreviewOrg, resolveGuestLanguage } from '@/server/services/storefront';
+import { canPreviewOrg, guestQuery, resolveGuestLanguage } from '@/server/services/storefront';
 import { PreviewBanner } from '@/components/storefront/preview-banner';
 import { ReserveForm } from './reserve-form';
 
@@ -36,8 +36,9 @@ export default async function ReservePage({ params, searchParams }: { params: Pr
   // The floor plan only when the restaurant lets guests choose their table (Tables → Floor plan).
   const plan = location.reservationSettings?.guestTableChoice ? await guestFloorPlan(location.id) : null;
   const wide = !!plan && (plan.areas.length > 0 || plan.unplaced.length > 0);
+  const homeHref = `/r/${org.slug}${sp.l ? `/${encodeURIComponent(sp.l)}` : ''}${guestQuery({}, { preview: isPreview, lang: sp.lang === lang ? lang : null })}`;
   return (
-    <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={m.reservation.title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy}>
+    <StorefrontShell branding={org.branding} restaurantName={org.name} subtitle={m.reservation.title} lang={lang} languages={org.enabledLanguages} compactHeader poweredBy={m.common.poweredBy} homeHref={homeHref} homeLabel={m.ordering.backToMenu}>
       {isPreview && <PreviewBanner />}
       <div className={wide ? 'mx-auto max-w-5xl px-4 py-6 sm:px-6' : 'mx-auto max-w-lg px-4 py-6'}>
         <h2 className="mb-4 font-serif text-2xl">{m.reservation.title}</h2>

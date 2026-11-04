@@ -34,27 +34,27 @@ test('guests on a phone and on a laptop get right-sized AVIF copies; a removed p
   await expect.poll(urls).toHaveLength(1);
   const [url] = await urls();
 
-  // Phone (3× screen): phones are offered copies up to 320 px for the 112 px tile (2.9×), so the
-  // 320 px copy is chosen rather than the 480 px one a 336 px need would otherwise pick.
+  // Phone (3× screen): the tile is half the screen (195 px). Phones are offered copies up to
+  // 480 px (2.5×), so the 480 px copy is chosen rather than the 640 px one a 585 px need would pick.
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const guest = await phone.newPage();
   await guest.goto(`/t/${s.qrToken}`);
   const onPhone = await imageInfo(guest, url);
   expect(onPhone.inPicture).toBe(true);
-  expect(onPhone.currentSrc).toMatch(/\?w=320&f=avif$/);
-  // naturalWidth of a srcset image is density-corrected: the 320 px copy fills the 112 px slot.
-  expect(onPhone.naturalWidth).toBe(112);
+  expect(onPhone.currentSrc).toMatch(/\?w=480&f=avif$/);
+  // naturalWidth of a srcset image is density-corrected: the 480 px copy fills the 195 px slot.
+  expect(Math.abs(onPhone.naturalWidth - 195)).toBeLessThanOrEqual(1); // browsers round differently
   const variant = await guest.request.get(onPhone.currentSrc);
   expect(variant.headers()['content-type']).toBe('image/avif');
   expect(variant.headers()['cache-control']).toContain('immutable');
   const variantBody = await variant.body();
-  expect((await sharp(variantBody).metadata()).width).toBe(320);
+  expect((await sharp(variantBody).metadata()).width).toBe(480);
   expect(variantBody.length).toBeLessThan(photo.length / 4);
   // The uploaded photo itself is unchanged and still served at its own address.
   expect(Buffer.from(await (await guest.request.get(url)).body()).equals(photo)).toBe(true);
   await phone.close();
 
-  // Laptop (1×): the card is 320 px wide in the three-column grid.
+  // Laptop (1×): the tile is about 300 px wide in the four-column grid.
   const laptop = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const desk = await laptop.newPage();
   await desk.goto(`/t/${s.qrToken}`);

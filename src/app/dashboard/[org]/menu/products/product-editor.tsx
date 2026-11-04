@@ -10,9 +10,12 @@ import { cn } from '@/lib/cn';
 import { saveProductAction } from '../actions';
 
 type T = { name: string; description: string; ingredients: string };
+/** Same value as the server's NO_PREPARATION (that module is server-only). */
+const NO_PREPARATION = 'NO_PREPARATION';
 export type ProductEditorValue = {
   id?: string;
   categoryId: string;
+  /** A station id, NO_PREPARATION, or null for "use the category's". */
   stationId: string | null;
   taxClassId: string | null;
   status: 'DRAFT' | 'ACTIVE';
@@ -53,7 +56,8 @@ export function ProductEditor({
   const payload = JSON.stringify({
     ...v,
     id: v.id,
-    stationId: v.stationId || null,
+    stationId: v.stationId && v.stationId !== NO_PREPARATION ? v.stationId : null,
+    noPreparation: v.stationId === NO_PREPARATION,
     taxClassId: v.taxClassId || null,
     translations: Object.fromEntries(ordered.map((l) => [l, tr(l)])),
   });
@@ -150,6 +154,7 @@ export function ProductEditor({
                 <Select id="stationId" value={v.stationId ?? ''} onChange={(e) => setV({ ...v, stationId: e.target.value || null })} data-testid="product-station">
                   <option value="">Use category default</option>
                   {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <option value={NO_PREPARATION}>No preparation — handed over at the counter</option>
                 </Select>
               </Field>
               {taxClasses.length > 0 && (

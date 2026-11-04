@@ -131,17 +131,16 @@ describe('M8 table sessions and bills', () => {
     expect((await sessionOf(f)).id).not.toBe(s.id);
   });
 
-  it('M8-12: with a table code required, guests need staff to open the table and the right code', async () => {
+  it('M8-12 (now SESSION_PIN): staff must open the table; a code sent with the order never authorises it', async () => {
     const f = await createOrderingFixture();
-    await db.restaurantLocation.update({ where: { id: f.location.id }, data: { tableCodeRequired: true } });
+    await db.restaurantLocation.update({ where: { id: f.location.id }, data: { tableOrderingPolicy: 'SESSION_PIN' } });
     const items = [{ productId: f.dish.id, quantity: 1 }];
     await expect(order(f, items)).rejects.toMatchObject({ code: 'table_not_open' });
     const session = await openTableSession(f.ctx, f.table.id);
-    expect(session.verificationCode).toMatch(/^\d{4}$/);
-    const wrong = session.verificationCode === '0000' ? '1111' : '0000';
-    await expect(order(f, items, { tableCode: wrong })).rejects.toMatchObject({ code: 'table_code_invalid' });
-    await expect(order(f, items, { tableCode: session.verificationCode })).resolves.toMatchObject({ status: 'NEW' });
-    expect(await db.order.count()).toBe(1);
+    expect(session.pin).toMatch(/^\d{6}$/);
+    // The old per-order field is ignored: each phone enters the PIN once (secure-table-sessions.test.ts).
+    await expect(order(f, items, { tableCode: session.pin! })).rejects.toMatchObject({ code: 'pin_required' });
+    expect(await db.order.count()).toBe(0);
   });
 
   it('bills and payments are tenant-isolated', async () => {
